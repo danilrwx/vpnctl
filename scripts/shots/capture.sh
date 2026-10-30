@@ -10,7 +10,7 @@ shot() { tmux capture-pane -t vpnshots -e -p > "$T/$1.txt"; python3 "$HERE/ansi2
 k() { tmux send-keys -t vpnshots "$@"; sleep "${SLEEP:-1}"; }
 shot tui-1-overview
 k 2; shot tui-2-users
-k 3; k l; sleep 2; shot tui-3-host
+k 3; k Right; k l; sleep 2; shot tui-3-host
 k 4; k p; sleep 4; shot tui-4-plan
 k 5; shot tui-5-topology
 k 6; shot tui-6-routing

@@ -136,7 +136,7 @@ Colours: **green** — fine, **yellow** — needs attention (drift, behind HEAD,
 |---|---|
 | ![Host](docs/img/tui-3-host.png) | ![Plan](docs/img/tui-4-plan.png) |
 
-Screenshots are from the two-container lab (two hosts, one user), captured with `tmux capture-pane`. Values that are not collected yet show as `—` or `no data yet`. Key help (`?`):
+Screenshots are from the two-container lab (two hosts, one user), captured by `scripts/shots/capture.sh <state dir>`: it drives the TUI in tmux, turns `capture-pane` output into HTML (box-drawing characters become CSS cells so frames join cleanly) and renders PNGs with headless Chromium. Values that are not collected yet show as `—` or `no data yet`. Key help (`?`):
 
 ![Help](docs/img/tui-help.png)
 
