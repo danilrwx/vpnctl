@@ -4,25 +4,7 @@
 
 ![Rust 2024](https://img.shields.io/badge/Rust-2024-orange) ![TUI ratatui](https://img.shields.io/badge/TUI-ratatui-blue) ![Stages 1–6 done](https://img.shields.io/badge/stages-1–6%20done-brightgreen)
 
-```text
- 1 Обзор │ 2 Пользователи │ 3 Хост │ 4 План │ 5 Топология │ 6 Маршрут
-репо main · HEAD eb75819 · дерево чистое · последний apply 2026-10-30T16-00-11 · метрики 39 мин назад
-┌Хосты─────────────────────────────────────────────────────────────────────────────────────┐
-│хост роль         домен       ssh     коммит  дрейф проба           серт    обновл.       │
-│fi   выход via ru — (по IP)   ● 11 мс fe6b9e9       ● 204 за 519 мс 3649 дн 1             │
-│ru   вход         gw.lab.test ● 10 мс fe6b9e9       ● 204 за 436 мс —       1             │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-┌Линки─────────────────────────────────────────────────────────────────────────────────────┐
-│ru → fi · reality ● 2 мс активный · 0/сутки                                               │
-│политика выхода ru: авто (urltest), предпочтение fi                                       │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-┌Сводка────────────────────────────────────────────────────────────────────────────────────┐
-│пользователи 1 · активных 1 · истекает 0 за 7 дн                                          │
-│трафик за сутки: пользователи 0 · напрямую 0 · через выход 0                              │
-│требует внимания: fi: отстаёт от HEAD, обновлений 1 · ru: отстаёт от HEAD, обновлений 1   │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-? помощь · j/k строка · Enter карточка хоста · p план · a применить · r метрики · t матрица
-```
+![Overview screen](docs/img/tui-1-overview.png)
 
 <sup>The Overview screen on a two-container Docker lab. The interface is in Russian.</sup>
 
@@ -40,19 +22,13 @@
 
 ## How it works
 
-```text
- operator's laptop                     entry (RU)                      exits (abroad)
-┌─────────────────────┐   ssh    ┌───────────────────┐  awg / reality / hy2  ┌─────────────┐
-│ vpnctl  ─ state in  │ ───────▶ │ sing-box or xray  │ ────────────────────▶ │ fi-hel-1    │
-│ git + metrics.db    │ ◀─────── │ caddy · awg · mtg │ ──────────────────┐   └─────────────┘
-└─────────────────────┘ metrics  └───────────────────┘                    │   ┌─────────────┐
-                                   ▲ users: reality · ws · hy2 ·          └─▶ │ nl-ams-1    │
-                                     awg peers · tg proxy · subscriptions     └─────────────┘
-```
+![How it works](docs/img/overview.svg)
 
 - **The source of truth is a state directory in git**: hosts, links, users, routing, domain sets, pinned versions, secrets via sops/age. Every state-changing command makes a commit.
 - **Rendering is deterministic**: the state produces configs for sing-box/xray, Caddy, AmneziaWG, mtg, nftables, systemd and user subscriptions; two renders of the same state are byte-identical (`render --check`).
 - **Applying is a push over SSH** from the laptop: `plan` shows the diff, drift and unreachable hosts; `apply` copies via stdin, checks configs, swaps them atomically, probes the chain and rolls back on failure. Exits are applied before the jump host.
+
+![One apply](docs/img/apply-flow.svg)
 - **Metrics are pulled over SSH** into a local SQLite: traffic per account and per outbound, machine state, certificates, chain probe, an "edge × protocol" matrix.
 - **TUI and CLI are thin fronts** over one library crate; the logic lives in pure functions with tests.
 
@@ -147,6 +123,22 @@ One key layout everywhere:
 | `/` filter · `?` help · `q` quit | `J`/`K` move a rule · `o` link dialog · `h` another entry | `r` collect metrics · `t` matrix · `V` validate |
 
 Colours: **green** — fine, **yellow** — needs attention (drift, behind HEAD, certificate < 14 days, pending updates, user expiring in < 7 days), **red** — broken, **grey** — inactive.
+
+| Users with the subscription card and QR | Routing groups of the entry |
+|---|---|
+| ![Users](docs/img/tui-2-users.png) | ![Routing](docs/img/tui-6-routing.png) |
+
+| Topology matrix | New user form with live validation |
+|---|---|
+| ![Topology](docs/img/tui-5-topology.png) | ![New user](docs/img/tui-dialog-user.png) |
+
+| Host card | Plan output streamed on screen 4 |
+|---|---|
+| ![Host](docs/img/tui-3-host.png) | ![Plan](docs/img/tui-4-plan.png) |
+
+Screenshots are from the two-container lab, captured with `tmux capture-pane`. Key help (`?`):
+
+![Help](docs/img/tui-help.png)
 
 The user, rule and link dialogs are forms with the same values as the CLI. On every field change the operation and validation run on a copy of the state: the bottom of the form shows the upcoming commit message or the error, and for a rule the group as it will look. `Enter` performs the operation, validation, write and commit. Long operations run as a child `vpnctl`; their output streams onto screen 4 and the summary is reloaded when they finish.
 

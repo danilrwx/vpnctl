@@ -18,22 +18,7 @@
 
 ## 2. Целевая топология
 
-```
-клиенты (Karing / Happ / роутер AWG / Telegram)
-   │  домен gw.example.ru, TTL 120 — смена IP невидима
-   ▼
-вход в РФ (джамп-хост)
-   443 tcp  Reality  ──┐
-   443 tcp  → caddy 8443 (сайт-прикрытие, ws, подписки)
-   443 udp  Hysteria2 │   движок маршрутизации (xray или sing-box)
-   51820    AWG ──tproxy──►  geosite ru / geoip ru → direct
-   2053     mtg ──socks───►  остальное → линк
-   │                          │
-   │ напрямую из РФ           │ линк: AWG в ядре (основной) + Reality (запасной), urltest
-   ▼                          ▼
-Госуслуги, банки, Яндекс    выход FI (AWG-пир + NAT, sing-box с одним Reality-inbound)
-                            выход NL (резерв)
-```
+![Целевая топология](img/topology.svg)
 
 Два слоя на входе: терминаторы протоколов (inbound'ы движка; AWG/WG, IKEv2, OpenVPN как интерфейсы) и один движок маршрутизации, в который всё сливается. L3-туннели заворачиваются в движок через nftables tproxy, домены восстанавливает sniffing (tls/http/quic), DNS клиентам пушится адрес входа.
 
