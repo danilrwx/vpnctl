@@ -334,6 +334,7 @@ impl App {
 
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .spacing(1)
                 .areas(bottom);
         let kw = 22;
         let mut lines = vec![];
@@ -459,6 +460,7 @@ impl App {
     fn users(&mut self, f: &mut Frame, area: Rect) {
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
+                .spacing(1)
                 .areas(area);
         let table_rows = self.user_table();
         self.sel[1] = step(self.sel[1], table_rows.len(), 0);
@@ -652,6 +654,7 @@ impl App {
             Constraint::Percentage(34),
             Constraint::Percentage(33),
         ])
+        .spacing(1)
         .areas(top);
         f.render_widget(titled("State", kv(&state, 12)), a);
         f.render_widget(titled("Machine", kv(&machine, 12)), b);
@@ -659,6 +662,7 @@ impl App {
 
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .spacing(1)
                 .areas(bottom);
         let (inb, exits) = self.host_rows3();
         self.sel[2] = step(self.sel[2], inb.len() + exits.len(), 0);
@@ -740,19 +744,15 @@ impl App {
                 Rect::new(inner.x, inner.y + 2, inner.width, 6),
             );
             let axis = Rect::new(inner.x, inner.y + 8, inner.width, 1);
-            f.render_widget(
-                Line::from(vec![
-                    dim(format!("{:<12}", ago(data[0].0, self.now))),
-                    dim(format!(
-                        "0 — {:.1} s · yellow > {:.1} s · red failed",
-                        max as f64 / 1000.0,
-                        PROBE_SLOW_MS as f64 / 1000.0
-                    )),
-                ]),
-                axis,
+            let left = format!("{:<10}", ago(data[0].0, self.now));
+            let mid = format!(
+                "0 — {:.1} s · >{:.1} s yellow · failed red",
+                max as f64 / 1000.0,
+                PROBE_SLOW_MS as f64 / 1000.0
             );
+            let pad = (inner.width as usize).saturating_sub(left.len() + mid.chars().count() + 3);
             f.render_widget(
-                Paragraph::new(Line::from(dim("now"))).alignment(Alignment::Right),
+                Line::from(dim(format!("{left}{mid}{}now", " ".repeat(pad.max(1))))),
                 axis,
             );
         }
@@ -776,6 +776,7 @@ impl App {
     fn plan(&mut self, f: &mut Frame, area: Rect) {
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .spacing(1)
                 .areas(area);
         let rows = self.plan_rows();
         self.plan_sel = step(self.plan_sel, rows.len(), 0);
@@ -1109,6 +1110,7 @@ impl App {
         };
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(64), Constraint::Percentage(36)])
+                .spacing(1)
                 .areas(area);
         let sets = self.st.sets.len() as u16;
         let [rules_a, dns_a] =

@@ -110,7 +110,17 @@ pub fn widths(header: &[&str], rows: &[Vec<String>]) -> Vec<Constraint> {
 }
 
 /// Table with a dark header line, selected row on a dark background with a blue `▎` marker.
-pub fn table<'a>(header: &[&'a str], rows: Vec<TRow<'a>>, widths: Vec<Constraint>) -> Table<'a> {
+pub fn table<'a>(
+    header: &[&'a str],
+    rows: Vec<TRow<'a>>,
+    mut widths: Vec<Constraint>,
+) -> Table<'a> {
+    // the last column takes the rest so the header and selection bands reach the right border
+    if let Some(last) = widths.last_mut()
+        && let Constraint::Length(n) = *last
+    {
+        *last = Constraint::Min(n);
+    }
     Table::new(rows, widths)
         .header(
             TRow::new(header.iter().map(|h| Cell::from(*h)))
