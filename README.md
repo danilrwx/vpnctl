@@ -108,35 +108,35 @@ Global flags: `-C <state dir>`, `--no-commit` for batch edits, `--stub-secrets`.
 
 | Key | Screen | Shows |
 |---|---|---|
-| `1` | Overview | repo and HEAD, last `applied/*` tag, host table, links with per-protocol latency, exit policy, "direct / via exit" traffic summary, what needs attention |
-| `2` | Users | traffic per day/week/total, card: entry, protocols, subscription links, Telegram proxy, QR |
-| `3` | Host | state, machine, certificate, versions from `versions.yaml`, inbounds with user counts, exit, links |
-| `4` | Plan/Apply | line-by-line output of `plan`, `apply`, `collect`, `probe --matrix`; apply guards in the title |
-| `5` | Topology | static check and the "edge × protocol" matrix with colours |
-| `6` | Routing | rule groups of the entry with set contents, engine default, DNS, sets |
+| `1` | Overview | repo, HEAD, last `applied/*` tag; host table (role, domain, ssh, commit vs HEAD, services, chain probe, cert, pending updates); links with per-protocol latency and exit policy; summary: users, traffic direct / via exit, chain probes today, what needs attention |
+| `2` | Users | table (modes, status, expiry, traffic per day/week/total) and the card: entry, protocols, subscription links, QR, Telegram proxy, when the user was added |
+| `3` | Host | State (commit, drift, pinned versions), Machine, Domain and certificate (A record check, SSH key); inbounds with user counts and exits with traffic; chain probe sparkline over 24 h; `journalctl` tail over ssh |
+| `4` | Plan/Apply | what will change per host and file (diff, drift → adopt), checks before apply, apply output streamed line by line |
+| `5` | Topology | graph of nodes, static check, "edge × protocol" matrix with notes, 14-day history of the selected edge |
+| `6` | Routing | rule groups of the entry with set contents, engine default, DNS, sets, "where does it go?" trace by the rules |
 
 One key layout everywhere:
 
 | Everywhere | On an object | Operations |
 |---|---|---|
-| `j`/`k` rows · `Enter` open · `Esc` back | `n` new · `e` edit · `x` enable/disable · `D` delete | `p` plan · `a` apply (with confirmation) |
-| `/` filter · `?` help · `q` quit | `J`/`K` move a rule · `o` link dialog · `h` another entry | `r` collect metrics · `t` matrix · `V` validate |
+| `j`/`k` rows · `Enter` open · `Esc` back | `n` new · `e` edit · `x` toggle · `D` delete | `p` plan · `a` apply (with confirmation) · `B` bootstrap |
+| `/` filter · `?` help · `q` quit | `J`/`K` move a rule · `o` exit / link dialog · `h` another host or entry | `r` collect metrics · `t` matrix · `V` validate · `U` update OS · `R` reboot · `l` journal |
 
-Colours: **green** — fine, **yellow** — needs attention (drift, behind HEAD, certificate < 14 days, pending updates, user expiring in < 7 days), **red** — broken, **grey** — inactive.
+Colours: **green** — fine, **yellow** — needs attention (drift, behind HEAD, certificate < 14 days, pending updates, user expiring in < 7 days, probe slower than 0.7 s), **red** — broken, **grey** — inactive or no data yet.
 
-| Users with the subscription card and QR | Routing groups of the entry |
+| Users with the subscription card and QR | Routing groups, DNS, sets and the trace |
 |---|---|
 | ![Users](docs/img/tui-2-users.png) | ![Routing](docs/img/tui-6-routing.png) |
 
-| Topology matrix | New user form with live validation |
+| Topology: graph, matrix, edge history | New user form with live validation |
 |---|---|
 | ![Topology](docs/img/tui-5-topology.png) | ![New user](docs/img/tui-dialog-user.png) |
 
-| Host card | Plan output streamed on screen 4 |
+| Host card with the probe sparkline and journal | Plan: what will change, checks, apply stream |
 |---|---|
 | ![Host](docs/img/tui-3-host.png) | ![Plan](docs/img/tui-4-plan.png) |
 
-Screenshots are from the two-container lab, captured with `tmux capture-pane`. Key help (`?`):
+Screenshots are from the two-container lab (two hosts, one user), captured with `tmux capture-pane`. Values that are not collected yet show as `—` or `no data yet`. Key help (`?`):
 
 ![Help](docs/img/tui-help.png)
 

@@ -82,3 +82,38 @@ pub fn last_tag(dir: &Path, prefix: &str) -> Option<String> {
         .max()
         .map(String::from)
 }
+
+/// HEAD: (короткий sha, сообщение, epoch коммита).
+pub fn head_info(dir: &Path) -> Option<(String, String, i64)> {
+    let out = git(dir, &["log", "-1", "--format=%h%x09%s%x09%ct"]).ok()?;
+    let mut p = out.splitn(3, '\t');
+    Some((p.next()?.into(), p.next()?.into(), p.next()?.parse().ok()?))
+}
+
+/// Число коммитов в диапазоне `from..to`.
+pub fn count(dir: &Path, from: &str, to: &str) -> Option<usize> {
+    git(dir, &["rev-list", "--count", &format!("{from}..{to}")])
+        .ok()?
+        .parse()
+        .ok()
+}
+
+/// Первый коммит, добавивший строку `needle` в файл: (короткий sha, дата YYYY-MM-DD).
+pub fn added(dir: &Path, file: &str, needle: &str) -> Option<(String, String)> {
+    let out = git(
+        dir,
+        &[
+            "log",
+            "--reverse",
+            "--format=%h %cs",
+            "-S",
+            needle,
+            "--",
+            file,
+        ],
+    )
+    .ok()?;
+    let line = out.lines().next()?;
+    let (sha, date) = line.split_once(' ')?;
+    Some((sha.into(), date.into()))
+}

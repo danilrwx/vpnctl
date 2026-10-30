@@ -1,38 +1,32 @@
-//! TUI: цикл событий и рендер ratatui. Вся логика — в `model` (чистые функции) и в крейте.
-//! Долгие операции (plan/apply/collect/probe) — дочерний `vpnctl`, вывод построчно на экран 4.
+//! TUI: app state, event loop, keys and background jobs. Logic lives in `model` and in the crate;
+//! drawing in `screens`. Long operations run as a child `vpnctl` or `ssh` with their output streamed.
 pub mod model;
+mod screens;
+mod ui;
 
 use crate::metrics::{self, Db, Status};
+use crate::plan::HostPlan;
+use crate::render::Rendered;
+use crate::ssh::Ssh;
 use crate::state::*;
 use crate::{git, validate};
 use anyhow::{Context, Result, bail};
 use model::*;
-use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Style, Stylize};
-use ratatui::text::Line;
-use ratatui::widgets::{Block, Cell, Clear, Paragraph, Row as TRow, Table, TableState, Tabs, Wrap};
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-const SCREENS: [&str; 6] = [
-    "1 Обзор",
-    "2 Пользователи",
-    "3 Хост",
-    "4 План",
-    "5 Топология",
-    "6 Маршрут",
-];
-const HELP: [&str; 6] = [
-    "j/k строка · Enter карточка хоста · p план · a применить · r метрики · t матрица · V проверка",
-    "j/k строка · / фильтр · Enter следующая ссылка в QR · n новый · e править · x вкл/выкл · D удалить",
-    "j/k хост · h/l линк · o диалог линка · N новый линк",
-    "p план · a применить · r метрики · t матрица · вывод появляется построчно",
-    "t прогнать матрицу · N новый линк",
-    "j/k правило · h другой вход · n новое · e править · x вкл/выкл · D удалить · J/K переставить",
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const SCREENS: [&str; 6] = [
+    "1 Overview",
+    "2 Users",
+    "3 Host",
+    "4 Plan",
+    "5 Topology",
+    "6 Routing",
 ];
 
 enum Msg {
@@ -40,96 +34,106 @@ enum Msg {
     Done(i32),
 }
 
+/// Where a job's output goes.
+#[derive(Clone, PartialEq)]
+enum Sink {
+    /// Screen 4.
+    Plan,
+    /// Journal tail of a host (screen 3).
+    HostLog(String),
+}
+
+struct Job {
+    rx: Receiver<Msg>,
+    sink: Sink,
+    name: String,
+}
+
 enum Confirm {
-    Apply,
+    Apply(Option<String>),
     UserRm(String),
     RuleRm(String, Group, usize),
+    /// A command on a host over ssh, no commit: (host, name, command).
+    Ssh(String, String, String),
 }
 
-struct App {
-    st: State,
-    status: Status,
-    head: Option<String>,
-    branch: String,
-    clean: bool,
-    last_apply: Option<String>,
-    /// Проверка формы на лету: сообщение коммита и строки группы, либо ошибка.
-    preview: Option<Result<(String, Vec<Row>), String>>,
-    now: i64,
-    screen: usize,
-    sel: [usize; 6],
-    link_sel: usize,
-    entry_sel: usize,
-    qr: usize,
-    filter: String,
-    filtering: bool,
-    help: bool,
-    form: Option<Form>,
+/// A finished plan: hosts, apply order, rendered files.
+pub struct PlanData {
+    pub plans: Vec<HostPlan>,
+    pub order: Vec<String>,
+    pub rendered: Rendered,
+}
+
+/// Scrollable text overlay: title, lines, scroll.
+pub struct TextView {
+    pub title: String,
+    pub lines: Vec<String>,
+    pub scroll: u16,
+}
+
+pub struct App {
+    pub st: State,
+    pub db: Db,
+    pub status: Status,
+    pub now: i64,
+    // git
+    pub head: Option<String>,
+    pub head_msg: String,
+    pub head_ts: i64,
+    pub branch: String,
+    pub clean: bool,
+    pub last_apply: Option<String>,
+    pub since_apply: usize,
+    pub reproducible: bool,
+    pub behind: BTreeMap<String, usize>,
+    pub added: BTreeMap<String, (String, String)>,
+    pub resolved: BTreeMap<String, Vec<std::net::IpAddr>>,
+    // navigation
+    pub screen: usize,
+    pub sel: [usize; 6],
+    pub entry_sel: usize,
+    pub filter: String,
+    pub filtering: bool,
+    pub help: bool,
+    pub msg: String,
+    // users
+    pub qr: usize,
+    pub big_qr: bool,
+    pub sort_traffic: bool,
+    // host
+    pub host_sel: usize,
+    pub host_log: BTreeMap<String, Vec<String>>,
+    // plan
+    pub plan: Option<Result<PlanData, String>>,
+    plan_rx: Option<Receiver<Result<PlanData, String>>>,
+    pub plan_sel: usize,
+    // topology
+    pub proto_sel: usize,
+    // routing
+    pub trace_addr: String,
+    pub trace_input: bool,
+    pub trace_user: usize,
+    // overlays
+    pub form: Option<Form>,
+    pub preview: Option<Result<(String, Vec<Row>), String>>,
     confirm: Option<Confirm>,
-    msg: String,
-    job: Option<Receiver<Msg>>,
-    job_name: String,
-    job_ok: Option<bool>,
-    log: Vec<String>,
-}
-
-fn color(l: Level) -> Color {
-    match l {
-        Level::Ok => Color::Green,
-        Level::Warn => Color::Yellow,
-        Level::Bad => Color::Red,
-        Level::Off => Color::DarkGray,
-    }
-}
-
-fn center(area: Rect, w: u16, h: u16) -> Rect {
-    let w = w.min(area.width);
-    let h = h.min(area.height);
-    Rect::new(
-        area.x + (area.width - w) / 2,
-        area.y + (area.height - h) / 2,
-        w,
-        h,
-    )
-}
-
-fn widths(header: &[&str], rows: &[Row]) -> Vec<Constraint> {
-    (0..header.len())
-        .map(|i| {
-            let w = rows
-                .iter()
-                .map(|r| r.cells[i].chars().count())
-                .chain([header[i].chars().count()])
-                .max()
-                .unwrap_or(1);
-            Constraint::Length(w as u16)
-        })
-        .collect()
-}
-
-fn table<'a>(header: &[&'a str], rows: &'a [Row], title: String) -> Table<'a> {
-    Table::new(
-        rows.iter()
-            .map(|r| TRow::new(r.cells.iter().map(|c| Cell::from(c.as_str()))).fg(color(r.level))),
-        widths(header, rows),
-    )
-    .header(TRow::new(header.iter().copied()).bold())
-    .row_highlight_style(Style::new().reversed())
-    .block(Block::bordered().title(title))
-}
-
-fn para<'a>(title: &'a str, lines: Vec<Line<'a>>) -> Paragraph<'a> {
-    Paragraph::new(lines)
-        .block(Block::bordered().title(title))
-        .wrap(Wrap { trim: false })
+    pub confirm_text: String,
+    pub text: Option<TextView>,
+    // jobs
+    job: Option<Job>,
+    pub job_name: String,
+    pub job_ok: Option<bool>,
+    pub job_start: Option<Instant>,
+    pub job_elapsed: Duration,
+    pub log: Vec<String>,
 }
 
 pub fn run(st: State) -> Result<()> {
     let mut app = App::load(st)?;
-    let mut term = ratatui::try_init().context("терминал")?;
+    let mut term = ratatui::try_init().context("terminal")?;
     let r = (|| -> Result<()> {
         loop {
-            app.poll_job()?;
+            app.poll()?;
             term.draw(|f| app.draw(f))?;
             if event::poll(Duration::from_millis(250))?
                 && let Event::Key(k) = event::read()?
@@ -146,58 +150,124 @@ pub fn run(st: State) -> Result<()> {
 
 impl App {
     fn load(st: State) -> Result<App> {
+        let db = Db::open(&st.dir)?;
         let now = metrics::now();
-        let status = metrics::status(&st, &Db::open(&st.dir)?, now)?;
+        let status = metrics::status(&st, &db, now)?;
         let mut app = App {
             st,
+            db,
             status,
+            now,
             head: None,
+            head_msg: String::new(),
+            head_ts: 0,
             branch: "—".into(),
             clean: true,
             last_apply: None,
-            preview: None,
-            now,
+            since_apply: 0,
+            reproducible: false,
+            behind: BTreeMap::new(),
+            added: BTreeMap::new(),
+            resolved: BTreeMap::new(),
             screen: 0,
             sel: [0; 6],
-            link_sel: 0,
             entry_sel: 0,
-            qr: 0,
             filter: String::new(),
             filtering: false,
             help: false,
+            msg: "? help".into(),
+            qr: 0,
+            big_qr: false,
+            sort_traffic: false,
+            host_sel: 0,
+            host_log: BTreeMap::new(),
+            plan: None,
+            plan_rx: None,
+            plan_sel: 0,
+            proto_sel: 0,
+            trace_addr: "www.youtube.com:443".into(),
+            trace_input: false,
+            trace_user: 0,
             form: None,
+            preview: None,
             confirm: None,
-            msg: "? помощь".into(),
+            confirm_text: String::new(),
+            text: None,
             job: None,
             job_name: String::new(),
             job_ok: None,
+            job_start: None,
+            job_elapsed: Duration::ZERO,
             log: vec![],
         };
-        app.git();
+        app.refresh_meta();
         Ok(app)
     }
 
-    fn git(&mut self) {
-        self.head = git::head(&self.st.dir).ok();
-        self.branch = git::branch(&self.st.dir).unwrap_or("—".into());
-        self.clean = git::is_clean(&self.st.dir).unwrap_or(true);
-        self.last_apply = git::last_tag(&self.st.dir, "applied/");
+    /// Git facts, render check, DNS of domains, "added" commits of users.
+    fn refresh_meta(&mut self) {
+        let dir = self.st.dir.clone();
+        if let Some((h, m, ts)) = git::head_info(&dir) {
+            self.head = Some(h);
+            self.head_msg = m;
+            self.head_ts = ts;
+        }
+        self.branch = git::branch(&dir).unwrap_or("—".into());
+        self.clean = git::is_clean(&dir).unwrap_or(true);
+        self.last_apply = git::last_tag(&dir, "applied/");
+        self.since_apply = self
+            .last_apply
+            .as_deref()
+            .and_then(|t| git::count(&dir, t, "HEAD"))
+            .unwrap_or(0);
+        self.reproducible = crate::render::check(&self.st).is_ok();
+        self.behind.clear();
+        for h in self.status.hosts.values() {
+            if let Some(m) = h.last.as_ref().and_then(|l| l.marker.clone())
+                && let Some(n) = git::count(&dir, &m, "HEAD")
+            {
+                self.behind.insert(m, n);
+            }
+        }
+        self.added = self
+            .st
+            .users
+            .keys()
+            .filter_map(|u| {
+                git::added(&dir, "users.yaml", &format!("  {u}:")).map(|a| (u.clone(), a))
+            })
+            .collect();
+        // ponytail: a blocking resolver per domain at reload; a background thread if DNS ever stalls
+        use std::net::ToSocketAddrs;
+        self.resolved = self
+            .st
+            .hosts
+            .iter()
+            .filter_map(|(n, h)| {
+                let d = h.domain.as_ref()?;
+                let ips = (d.as_str(), 443)
+                    .to_socket_addrs()
+                    .map(|a| a.map(|s| s.ip()).collect())
+                    .unwrap_or_default();
+                Some((n.clone(), ips))
+            })
+            .collect();
     }
 
     fn reload(&mut self) -> Result<()> {
         self.st = State::load(&self.st.dir)?;
         self.now = metrics::now();
-        self.status = metrics::status(&self.st, &Db::open(&self.st.dir)?, self.now)?;
-        self.git();
+        self.status = metrics::status(&self.st, &self.db, self.now)?;
+        self.refresh_meta();
         Ok(())
     }
 
-    /// Операция → validate → save → commit; при ошибке состояние перечитано с диска.
+    /// Operation → validate → save → commit; on error the state is re-read from disk.
     fn commit(&mut self, f: impl FnOnce(&mut State) -> Result<String>) -> Result<String> {
         let r = f(&mut self.st).and_then(|msg| {
             let errs = validate::validate(&self.st);
             if !errs.is_empty() {
-                bail!("не записано: {}", errs.join("; "));
+                bail!("not written: {}", errs.join("; "));
             }
             self.st.save()?;
             git::commit(&self.st.dir, &msg)?;
@@ -215,26 +285,41 @@ impl App {
         Ok(())
     }
 
-    // ---------- фоновые операции ----------
+    // ---------- background jobs ----------
 
-    fn start(&mut self, name: &str, args: &[&str]) {
+    fn vpnctl(&self, args: &[&str]) -> Result<Command> {
+        let exe = std::env::current_exe().context("path to vpnctl")?;
+        let mut c = Command::new(exe);
+        c.arg("-C").arg(&self.st.dir).args(args);
+        Ok(c)
+    }
+
+    /// Child `vpnctl` with output on screen 4.
+    fn start_vpnctl(&mut self, name: &str, args: &[&str]) {
+        match self.vpnctl(args) {
+            Ok(c) => self.start(name, c, Sink::Plan),
+            Err(e) => self.msg = format!("✗ {e:#}"),
+        }
+    }
+
+    fn start_ssh(&mut self, host: &str, name: &str, cmd: &str, sink: Sink) {
+        match Ssh::for_host(&self.st, host) {
+            Ok(s) => self.start(name, s.command(cmd), sink),
+            Err(e) => self.msg = format!("✗ {e:#}"),
+        }
+    }
+
+    fn start(&mut self, name: &str, mut cmd: Command, sink: Sink) {
         if self.job.is_some() {
-            self.msg = "операция уже выполняется".into();
+            self.msg = "a job is already running".into();
             return;
         }
-        let child = std::env::current_exe()
-            .context("путь к vpnctl")
-            .and_then(|exe| {
-                Command::new(exe)
-                    .arg("-C")
-                    .arg(&self.st.dir)
-                    .args(args)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .context("запуск vpnctl")
-            });
+        let child = cmd
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("spawn");
         let mut child = match child {
             Ok(c) => c,
             Err(e) => {
@@ -257,34 +342,85 @@ impl App {
             let code = child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
             tx.send(Msg::Done(code)).ok();
         });
-        self.job = Some(rx);
-        self.job_name = name.into();
-        self.job_ok = None;
-        self.log.clear();
-        self.screen = 3;
-        self.msg = format!("{name}: выполняется");
+        if sink == Sink::Plan {
+            self.log.clear();
+            self.job_name = name.into();
+            self.job_ok = None;
+            self.job_start = Some(Instant::now());
+            self.screen = 3;
+        } else if let Sink::HostLog(h) = &sink {
+            self.host_log.insert(h.clone(), vec![]);
+        }
+        self.job = Some(Job {
+            rx,
+            sink,
+            name: name.into(),
+        });
+        self.msg = format!("{name}: running");
     }
 
-    fn poll_job(&mut self) -> Result<()> {
-        let Some(rx) = &self.job else {
+    /// Plan in a thread: render check + parallel probe of the hosts.
+    fn start_plan(&mut self) {
+        if self.plan_rx.is_some() {
+            self.msg = "plan is already running".into();
+            return;
+        }
+        let st = self.st.clone();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let r = crate::render::check(&st)
+                .and_then(|rendered| {
+                    let plans = crate::plan::plan(&st, &rendered)?;
+                    let names: Vec<String> = plans.iter().map(|p| p.name.clone()).collect();
+                    Ok(PlanData {
+                        order: crate::apply::order(&st, &names),
+                        plans,
+                        rendered,
+                    })
+                })
+                .map_err(|e| format!("{e:#}"));
+            tx.send(r).ok();
+        });
+        self.plan_rx = Some(rx);
+        self.plan_sel = 0;
+        self.screen = 3;
+        self.msg = "plan: probing hosts".into();
+    }
+
+    fn poll(&mut self) -> Result<()> {
+        if let Some(rx) = &self.plan_rx
+            && let Ok(r) = rx.try_recv()
+        {
+            self.msg = match &r {
+                Ok(p) => format!("plan: {} hosts", p.plans.len()),
+                Err(e) => format!("✗ plan: {e}"),
+            };
+            self.plan = Some(r);
+            self.plan_rx = None;
+        }
+        let Some(job) = &self.job else {
             return Ok(());
         };
-        let msgs: Vec<Msg> = rx.try_iter().collect();
+        if let Some(s) = self.job_start
+            && self.job_ok.is_none()
+        {
+            self.job_elapsed = s.elapsed();
+        }
+        let sink = job.sink.clone();
+        let name = job.name.clone();
+        let msgs: Vec<Msg> = job.rx.try_iter().collect();
         for m in msgs {
             match m {
-                Msg::Line(l) => self.log.push(l),
+                Msg::Line(l) => match &sink {
+                    Sink::Plan => self.log.push(l),
+                    Sink::HostLog(h) => self.host_log.entry(h.clone()).or_default().push(l),
+                },
                 Msg::Done(code) => {
                     self.job = None;
-                    self.job_ok = Some(code == 0);
-                    self.msg = format!(
-                        "{}: {}",
-                        self.job_name,
-                        if code == 0 {
-                            "готово"
-                        } else {
-                            "ошибка"
-                        }
-                    );
+                    if sink == Sink::Plan {
+                        self.job_ok = Some(code == 0);
+                    }
+                    self.msg = format!("{name}: {}", if code == 0 { "done" } else { "failed" });
                     self.reload()?;
                 }
             }
@@ -292,53 +428,122 @@ impl App {
         Ok(())
     }
 
-    // ---------- данные экранов ----------
+    pub fn job_running(&self) -> bool {
+        self.job.as_ref().is_some_and(|j| j.sink == Sink::Plan)
+    }
 
-    fn entries(&self) -> Vec<String> {
+    pub fn plan_running(&self) -> bool {
+        self.plan_rx.is_some()
+    }
+
+    // ---------- screen data ----------
+
+    pub fn entries(&self) -> Vec<String> {
         self.st.entries().map(|(n, _)| n.clone()).collect()
     }
 
-    fn host_names(&self) -> Vec<String> {
+    pub fn host_names(&self) -> Vec<String> {
         self.st.hosts.keys().cloned().collect()
     }
 
-    fn user_visible(&self) -> Vec<usize> {
-        filter(&user_rows(&self.st, &self.status, self.now), &self.filter)
+    pub fn host_name(&self) -> Option<String> {
+        self.host_names().get(self.host_sel).cloned()
     }
 
-    fn user_name(&self) -> Option<String> {
-        let names: Vec<&String> = self.st.users.keys().collect();
-        self.user_visible()
-            .get(self.sel[1])
-            .map(|i| names[*i].clone())
+    /// Users table rows after filter and sort, with the names.
+    pub fn user_table(&self) -> Vec<(String, Row)> {
+        let mut rows = user_rows(&self.st, &self.status, self.now);
+        sort_users(&mut rows, self.sort_traffic);
+        filter(&rows, &self.filter)
+            .into_iter()
+            .map(|i| (rows[i].cells[0].clone(), rows[i].clone()))
+            .collect()
     }
 
-    fn routing_host(&self) -> Option<String> {
+    pub fn user_name(&self) -> Option<String> {
+        self.user_table().get(self.sel[1]).map(|(n, _)| n.clone())
+    }
+
+    pub fn routing_host(&self) -> Option<String> {
         let e = self.entries();
         e.get(self.entry_sel.min(e.len().saturating_sub(1)))
             .cloned()
     }
 
-    fn rule_at(&self) -> Option<(String, Group, usize)> {
+    pub fn rule_at(&self) -> Option<(String, Group, usize)> {
         let h = self.routing_host()?;
         let (g, i, _) = rule_rows(&self.st, &h).into_iter().nth(self.sel[5])?;
         Some((h, g, i))
     }
 
-    fn host_link(&self) -> Option<(String, String)> {
-        let h = self.host_names().get(self.sel[2]).cloned()?;
-        let to = self
+    /// Rows of the "Inbounds and exits" panel: inbounds then exits.
+    pub fn host_rows3(&self) -> (Vec<Row3>, Vec<Row3>) {
+        match self.host_name() {
+            Some(h) => (
+                inbound_rows(&self.st, &h),
+                exit_rows(&self.st, &self.status, &h),
+            ),
+            None => (vec![], vec![]),
+        }
+    }
+
+    pub fn plan_rows(&self) -> Vec<PlanRow> {
+        let Some(Ok(p)) = &self.plan else {
+            return vec![];
+        };
+        let roles = self
             .st
-            .links_from(&h)
-            .nth(self.link_sel)
-            .map(|l| l.to.clone())?;
-        Some((h, to))
+            .hosts
+            .keys()
+            .map(|n| (n.clone(), role_text(&self.st, n)))
+            .collect();
+        plan_rows(&p.plans, &p.order, self.head.as_deref(), &roles)
+    }
+
+    /// Host and path of the selected plan file row.
+    fn plan_file(&self) -> Option<(String, String)> {
+        match self.plan_rows().get(self.plan_sel)? {
+            PlanRow::File { host, path, .. } => Some((host.clone(), path.clone())),
+            _ => None,
+        }
+    }
+
+    fn plan_host(&self) -> Option<String> {
+        let rows = self.plan_rows();
+        let upto = self.plan_sel.min(rows.len().checked_sub(1)?);
+        for r in rows[..=upto].iter().rev() {
+            match r {
+                PlanRow::Host(t, _) => return t.split(" · ").next().map(String::from),
+                PlanRow::File { host, .. } => return Some(host.clone()),
+                _ => {}
+            }
+        }
+        None
+    }
+
+    pub fn matrix(&self) -> Vec<MatrixRow> {
+        matrix_rows(&self.status)
+    }
+
+    pub fn trace_user_name(&self) -> Option<(String, Mode)> {
+        let users: Vec<(&String, &User)> = self.st.users.iter().collect();
+        let (n, u) = users.get(self.trace_user % users.len().max(1))?;
+        Some((
+            n.to_string(),
+            u.modes.first().copied().unwrap_or(Mode::Split),
+        ))
     }
 
     fn len(&self, screen: usize) -> usize {
         match screen {
-            0 | 2 => self.st.hosts.len(),
-            1 => self.user_visible().len(),
+            0 => self.st.hosts.len(),
+            1 => self.user_table().len(),
+            2 => {
+                let (i, e) = self.host_rows3();
+                i.len() + e.len()
+            }
+            3 => self.plan_rows().len(),
+            4 => self.matrix().len(),
             5 => self
                 .routing_host()
                 .map(|h| rule_rows(&self.st, &h).len())
@@ -359,10 +564,57 @@ impl App {
             .map(|f| preview(f, &self.st).map_err(|e| format!("{e:#}")));
     }
 
-    // ---------- клавиши ----------
+    pub fn confirm_pending(&self) -> bool {
+        self.confirm.is_some()
+    }
 
-    /// true — выйти.
+    fn ask(&mut self, text: &str, c: Confirm) {
+        self.confirm_text = text.into();
+        self.confirm = Some(c);
+    }
+
+    fn show_text(&mut self, title: &str, text: &str) {
+        self.text = Some(TextView {
+            title: title.into(),
+            lines: text.lines().map(String::from).collect(),
+            scroll: 0,
+        });
+    }
+
+    /// OSC 52: put text into the terminal clipboard.
+    fn copy(&mut self, s: &str) {
+        use base64::Engine as _;
+        use std::io::Write;
+        let b = base64::engine::general_purpose::STANDARD.encode(s);
+        let mut out = std::io::stdout();
+        write!(out, "\x1b]52;c;{b}\x07").ok();
+        out.flush().ok();
+        self.msg = "copied to the terminal clipboard (OSC 52)".into();
+    }
+
+    fn selected_host(&self, s: usize) -> Option<String> {
+        if s == 0 {
+            self.host_names().get(self.sel[0]).cloned()
+        } else {
+            self.host_name()
+        }
+    }
+
+    // ---------- keys ----------
+
+    /// true — quit.
     fn key(&mut self, k: KeyEvent) -> Result<bool> {
+        if let Some(t) = &mut self.text {
+            match k.code {
+                KeyCode::Esc | KeyCode::Char('q') => self.text = None,
+                KeyCode::Char('j') | KeyCode::Down => t.scroll = t.scroll.saturating_add(1),
+                KeyCode::Char('k') | KeyCode::Up => t.scroll = t.scroll.saturating_sub(1),
+                KeyCode::PageDown => t.scroll = t.scroll.saturating_add(20),
+                KeyCode::PageUp => t.scroll = t.scroll.saturating_sub(20),
+                _ => {}
+            }
+            return Ok(false);
+        }
         if let Some(f) = &mut self.form {
             match k.code {
                 KeyCode::Esc => self.form = None,
@@ -397,32 +649,50 @@ impl App {
         if let Some(c) = self.confirm.take() {
             if k.code == KeyCode::Char('y') {
                 match c {
-                    Confirm::Apply => self.start("apply", &["apply"]),
+                    Confirm::Apply(None) => self.start_vpnctl("apply", &["apply"]),
+                    Confirm::Apply(Some(h)) => {
+                        self.start_vpnctl(&format!("apply {h}"), &["apply", "--host", &h])
+                    }
                     Confirm::UserRm(n) => self.act(|st| crate::ops::user_rm(st, &n))?,
                     Confirm::RuleRm(h, g, i) => {
                         self.act(|st| crate::ops::rule_rm(st, &h, g, i))?;
                         self.sel[5] = step(self.sel[5], self.len(5), 0);
                     }
+                    Confirm::Ssh(h, name, cmd) => self.start_ssh(&h, &name, &cmd, Sink::Plan),
                 }
             } else {
-                self.msg = "отменено".into();
+                self.msg = "cancelled".into();
             }
             return Ok(false);
         }
-        if self.filtering {
+        if self.filtering || self.trace_input {
+            let filtering = self.filtering;
+            let buf = if filtering {
+                &mut self.filter
+            } else {
+                &mut self.trace_addr
+            };
             match k.code {
                 KeyCode::Esc => {
-                    self.filter.clear();
+                    if filtering {
+                        buf.clear();
+                    }
                     self.filtering = false;
+                    self.trace_input = false;
                 }
-                KeyCode::Enter => self.filtering = false,
+                KeyCode::Enter => {
+                    self.filtering = false;
+                    self.trace_input = false;
+                }
                 KeyCode::Backspace => {
-                    self.filter.pop();
+                    buf.pop();
                 }
-                KeyCode::Char(c) => self.filter.push(c),
+                KeyCode::Char(c) => buf.push(c),
                 _ => {}
             }
-            self.sel[1] = 0;
+            if filtering {
+                self.sel[1] = 0;
+            }
             return Ok(false);
         }
         if self.help {
@@ -432,7 +702,10 @@ impl App {
         let s = self.screen;
         match k.code {
             KeyCode::Char('q') => return Ok(true),
-            KeyCode::Char(d @ '1'..='6') => self.screen = d as usize - '1' as usize,
+            KeyCode::Char(d @ '1'..='6') => {
+                self.screen = d as usize - '1' as usize;
+                self.msg.clear();
+            }
             KeyCode::Char('?') => self.help = true,
             KeyCode::Char('/') => {
                 self.filtering = true;
@@ -440,27 +713,99 @@ impl App {
             }
             KeyCode::Esc => {
                 self.filter.clear();
+                self.msg.clear();
                 self.screen = 0;
             }
-            KeyCode::Char('j') => self.sel[s] = step(self.sel[s], self.len(s), 1),
-            KeyCode::Char('k') => self.sel[s] = step(self.sel[s], self.len(s), -1),
-            KeyCode::Char('p') => self.start("plan", &["plan"]),
-            KeyCode::Char('a') => self.confirm = Some(Confirm::Apply),
-            KeyCode::Char('r') => self.start("collect", &["collect"]),
-            KeyCode::Char('t') => self.start("probe --matrix", &["probe", "--matrix"]),
+            KeyCode::Char('j') | KeyCode::Down => {
+                let n = self.len(s);
+                match s {
+                    3 => self.plan_sel = step(self.plan_sel, n, 1),
+                    _ => self.sel[s] = step(self.sel[s], n, 1),
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                let n = self.len(s);
+                match s {
+                    3 => self.plan_sel = step(self.plan_sel, n, -1),
+                    _ => self.sel[s] = step(self.sel[s], n, -1),
+                }
+            }
+            KeyCode::Char('p') => self.start_plan(),
+            KeyCode::Char('a') => self.ask(
+                "apply the state to all hosts? y — yes",
+                Confirm::Apply(None),
+            ),
+            KeyCode::Char('r') => self.start_vpnctl("collect", &["collect"]),
+            KeyCode::Char('t') if s != 5 => {
+                self.start_vpnctl("probe --matrix", &["probe", "--matrix"])
+            }
             KeyCode::Char('V') => {
                 let errs = validate::validate(&self.st);
                 self.msg = if errs.is_empty() {
-                    "✓ состояние валидно".into()
+                    "✓ state is valid".into()
                 } else {
                     format!("✗ {}", errs.join("; "))
                 };
             }
+            // --- overview
             KeyCode::Enter if s == 0 => {
-                self.sel[2] = self.sel[0];
+                self.host_sel = self.sel[0];
+                self.sel[2] = 0;
                 self.screen = 2;
             }
+            KeyCode::Char('o') if s == 0 || s == 2 => {
+                match self
+                    .selected_host(s)
+                    .filter(|h| self.st.hosts[h].role == Role::Entry)
+                {
+                    Some(h) => self.open(exit_form(&self.st, &h)),
+                    None => self.msg = "exit policy is set on an entry".into(),
+                }
+            }
+            KeyCode::Char('B') if s == 0 || s == 2 => {
+                if let Some(h) = self.selected_host(s) {
+                    self.start_vpnctl(&format!("bootstrap {h}"), &["host", "bootstrap", &h]);
+                }
+            }
+            // --- users
             KeyCode::Enter if s == 1 => self.qr += 1,
+            KeyCode::Char('T') if s == 1 => {
+                if let Some(n) = self.user_name()
+                    && let Ok(links) = user_links(&self.st, &n)
+                    && let Some(i) = links.iter().position(|(l, _)| l.starts_with("Telegram"))
+                {
+                    self.qr = i;
+                }
+            }
+            KeyCode::Char('Q') if s == 1 => self.big_qr = !self.big_qr,
+            KeyCode::Char('y') if s == 1 => {
+                if let Some(n) = self.user_name()
+                    && let Ok(links) = user_links(&self.st, &n)
+                    && !links.is_empty()
+                {
+                    let url = links[self.qr % links.len()].1.clone();
+                    self.copy(&url);
+                }
+            }
+            KeyCode::Char('s') if s == 1 => self.sort_traffic = !self.sort_traffic,
+            KeyCode::Char('f') if s == 1 => {
+                if let Some(n) = self.user_name() {
+                    let u = &self.st.users[&n];
+                    match self.st.entry_of(u) {
+                        Some(e) if u.awg.is_some() => {
+                            let p = format!("/etc/vpnctl/profiles/{n}/awg.conf");
+                            match crate::render::render_host(&self.st, &e) {
+                                Ok(files) => match files.get(&p) {
+                                    Some(c) => self.show_text(&p, c),
+                                    None => self.msg = "no awg profile rendered".into(),
+                                },
+                                Err(e) => self.msg = format!("✗ {e:#}"),
+                            }
+                        }
+                        _ => self.msg = "the user has no awg peer — nothing to show".into(),
+                    }
+                }
+            }
             KeyCode::Char('n') if s == 1 => self.open(user_form(&self.st, None)),
             KeyCode::Char('e') if s == 1 => {
                 if let Some(n) = self.user_name() {
@@ -475,22 +820,131 @@ impl App {
             }
             KeyCode::Char('D') if s == 1 => {
                 if let Some(n) = self.user_name() {
-                    self.msg = format!("удалить пользователя {n}? y — да");
-                    self.confirm = Some(Confirm::UserRm(n));
+                    self.ask(&format!("delete user {n}? y — yes"), Confirm::UserRm(n));
                 }
             }
-            KeyCode::Char('h') if s == 2 => self.link_sel = self.link_sel.saturating_sub(1),
-            KeyCode::Char('l') if s == 2 => self.link_sel += 1,
-            KeyCode::Char('o') if s == 2 => {
-                if let Some((from, to)) = self.host_link() {
-                    self.open(link_form(&self.st, &from, &to));
+            // --- host
+            KeyCode::Char('h') | KeyCode::Left if s == 2 => {
+                self.host_sel = step(self.host_sel, self.st.hosts.len(), -1);
+                self.sel[2] = 0;
+            }
+            KeyCode::Right if s == 2 => {
+                self.host_sel = step(self.host_sel, self.st.hosts.len(), 1);
+                self.sel[2] = 0;
+            }
+            KeyCode::Char('l') if s == 2 => {
+                if let Some(h) = self.host_name() {
+                    let unit = match self.st.hosts[&h].engine {
+                        Engine::SingBox => "sing-box",
+                        Engine::Xray => "xray",
+                    };
+                    self.start_ssh(
+                        &h,
+                        "journal",
+                        &format!("journalctl -u {unit} -n 20 --no-pager"),
+                        Sink::HostLog(h.clone()),
+                    );
                 }
             }
-            KeyCode::Char('N') if s == 2 || s == 4 => self.open(link_form(&self.st, "", "")),
+            KeyCode::Char('x') if s == 2 => {
+                if let Some(h) = self.host_name() {
+                    let protos: Vec<Proto> = self
+                        .st
+                        .inbounds
+                        .get(&h)
+                        .map(|m| m.keys().copied().collect())
+                        .unwrap_or_default();
+                    match protos.get(self.sel[2]) {
+                        Some(p) => {
+                            let p = *p;
+                            self.act(|st| crate::ops::inbound_toggle(st, &h, p))?;
+                        }
+                        None => self.msg = "select an inbound row".into(),
+                    }
+                }
+            }
+            KeyCode::Char('U') if s == 2 => {
+                if let Some(h) = self.host_name() {
+                    self.ask(
+                        &format!("upgrade OS packages on {h}? y — yes"),
+                        Confirm::Ssh(
+                            h.clone(),
+                            format!("upgrade {h}"),
+                            "DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confold upgrade".into(),
+                        ),
+                    );
+                }
+            }
+            KeyCode::Char('R') if s == 2 => {
+                if let Some(h) = self.host_name() {
+                    self.ask(
+                        &format!("reboot {h}? y — yes"),
+                        Confirm::Ssh(h.clone(), format!("reboot {h}"), "systemctl reboot".into()),
+                    );
+                }
+            }
+            // --- plan
+            KeyCode::Enter if s == 3 => self.ask(
+                "apply the state to all hosts? y — yes",
+                Confirm::Apply(None),
+            ),
+            KeyCode::Char('s') if s == 3 => match self.plan_host() {
+                Some(h) => self.ask(
+                    &format!("apply to {h} only? y — yes"),
+                    Confirm::Apply(Some(h)),
+                ),
+                None => self.msg = "select a host in the plan".into(),
+            },
+            KeyCode::Char('d') if s == 3 => match (self.plan_file(), &self.plan) {
+                (Some((h, p)), Some(Ok(data))) => {
+                    match crate::plan::diff(&self.st, &data.rendered, &h, &p) {
+                        Ok(d) => self.show_text(&format!("diff {h}:{p}"), &d),
+                        Err(e) => self.msg = format!("✗ {e:#}"),
+                    }
+                }
+                _ => self.msg = "select a file row in the plan".into(),
+            },
+            KeyCode::Char('m') if s == 3 => match self.plan_file() {
+                Some((h, p)) => {
+                    self.act(|st| crate::plan::adopt(st, &h, &p))?;
+                    self.plan = None;
+                }
+                None => self.msg = "select a file row in the plan".into(),
+            },
+            // --- topology
+            KeyCode::Char('t') if s == 4 => {
+                self.start_vpnctl("probe --matrix", &["probe", "--matrix"])
+            }
+            KeyCode::Enter if s == 4 => self.proto_sel = (self.proto_sel + 1) % MATRIX_COLS.len(),
+            KeyCode::Char('o') if s == 4 => {
+                if let Some(((src, dst), _)) = self.matrix().get(self.sel[4]).cloned() {
+                    if self.st.link(&src, &dst).is_some() {
+                        self.open(link_form(&self.st, &src, &dst));
+                    } else {
+                        self.msg = "the selected edge is not a link".into();
+                    }
+                }
+            }
+            KeyCode::Char('N') if s == 4 => self.open(link_form(&self.st, "", "")),
+            // --- routing
             KeyCode::Char('h') if s == 5 => {
                 let n = self.entries().len();
                 self.entry_sel = (self.entry_sel + 1) % n.max(1);
                 self.sel[5] = 0;
+            }
+            KeyCode::Char('t') if s == 5 => self.trace_input = true,
+            KeyCode::Char('u') if s == 5 => self.trace_user += 1,
+            KeyCode::Char('v') if s == 5 => {
+                if let Some(h) = self.routing_host() {
+                    let r = match self.st.hosts[&h].engine {
+                        Engine::SingBox => crate::render::singbox::config(&self.st, &h),
+                        Engine::Xray => crate::render::xray::config(&self.st, &h),
+                    };
+                    match r {
+                        Ok(c) => self.show_text(&format!("{h} · engine config"), &c),
+                        Err(e) => self.msg = format!("✗ {e:#}"),
+                    }
+                }
             }
             KeyCode::Char('n') if s == 5 => {
                 if let Some(h) = self.routing_host() {
@@ -510,556 +964,26 @@ impl App {
             }
             KeyCode::Char('D') if s == 5 => {
                 if let Some((h, g, i)) = self.rule_at() {
-                    self.msg = format!("удалить правило #{i}? y — да");
-                    self.confirm = Some(Confirm::RuleRm(h, g, i));
+                    self.ask(
+                        &format!("delete rule #{i}? y — yes"),
+                        Confirm::RuleRm(h, g, i),
+                    );
                 }
             }
             KeyCode::Char(c @ ('J' | 'K')) if s == 5 => {
                 if let Some((h, g, i)) = self.rule_at() {
                     let to = if c == 'J' { i + 1 } else { i.saturating_sub(1) };
-                    if to >= 1
-                        && self
-                            .commit(|st| crate::ops::rule_move(st, &h, g, i, to))
-                            .is_ok()
-                    {
-                        self.sel[5] = step(self.sel[5], self.len(5), if c == 'J' { 1 } else { -1 });
+                    if to >= 1 {
+                        self.act(|st| crate::ops::rule_move(st, &h, g, i, to))?;
+                        if !self.msg.starts_with('✗') {
+                            let d = if c == 'J' { 1 } else { -1 };
+                            self.sel[5] = step(self.sel[5], self.len(5), d);
+                        }
                     }
                 }
             }
             _ => {}
         }
         Ok(false)
-    }
-
-    // ---------- рендер ----------
-
-    fn draw(&mut self, f: &mut Frame) {
-        let [tabs, body, bar] = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
-        .areas(f.area());
-        f.render_widget(
-            Tabs::new(SCREENS)
-                .select(self.screen)
-                .highlight_style(Style::new().bold().yellow()),
-            tabs,
-        );
-        match self.screen {
-            0 => self.overview(f, body),
-            1 => self.users(f, body),
-            2 => self.host(f, body),
-            3 => self.plan(f, body),
-            4 => self.topology(f, body),
-            _ => self.routing(f, body),
-        }
-        let bar_text = if self.filtering {
-            format!("/ {}_", self.filter)
-        } else {
-            format!("{} · {}", self.msg, HELP[self.screen])
-        };
-        f.render_widget(Line::from(bar_text).dark_gray(), bar);
-        if self.help {
-            let a = center(body, 90, 9);
-            f.render_widget(Clear, a);
-            f.render_widget(
-                para(
-                    "Клавиши",
-                    vec![
-                        Line::from(
-                            "везде: 1–6 экраны · j/k · Enter · Esc · / фильтр · ? помощь · q выход",
-                        ),
-                        Line::from(
-                            "p план · a применить · r обновить метрики · t матрица · V проверка",
-                        ),
-                        Line::from(""),
-                        Line::from(format!("этот экран: {}", HELP[self.screen])),
-                        Line::from(""),
-                        Line::from(
-                            "зелёный в норме · жёлтый внимание · красный сломано · серый неактивно",
-                        ),
-                    ],
-                ),
-                a,
-            );
-        }
-        if let Some(form) = &self.form {
-            let (pv, pv_rows): (Vec<Line>, Vec<Row>) = match &self.preview {
-                Some(Ok((msg, rows))) => (
-                    vec![Line::from(format!("коммит: {msg}")).green()],
-                    rows.clone(),
-                ),
-                Some(Err(e)) => (vec![Line::from(format!("✗ {e}")).red()], vec![]),
-                None => (vec![], vec![]),
-            };
-            let a = center(
-                body,
-                100,
-                form.fields.len() as u16 + 6 + pv_rows.len().min(10) as u16,
-            );
-            f.render_widget(Clear, a);
-            let mut lines: Vec<Line> = form
-                .fields
-                .iter()
-                .enumerate()
-                .map(|(i, (l, v))| {
-                    let s = format!("{l:>24}: {v}{}", if i == form.cur { "▏" } else { "" });
-                    if i == form.cur {
-                        Line::from(s).bold()
-                    } else {
-                        Line::from(s)
-                    }
-                })
-                .collect();
-            lines.push(Line::from(""));
-            lines.push(match &form.error {
-                Some(e) => Line::from(format!("✗ {e}")).red(),
-                None => {
-                    Line::from("Enter сохранить и закоммитить · Esc отмена · Tab поле").dark_gray()
-                }
-            });
-            lines.extend(pv);
-            for r in pv_rows.iter().take(10) {
-                lines.push(
-                    Line::from(format!(
-                        "  {} {} {} {} {}",
-                        r.cells[0], r.cells[3], r.cells[1], r.cells[2], r.cells[4]
-                    ))
-                    .fg(color(r.level)),
-                );
-            }
-            f.render_widget(para(&form.title, lines), a);
-        }
-        if let Some(c) = &self.confirm {
-            let a = center(body, 60, 3);
-            f.render_widget(Clear, a);
-            let q = match c {
-                Confirm::Apply => "применить состояние на хосты? y — да".to_string(),
-                _ => self.msg.clone(),
-            };
-            f.render_widget(para("Подтверждение", vec![Line::from(q).yellow()]), a);
-        }
-    }
-
-    fn overview(&mut self, f: &mut Frame, area: Rect) {
-        let rows = host_rows(&self.st, &self.status, self.head.as_deref());
-        let links = (self.st.links.len() + self.st.entries().count()) as u16;
-        let [top, hosts, lnk, sum] = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(rows.len() as u16 + 3),
-            Constraint::Length(links + 2),
-            Constraint::Min(3),
-        ])
-        .areas(area);
-        let collected = self
-            .status
-            .hosts
-            .values()
-            .filter_map(|h| h.last.as_ref().map(|l| l.ts))
-            .max();
-        f.render_widget(
-            Line::from(format!(
-                "репо {} · HEAD {} · дерево {} · последний apply {} · метрики {}",
-                self.branch,
-                self.head.as_deref().unwrap_or("—"),
-                if self.clean {
-                    "чистое"
-                } else {
-                    "не закоммичено"
-                },
-                self.last_apply
-                    .as_deref()
-                    .map(|t| t.trim_start_matches("applied/"))
-                    .unwrap_or("—"),
-                collected
-                    .map(|t| ago(t, self.now))
-                    .unwrap_or("не собирались (r)".into())
-            )),
-            top,
-        );
-        self.sel[0] = step(self.sel[0], rows.len(), 0);
-        f.render_stateful_widget(
-            table(&HOST_HEADER, &rows, "Хосты".into()),
-            hosts,
-            &mut TableState::default().with_selected(self.sel[0]),
-        );
-        let mut lines: Vec<Line> = self
-            .st
-            .links
-            .iter()
-            .map(|l| {
-                let protos: Vec<String> = l
-                    .protocols
-                    .iter()
-                    .map(|p| {
-                        format!(
-                            "{}{}{}",
-                            p.name(),
-                            link_ms(&self.status, &l.from, &l.to, *p)
-                                .map(|m| format!(" {m}"))
-                                .unwrap_or_default(),
-                            if l.active == Some(*p) {
-                                " активный"
-                            } else {
-                                ""
-                            }
-                        )
-                    })
-                    .collect();
-                Line::from(format!(
-                    "{} → {} · {} · {}/сутки",
-                    l.from,
-                    l.to,
-                    protos.join(" · "),
-                    gb(link_traffic(&self.status, &l.from, l))
-                ))
-            })
-            .collect();
-        for (n, r) in &self.st.routing {
-            if self.st.hosts.get(n).is_some_and(|h| h.role == Role::Entry) {
-                lines
-                    .push(Line::from(format!("политика выхода {n}: {}", exit_text(r))).dark_gray());
-            }
-        }
-        f.render_widget(para("Линки", lines), lnk);
-        let users = &self.status.users;
-        let active = users.values().filter(|u| u.enabled).count();
-        let soon = self
-            .st
-            .users
-            .iter()
-            .filter(|(n, u)| user_level(&users[*n], u.expires.as_deref(), self.now) == Level::Warn)
-            .count();
-        let day: u64 = users.values().map(|u| u.day.up + u.day.down).sum();
-        let (direct, exit) = self
-            .st
-            .entries()
-            .map(|(n, _)| traffic_split(&self.st, &self.status, n))
-            .fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
-        let attention: Vec<String> = self
-            .status
-            .hosts
-            .iter()
-            .filter_map(|(n, h)| {
-                let issues = host_issues(h, self.head.as_deref());
-                (!issues.is_empty()).then(|| {
-                    format!(
-                        "{n}: {}",
-                        issues
-                            .into_iter()
-                            .map(|(_, s)| s)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                })
-            })
-            .collect();
-        f.render_widget(
-            para(
-                "Сводка",
-                vec![
-                    Line::from(format!(
-                        "пользователи {} · активных {active} · истекает {soon} за {EXPIRES_WARN_DAYS} дн",
-                        users.len()
-                    )),
-                    Line::from(format!(
-                        "трафик за сутки: пользователи {} · напрямую {} · через выход {}",
-                        gb(day),
-                        gb(direct),
-                        gb(exit)
-                    )),
-                    Line::from(if attention.is_empty() {
-                        "требует внимания: ничего".to_string()
-                    } else {
-                        format!("требует внимания: {}", attention.join(" · "))
-                    })
-                    .yellow(),
-                ],
-            ),
-            sum,
-        );
-    }
-
-    fn users(&mut self, f: &mut Frame, area: Rect) {
-        let [left, right] =
-            Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .areas(area);
-        let all = user_rows(&self.st, &self.status, self.now);
-        let vis = filter(&all, &self.filter);
-        let rows: Vec<Row> = vis.iter().map(|i| all[*i].clone()).collect();
-        self.sel[1] = step(self.sel[1], rows.len(), 0);
-        f.render_stateful_widget(
-            table(
-                &USER_HEADER,
-                &rows,
-                format!(
-                    "{} пользователей · фильтр: {}",
-                    all.len(),
-                    if self.filter.is_empty() {
-                        "/"
-                    } else {
-                        &self.filter
-                    }
-                ),
-            ),
-            left,
-            &mut TableState::default().with_selected(self.sel[1]),
-        );
-        let Some(name) = self.user_name() else {
-            f.render_widget(para("Карточка", vec![]), right);
-            return;
-        };
-        let u = &self.st.users[&name];
-        let mut lines = vec![
-            Line::from(format!(
-                "вход {}",
-                self.st.entry_of(u).unwrap_or("—".into())
-            )),
-            Line::from(format!(
-                "протоколы {}",
-                u.protocols
-                    .iter()
-                    .map(|p| p.name())
-                    .collect::<Vec<_>>()
-                    .join(" · ")
-            )),
-            Line::from(format!("заметка {}", u.note.as_deref().unwrap_or("—"))),
-            Line::from(format!(
-                "awg-пир {}",
-                u.awg
-                    .as_ref()
-                    .map(|a| format!("{} {}", a.mode.name(), a.ip))
-                    .unwrap_or("нет".into())
-            )),
-            Line::from(""),
-        ];
-        match user_links(&self.st, &name) {
-            Err(e) => lines.push(Line::from(format!("ссылки: {e:#}")).red()),
-            Ok(links) if links.is_empty() => lines.push(Line::from("ссылок нет").dark_gray()),
-            Ok(links) => {
-                let cur = self.qr % links.len();
-                for (i, (l, url)) in links.iter().enumerate() {
-                    let line = Line::from(format!("{l}: {url}"));
-                    lines.push(if i == cur { line.bold() } else { line });
-                }
-                lines.push(Line::from(""));
-                lines.extend(
-                    crate::render::subs::qr(&links[cur].1)
-                        .lines()
-                        .map(|l| Line::from(l.to_string())),
-                );
-            }
-        }
-        f.render_widget(
-            Paragraph::new(lines).block(Block::bordered().title(name)),
-            right,
-        );
-    }
-
-    fn host(&mut self, f: &mut Frame, area: Rect) {
-        let names = self.host_names();
-        self.sel[2] = step(self.sel[2], names.len(), 0);
-        let Some(name) = names.get(self.sel[2]) else {
-            return;
-        };
-        let info = host_info(&self.st, &self.status, name, self.head.as_deref(), self.now);
-        let [left, right] =
-            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .areas(area);
-        let [a, b] = Layout::vertical([Constraint::Length(8), Constraint::Min(3)]).areas(left);
-        let [c, v, d, e] = Layout::vertical([
-            Constraint::Length(4),
-            Constraint::Length(3),
-            Constraint::Length(info[4].1.len() as u16 + 2),
-            Constraint::Min(3),
-        ])
-        .areas(right);
-        for ((title, lines), area) in info.iter().zip([a, b, c, v, d]) {
-            let lines = lines.iter().map(|l| Line::from(l.as_str())).collect();
-            f.render_widget(
-                para(title, lines).block(Block::bordered().title(format!("{name} · {title}"))),
-                area,
-            );
-        }
-        let links = host_links(&self.st, &self.status, name);
-        self.link_sel = step(self.link_sel, links.len(), 0);
-        let lines = links
-            .iter()
-            .enumerate()
-            .map(|(i, l)| {
-                if i == self.link_sel {
-                    Line::from(l.as_str()).reversed()
-                } else {
-                    Line::from(l.as_str())
-                }
-            })
-            .collect();
-        f.render_widget(para("Линки (h/l, o)", lines), e);
-    }
-
-    fn plan(&mut self, f: &mut Frame, area: Rect) {
-        let title = match (self.job.is_some(), self.job_ok) {
-            _ if self.job_name.is_empty() => "p план · a применить · r метрики · t матрица".into(),
-            (true, _) => format!("{} · выполняется", self.job_name),
-            (_, Some(true)) => format!("{} · готово", self.job_name),
-            _ => format!("{} · ошибка", self.job_name),
-        };
-        let guards = if self.branch == "main" && self.clean {
-            Line::from("✓ ветка main, дерево чистое — apply пройдёт guard'ы").green()
-        } else {
-            Line::from(format!(
-                "! ветка {}, дерево {} — apply откажет",
-                self.branch,
-                if self.clean {
-                    "чистое"
-                } else {
-                    "не закоммичено"
-                }
-            ))
-            .yellow()
-        };
-        let [g, area] = Layout::vertical([Constraint::Length(1), Constraint::Min(3)]).areas(area);
-        f.render_widget(guards, g);
-        let h = area.height.saturating_sub(2) as usize;
-        let scroll = self.log.len().saturating_sub(h) as u16;
-        let lines: Vec<Line> = self.log.iter().map(|l| Line::from(l.as_str())).collect();
-        f.render_widget(
-            Paragraph::new(lines)
-                .block(Block::bordered().title(title))
-                .scroll((scroll, 0)),
-            area,
-        );
-    }
-
-    fn topology(&mut self, f: &mut Frame, area: Rect) {
-        let errs = validate::validate(&self.st);
-        let check = if errs.is_empty() {
-            Line::from(format!(
-                "статическая проверка ✓ · {} хостов, {} линков · via без циклов, выходы, ключи, подсети",
-                self.st.hosts.len(),
-                self.st.links.len()
-            ))
-            .green()
-        } else {
-            Line::from(format!(
-                "статическая проверка ✗ {} ошибок · V подробности",
-                errs.len()
-            ))
-            .red()
-        };
-        let [c, area] = Layout::vertical([Constraint::Length(1), Constraint::Min(3)]).areas(area);
-        f.render_widget(check, c);
-        let (cols, rows) = matrix_rows(&self.status);
-        if rows.is_empty() {
-            f.render_widget(
-                para(
-                    "Топология",
-                    vec![
-                        Line::from("матрица ещё не прогонялась · t — прогнать матрицу").dark_gray(),
-                    ],
-                ),
-                area,
-            );
-            return;
-        }
-        let header = TRow::new(["ребро"].into_iter().chain(cols.iter().copied())).bold();
-        let trows = rows.iter().map(|(edge, cells)| {
-            TRow::new(
-                [Cell::from(edge.as_str())].into_iter().chain(
-                    cells
-                        .iter()
-                        .map(|(t, l)| Cell::from(t.as_str()).fg(color(*l))),
-                ),
-            )
-        });
-        let mut w = vec![Constraint::Length(
-            rows.iter()
-                .map(|(e, _)| e.chars().count())
-                .max()
-                .unwrap_or(5) as u16,
-        )];
-        w.extend(std::iter::repeat_n(Constraint::Length(16), cols.len()));
-        f.render_widget(
-            Table::new(trows, w)
-                .header(header)
-                .block(Block::bordered().title(format!(
-                "матрица · прогон {}",
-                self.status
-                    .matrix_ts
-                    .map(|t| ago(t, self.now))
-                    .unwrap_or("—".into())
-            ))),
-            area,
-        );
-    }
-
-    fn routing(&mut self, f: &mut Frame, area: Rect) {
-        let Some(host) = self.routing_host() else {
-            f.render_widget(para("Маршрутизация", vec![Line::from("нет входов")]), area);
-            return;
-        };
-        let rules = rule_rows(&self.st, &host);
-        self.sel[5] = step(self.sel[5], rules.len(), 0);
-        let sets = self.st.sets.len() as u16;
-        let [top, dns, bottom] = Layout::vertical([
-            Constraint::Min(3),
-            Constraint::Length(5),
-            Constraint::Length(sets + 2),
-        ])
-        .areas(area);
-        let mut trows = vec![];
-        let mut selected = 0;
-        let mut last = None;
-        for (i, (g, _, r)) in rules.iter().enumerate() {
-            if last != Some(*g) {
-                trows.push(TRow::new([
-                    Cell::from(""),
-                    Cell::from(group_name(*g)).bold().cyan(),
-                ]));
-                last = Some(*g);
-            }
-            if i == self.sel[5] {
-                selected = trows.len();
-            }
-            trows
-                .push(TRow::new(r.cells.iter().map(|c| Cell::from(c.as_str()))).fg(color(r.level)));
-        }
-        let plain: Vec<Row> = rules.iter().map(|(_, _, r)| r.clone()).collect();
-        let mut w = widths(&["#", "условие", "действие", "", "заметка"], &plain);
-        w[1] = Constraint::Length(match w[1] {
-            Constraint::Length(n) => n.max(12),
-            _ => 12,
-        });
-        f.render_stateful_widget(
-            Table::new(trows, w)
-                .row_highlight_style(Style::new().reversed())
-                .block(Block::bordered().title(format!(
-                    "{host} · routing.yaml · правила сверху вниз, первое совпавшее (h — другой вход)"
-                ))),
-            top,
-            &mut TableState::default().with_selected(selected),
-        );
-        if let Some(r) = self.st.routing.get(&host) {
-            f.render_widget(
-                para(
-                    "Если ничего не совпало · DNS",
-                    vec![
-                        Line::from("умолчание движка (direct), не правило · трафик awg попадает сюда через tproxy")
-                            .dark_gray(),
-                        Line::from(dns_text(r)),
-                        Line::from(format!("выход: {}", exit_text(r))),
-                    ],
-                ),
-                dns,
-            );
-        }
-        let lines = self
-            .st
-            .sets
-            .keys()
-            .map(|n| Line::from(set_text(&self.st, n)))
-            .collect();
-        f.render_widget(para("Наборы", lines), bottom);
     }
 }

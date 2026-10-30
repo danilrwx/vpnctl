@@ -281,6 +281,9 @@ pub struct Traffic {
     pub down: u64,
 }
 
+/// Точка истории пробы: (ts, код ответа, мс).
+pub type ProbePoint = (i64, Option<u16>, Option<u64>);
+
 pub struct Db(Connection);
 
 fn traffic(up: i64, down: i64) -> Traffic {
@@ -450,6 +453,42 @@ impl Db {
             })
         })?;
         Ok((Some(ts), rows.collect::<Result<_, _>>()?))
+    }
+
+    /// История пробы цепочки хоста с `since`: (ts, код, мс).
+    pub fn probe_history(&self, host: &str, since: i64) -> Result<Vec<ProbePoint>> {
+        let mut st = self.0.prepare(
+            "SELECT ts, json_extract(data, '$.probe_code'), json_extract(data, '$.probe_ms') FROM samples WHERE host = ?1 AND ts >= ?2 ORDER BY ts",
+        )?;
+        let rows = st.query_map(params![host, since], |r| {
+            Ok((
+                r.get(0)?,
+                r.get::<_, Option<i64>>(1)?.map(|c| c as u16),
+                r.get::<_, Option<i64>>(2)?.map(|m| m as u64),
+            ))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// История ребра с `since`: (ts, ok, мс).
+    pub fn edge_history(
+        &self,
+        src: &str,
+        dst: &str,
+        proto: &str,
+        since: i64,
+    ) -> Result<Vec<(i64, bool, Option<u64>)>> {
+        let mut st = self.0.prepare(
+            "SELECT ts, ok, ms FROM edges WHERE src = ?1 AND dst = ?2 AND proto = ?3 AND ts >= ?4 ORDER BY ts",
+        )?;
+        let rows = st.query_map(params![src, dst, proto, since], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get::<_, Option<i64>>(2)?.map(|m| m as u64),
+            ))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// Удаляет снятия старше ретеншна; `totals` не трогает.

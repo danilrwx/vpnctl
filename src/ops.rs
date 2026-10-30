@@ -466,6 +466,25 @@ fn link_secret_for(ls: &mut LinkSecrets, p: Proto) {
     }
 }
 
+/// Включить/выключить inbound хоста.
+pub fn inbound_toggle(st: &mut State, host: &str, p: Proto) -> Result<String> {
+    let i = st
+        .inbounds
+        .get_mut(host)
+        .and_then(|m| m.get_mut(&p))
+        .with_context(|| format!("на хосте «{host}» нет inbound {}", p.name()))?;
+    i.enabled = !i.enabled;
+    Ok(format!(
+        "protocols({host}): {} {}",
+        p.name(),
+        if i.enabled {
+            "включён"
+        } else {
+            "выключен"
+        }
+    ))
+}
+
 pub fn link_add(
     st: &mut State,
     from: &str,

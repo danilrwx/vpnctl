@@ -43,8 +43,8 @@ fn entry_script() {
         "без sha — предупреждение"
     );
     assert!(
-        s.contains("echo \"-\" > /etc/vpnctl/bootstrap"),
-        "фикстура не в git — маркер «-»"
+        s.contains("\" > /etc/vpnctl/bootstrap"),
+        "маркер — HEAD репозитория или «-» вне git"
     );
     assert!(s.contains("table inet filter"), "nftables из рендера");
 }
