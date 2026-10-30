@@ -1,0 +1,24 @@
+inbounds:
+  fi-hel-1:
+    reality:
+      port: 443
+      sni: www.microsoft.com
+    hy2:
+      port: 443
+    awg:
+      port: 51820
+  ru-msk-1:
+    reality:
+      port: 443
+    ws:
+      port: 8444
+      path: /ws
+    hy2:
+      port: 443
+    awg:
+      port: 51820
+      subnets:
+        split: 10.8.1.0/24
+        full: 10.8.2.0/24
+    mtg:
+      port: 2053

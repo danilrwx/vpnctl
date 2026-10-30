@@ -1,0 +1,410 @@
+---
+source: tests/render.rs
+expression: body
+---
+{
+  "dns": {
+    "final": "dns-remote",
+    "rules": [
+      {
+        "rule_set": [
+          "geosite-category-ru",
+          "geosite-vk",
+          "geosite-yandex",
+          "set-ru-direct"
+        ],
+        "server": "dns-direct-1"
+      }
+    ],
+    "servers": [
+      {
+        "server": "77.88.8.8",
+        "tag": "dns-direct-1",
+        "type": "udp"
+      },
+      {
+        "server": "1.1.1.1",
+        "tag": "dns-direct-2",
+        "type": "udp"
+      },
+      {
+        "detour": "exit-auto",
+        "path": "/dns-query",
+        "server": "1.1.1.1",
+        "tag": "dns-remote",
+        "type": "https"
+      }
+    ],
+    "strategy": "prefer_ipv4"
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090"
+    }
+  },
+  "inbounds": [
+    {
+      "listen": "::",
+      "listen_port": 443,
+      "tag": "reality",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "127.0.0.1",
+            "server_port": 8443
+          },
+          "private_key": "6r0MzdOBbjwiXdKMr81z6DhFmywLhzQsH5p7w9yI3HA",
+          "short_id": [
+            "c1dcf5a1833630e3"
+          ]
+        },
+        "server_name": "gw.example.ru"
+      },
+      "type": "vless",
+      "users": [
+        {
+          "flow": "xtls-rprx-vision",
+          "name": "brat-split-reality",
+          "uuid": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+        },
+        {
+          "flow": "xtls-rprx-vision",
+          "name": "brat-full-reality",
+          "uuid": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+        }
+      ]
+    },
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 8444,
+      "tag": "ws",
+      "transport": {
+        "path": "/ws",
+        "type": "ws"
+      },
+      "type": "vless",
+      "users": [
+        {
+          "name": "brat-split-ws",
+          "uuid": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+        },
+        {
+          "name": "brat-full-ws",
+          "uuid": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+        }
+      ]
+    },
+    {
+      "listen": "::",
+      "listen_port": 443,
+      "tag": "hy2",
+      "tls": {
+        "certificate_path": "/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/gw.example.ru/gw.example.ru.crt",
+        "enabled": true,
+        "key_path": "/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/gw.example.ru/gw.example.ru.key"
+      },
+      "type": "hysteria2",
+      "users": [
+        {
+          "name": "brat-split-hy2",
+          "password": "Gc9eg6fvRC-aoxNJ-pkV3XocTj8yBZuD"
+        },
+        {
+          "name": "brat-full-hy2",
+          "password": "Gc9eg6fvRC-aoxNJ-pkV3XocTj8yBZuD"
+        }
+      ]
+    },
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 7893,
+      "tag": "tproxy",
+      "type": "tproxy"
+    },
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 1080,
+      "tag": "probe",
+      "type": "socks"
+    }
+  ],
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "outbounds": [
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "bind_interface": "awg1",
+      "tag": "fi-hel-1-awg",
+      "type": "direct"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "server": "1.2.3.4",
+      "server_port": 443,
+      "tag": "fi-hel-1-reality",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "88LUPmvt4mevpz21Ivl-x-KV_jm2bF8LzaFJF5zLuFU",
+          "short_id": "b7c3d96efeeb6166"
+        },
+        "server_name": "www.microsoft.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "3eca216e-ec5d-4a87-84a9-7469b95cba46"
+    },
+    {
+      "password": "dovbOYwsFOeZ9G3wgp5UhmiqHSOSFzpb",
+      "server": "1.2.3.4",
+      "server_port": 443,
+      "tag": "fi-hel-1-hy2",
+      "tls": {
+        "enabled": true,
+        "insecure": true,
+        "server_name": "fi-hel-1"
+      },
+      "type": "hysteria2"
+    },
+    {
+      "default": "fi-hel-1-awg",
+      "interrupt_exist_connections": true,
+      "outbounds": [
+        "fi-hel-1-awg",
+        "fi-hel-1-reality",
+        "fi-hel-1-hy2"
+      ],
+      "tag": "link-fi-hel-1",
+      "type": "selector"
+    },
+    {
+      "default": "link-fi-hel-1",
+      "interrupt_exist_connections": true,
+      "outbounds": [
+        "link-fi-hel-1"
+      ],
+      "tag": "exit-auto",
+      "type": "selector"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "final": "direct",
+    "rule_set": [
+      {
+        "format": "binary",
+        "path": "rules/geoip-ru.srs",
+        "tag": "geoip-ru",
+        "type": "local"
+      },
+      {
+        "format": "binary",
+        "path": "rules/geosite-category-ads-all.srs",
+        "tag": "geosite-category-ads-all",
+        "type": "local"
+      },
+      {
+        "format": "binary",
+        "path": "rules/geosite-category-ru.srs",
+        "tag": "geosite-category-ru",
+        "type": "local"
+      },
+      {
+        "format": "binary",
+        "path": "rules/geosite-vk.srs",
+        "tag": "geosite-vk",
+        "type": "local"
+      },
+      {
+        "format": "binary",
+        "path": "rules/geosite-yandex.srs",
+        "tag": "geosite-yandex",
+        "type": "local"
+      },
+      {
+        "format": "binary",
+        "path": "rules/geosite-youtube.srs",
+        "tag": "geosite-youtube",
+        "type": "local"
+      },
+      {
+        "format": "source",
+        "path": "rules/ru-direct.json",
+        "tag": "set-ru-direct",
+        "type": "local"
+      }
+    ],
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "inbound": [
+          "probe"
+        ],
+        "outbound": "exit-auto"
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "geosite-category-ads-all"
+        ]
+      },
+      {
+        "mode": "and",
+        "outbound": "direct",
+        "rules": [
+          {
+            "mode": "or",
+            "rules": [
+              {
+                "auth_user": [
+                  "brat-split-reality",
+                  "brat-split-ws",
+                  "brat-split-hy2"
+                ]
+              },
+              {
+                "source_ip_cidr": [
+                  "10.8.1.0/24"
+                ]
+              }
+            ],
+            "type": "logical"
+          },
+          {
+            "rule_set": [
+              "geosite-category-ru",
+              "geosite-vk",
+              "geosite-yandex",
+              "set-ru-direct"
+            ]
+          }
+        ],
+        "type": "logical"
+      },
+      {
+        "mode": "and",
+        "outbound": "direct",
+        "rules": [
+          {
+            "mode": "or",
+            "rules": [
+              {
+                "auth_user": [
+                  "brat-split-reality",
+                  "brat-split-ws",
+                  "brat-split-hy2"
+                ]
+              },
+              {
+                "source_ip_cidr": [
+                  "10.8.1.0/24"
+                ]
+              }
+            ],
+            "type": "logical"
+          },
+          {
+            "mode": "or",
+            "rules": [
+              {
+                "rule_set": [
+                  "geoip-ru"
+                ]
+              },
+              {
+                "ip_is_private": true
+              }
+            ],
+            "type": "logical"
+          }
+        ],
+        "type": "logical"
+      },
+      {
+        "mode": "and",
+        "outbound": "link-fi-hel-1",
+        "rules": [
+          {
+            "mode": "or",
+            "rules": [
+              {
+                "auth_user": [
+                  "brat-split-reality",
+                  "brat-split-ws",
+                  "brat-split-hy2"
+                ]
+              },
+              {
+                "source_ip_cidr": [
+                  "10.8.1.0/24"
+                ]
+              }
+            ],
+            "type": "logical"
+          },
+          {
+            "rule_set": [
+              "geosite-youtube"
+            ]
+          }
+        ],
+        "type": "logical"
+      },
+      {
+        "mode": "or",
+        "outbound": "exit-auto",
+        "rules": [
+          {
+            "auth_user": [
+              "brat-split-reality",
+              "brat-split-ws",
+              "brat-split-hy2"
+            ]
+          },
+          {
+            "source_ip_cidr": [
+              "10.8.1.0/24"
+            ]
+          }
+        ],
+        "type": "logical"
+      },
+      {
+        "mode": "or",
+        "outbound": "exit-auto",
+        "rules": [
+          {
+            "auth_user": [
+              "brat-full-reality",
+              "brat-full-ws",
+              "brat-full-hy2"
+            ]
+          },
+          {
+            "source_ip_cidr": [
+              "10.8.2.0/24"
+            ]
+          }
+        ],
+        "type": "logical"
+      }
+    ]
+  }
+}

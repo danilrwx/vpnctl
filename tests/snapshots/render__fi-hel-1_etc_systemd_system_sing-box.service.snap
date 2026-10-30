@@ -1,0 +1,20 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · fi-hel-1
+[Unit]
+Description=sing-box (fi-hel-1)
+After=network-online.target nftables.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/sing-box run -D /etc/sing-box -c /etc/sing-box/config.json
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

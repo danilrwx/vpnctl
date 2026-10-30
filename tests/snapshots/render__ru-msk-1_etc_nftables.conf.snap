@@ -1,0 +1,38 @@
+---
+source: tests/render.rs
+expression: body
+---
+#!/usr/sbin/nft -f
+# vpnctl · ru-msk-1
+flush ruleset
+
+table inet filter {
+	chain input {
+		type filter hook input priority 0; policy drop;
+		iif lo accept
+		ct state established,related accept
+		ip protocol icmp accept
+		ip6 nexthdr icmpv6 accept
+		tcp dport 22 accept
+		tcp dport 80 accept
+		tcp dport 443 accept
+		tcp dport 2053 accept
+		udp dport 443 accept
+		udp dport 51820 accept
+		iif "awg0" accept
+		iif "awg1" accept
+	}
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+		ct state established,related accept
+		iif "awg0" accept
+		iif "awg1" accept
+	}
+}
+
+table ip mangle {
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iif "awg0" meta l4proto { tcp, udp } tproxy to 127.0.0.1:7893 meta mark set 1 accept
+	}
+}

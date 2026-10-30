@@ -1,0 +1,12 @@
+awg:
+  version: 1.0.20250706
+caddy:
+  version: 2.10.0
+geodata:
+  version: latest
+mtg:
+  version: 2.1.7
+sing-box:
+  version: 1.12.4
+xray:
+  version: 25.9.11

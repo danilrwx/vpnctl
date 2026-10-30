@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>vpnctl · Диалог: правило</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<div style="width: 1120px; height: 720px; box-sizing: border-box; background: #0e1116; color: #e6edf3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; position: relative; overflow: hidden">
+
+  <div style="position: absolute; left: 16px; top: 12px; right: 16px; color: #3a414b; display: flex; gap: 24px">
+    <div style="font-weight: 700">vpnctl 0.3.1</div><div>1 Обзор · 2 Пользователи · 3 Хост · 4 План · 5 Топология · <span style="color: #4a5568">6 Маршрут</span></div>
+  </div>
+  <div style="position: absolute; left: 16px; top: 56px; right: 16px; bottom: 44px; border: 1px solid #1c2129; border-radius: 6px; color: #3a414b; padding: 8px 12px">
+    <div>Режим split · 1 ru-direct → direct · 2 geoip:ru → direct · 3 force-exit → линк fi-hel-1 · 4 всё остальное → линк авто</div>
+  </div>
+
+  <div style="position: absolute; left: 40px; top: 60px; width: 1040px; height: 620px; overflow: hidden; box-sizing: border-box; background: #161b22; border: 1px solid #58a6ff; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 16px 48px rgba(0,0,0,0.6)">
+    <div style="display: flex; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px">
+      <div style="font-weight: 700; white-space: nowrap; flex-shrink: 0">Новое правило <span style="color: #8b949e; font-weight: 400">· хост ru-msk-1</span></div>
+      <div style="margin-left: auto; color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1">Tab поле · Space выбор · Enter сохранить · Esc отмена</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; flex: 1 1 auto; min-height: 0">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; align-items: start">
+          <div style="color: #8b949e">группа</div>
+          <div style="display: flex; gap: 6px"><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">для всех</div><div style="padding: 0 8px; border: 1px solid #bc8cff; border-radius: 4px; color: #bc8cff">split</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">full</div></div>
+
+          <div style="color: #8b949e">позиция</div>
+          <div>после <span style="background: #0e1116; padding: 0 6px; border-radius: 4px">2 · geoip:ru → direct</span> <span style="color: #8b949e">▾</span></div>
+
+          <div style="color: #8b949e">условие</div>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <div style="display: flex; gap: 6px; flex-wrap: wrap"><div style="padding: 0 8px; border: 1px solid #58a6ff; border-radius: 4px; color: #58a6ff">домены</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">IP-сети</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">inbound</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">порт</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">протокол</div></div>
+            <div style="background: #0e1116; border: 1px solid #58a6ff; border-radius: 4px; padding: 4px 8px; display: flex; flex-direction: column; gap: 2px">
+              <div><span style="color: #3fb950">●</span> набор <span style="color: #e6edf3">ru-banks</span> <span style="color: #8b949e">· свой, 9 доменов</span></div>
+              <div><span style="color: #3fb950">●</span> geosite:<span style="color: #e6edf3">category-gov-ru</span> <span style="color: #8b949e">· 312 доменов</span></div>
+              <div style="color: #8b949e">+ добавить: набор · категория geosite · домены вручную</div>
+            </div>
+            <div style="color: #8b949e; font-size: 12px">условия одного правила складываются через ИЛИ; для И — два правила подряд</div>
+          </div>
+
+          <div style="color: #8b949e">действие</div>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap"><div style="padding: 0 8px; border: 1px solid #3fb950; border-radius: 4px; color: #3fb950">direct</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">линк авто</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">линк fi-hel-1</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">линк nl-ams-1</div><div style="padding: 0 8px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">block</div></div>
+
+          <div style="color: #8b949e">заметка</div>
+          <div style="background: #0e1116; border-radius: 4px; padding: 0 8px">банки блокируют зарубежные IP</div>
+
+          <div style="color: #8b949e">включено</div>
+          <div><span style="color: #3fb950">[x]</span> да</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0">
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px">
+          <div style="color: #8b949e; font-weight: 700">Так правило встанет в список</div>
+          <div style="color: #8b949e">split · 2 · geoip:ru → direct</div>
+          <div style="background: #1f2630; border-left: 3px solid #58a6ff; padding-left: 8px">split · <span style="color: #e6edf3">3 · ru-banks, category-gov-ru → direct</span> <span style="color: #8b949e">новое</span></div>
+          <div style="color: #8b949e">split · 4 · force-exit → линк fi-hel-1</div>
+          <div style="color: #8b949e">split · 5 · всё остальное → линк авто</div>
+          <div style="color: #d29922; font-size: 12px; margin-top: 2px">! 7 доменов из ru-banks уже ловит правило 1 (ru-direct) — новое правило для них не сработает, но вреда нет</div>
+        </div>
+
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px">
+          <div style="color: #8b949e; font-weight: 700">Проверка на лету</div>
+          <div>brat · split · <span style="background: #0e1116; padding: 0 6px; border-radius: 4px">online.sberbank.ru</span> → <span style="color: #3fb950">direct</span> <span style="color: #8b949e">(это правило)</span></div>
+          <div>brat · split · <span style="background: #0e1116; padding: 0 6px; border-radius: 4px">www.youtube.com</span> → <span style="color: #58a6ff">линк fi-hel-1</span> <span style="color: #8b949e">(без изменений)</span></div>
+          <div style="color: #8b949e"><span style="color: #e6edf3">t</span> другой адрес</div>
+        </div>
+
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px">
+          <div style="color: #8b949e; font-weight: 700">Как это уйдёт в sing-box <span style="font-weight: 400">· только чтение</span></div>
+          <div style="color: #8b949e; font-size: 12px; line-height: 16px; white-space: pre">{
+  "auth_user": ["brat-split-reality","brat-split-ws",
+                "… все *-split-*"],
+  "source_ip_cidr": ["10.8.1.0/24"],
+  "rule_set": ["ru-banks","geosite-category-gov-ru"],
+  "outbound": "direct"
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 16px; border-top: 1px solid #30363d; padding-top: 8px">
+      <div style="color: #8b949e">коммит:</div>
+      <div style="background: #0e1116; border-radius: 4px; padding: 0 8px; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0">routing(ru-msk-1): банки и госсайты напрямую для split</div>
+      <div style="padding: 0 12px; background: #1f6feb; color: #ffffff; border-radius: 4px; font-weight: 700; white-space: nowrap; flex-shrink: 0">Enter сохранить и закоммитить</div>
+      <div style="color: #8b949e; white-space: nowrap">Ctrl+Enter → сразу в план</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

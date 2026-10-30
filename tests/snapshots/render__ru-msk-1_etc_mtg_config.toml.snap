@@ -1,0 +1,10 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1 · MTProto-прокси, upstream — probe-socks движка
+secret = "ee83ce0364e172822fa4bac11fc3c5dd9267772e6578616d706c652e7275"
+bind-to = "0.0.0.0:2053"
+
+[network]
+proxies = ["socks5://127.0.0.1:1080"]

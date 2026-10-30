@@ -1,0 +1,77 @@
+---
+source: tests/render.rs
+expression: body
+---
+{
+  "outbounds": [
+    {
+      "interval": "60s",
+      "outbounds": [
+        "brat-full-reality",
+        "brat-full-ws",
+        "brat-full-hy2"
+      ],
+      "tag": "brat-full",
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "server": "gw.example.ru",
+      "server_port": 443,
+      "tag": "brat-full-reality",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "g7VdAo_0hqv9BZNFpOQsDVyPDkZ8fAIAOYpyrqry3jA",
+          "short_id": "c1dcf5a1833630e3"
+        },
+        "server_name": "gw.example.ru",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+    },
+    {
+      "server": "gw.example.ru",
+      "server_port": 443,
+      "tag": "brat-full-ws",
+      "tls": {
+        "enabled": true,
+        "server_name": "gw.example.ru"
+      },
+      "transport": {
+        "headers": {
+          "Host": "gw.example.ru"
+        },
+        "path": "/ws",
+        "type": "ws"
+      },
+      "type": "vless",
+      "uuid": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+    },
+    {
+      "password": "Gc9eg6fvRC-aoxNJ-pkV3XocTj8yBZuD",
+      "server": "gw.example.ru",
+      "server_port": 443,
+      "tag": "brat-full-hy2",
+      "tls": {
+        "enabled": true,
+        "server_name": "gw.example.ru"
+      },
+      "type": "hysteria2"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "final": "brat-full"
+  }
+}

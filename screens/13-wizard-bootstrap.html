@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>vpnctl · Мастер: новый хост</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<div style="width: 1120px; height: 720px; box-sizing: border-box; background: #0e1116; color: #e6edf3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; position: relative; overflow: hidden">
+
+  <div style="position: absolute; left: 16px; top: 12px; right: 16px; color: #3a414b; display: flex; gap: 24px">
+    <div style="font-weight: 700">vpnctl 0.3.1</div><div><span style="color: #4a5568">1 Обзор</span> · 2 Пользователи · 3 Хост · 4 План · 5 Топология · 6 Маршрут</div>
+  </div>
+
+  <div style="position: absolute; left: 40px; top: 36px; width: 1040px; height: 664px; overflow: hidden; box-sizing: border-box; background: #161b22; border: 1px solid #58a6ff; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 16px 48px rgba(0,0,0,0.6)">
+    <div style="display: flex; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px">
+      <div style="font-weight: 700; white-space: nowrap; flex-shrink: 0">Новый хост <span style="color: #8b949e; font-weight: 400">· ru-spb-2 · замена входа ru-msk-1</span></div>
+      <div style="margin-left: auto; display: flex; gap: 4px">
+        <div style="padding: 0 8px; color: #3fb950">1 описание ✓</div><div style="padding: 0 8px; color: #3fb950">2 доступ ✓</div><div style="padding: 0 8px; background: #1f6feb; color: #ffffff; border-radius: 4px; font-weight: 700">3 bootstrap</div><div style="padding: 0 8px; color: #8b949e">4 проверка</div><div style="padding: 0 8px; color: #8b949e">5 переключение</div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 16px; flex: 1 1 auto; min-height: 0; font-size: 13px; line-height: 18px">
+      <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden">
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: grid; grid-template-columns: 100px 1fr; gap: 2px 8px">
+          <div style="color: #8b949e; font-weight: 700; grid-column: 1 / 3">Шаг 1 · описание</div>
+          <div style="color: #8b949e">имя</div><div>ru-spb-2</div>
+          <div style="color: #8b949e">роль</div><div>вход · джамп</div>
+          <div style="color: #8b949e">IP</div><div>95.xx.xx.41</div>
+          <div style="color: #8b949e">домен</div><div>gw.example.ru <span style="color: #8b949e">· тот же, переедет</span></div>
+          <div style="color: #8b949e">ОС</div><div>Debian 13 · minimal</div>
+          <div style="color: #8b949e">via</div><div>— напрямую</div>
+          <div style="color: #8b949e">линки</div><div>→ fi-hel-1 (awg, reality) · → nl-ams-1 (awg)</div>
+          <div style="color: #8b949e">режим</div><div><span style="color: #d29922">стоит рядом с ru-msk-1</span> · DNS пока на старом</div>
+        </div>
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: grid; grid-template-columns: 100px 1fr; gap: 2px 8px">
+          <div style="color: #8b949e; font-weight: 700; grid-column: 1 / 3">Шаг 2 · доступ</div>
+          <div style="color: #8b949e">ssh</div><div>root@95.xx.xx.41 · пароль хостера → ключ</div>
+          <div style="color: #8b949e">host key</div><div>SHA256:k2Jf…9Qe <span style="color: #3fb950">принят, записан в состояние</span></div>
+          <div style="color: #8b949e">ключ CI/ноута</div><div>ed25519 положен, вход по паролю <span style="color: #3fb950">выключен</span></div>
+          <div style="color: #8b949e">sudo</div><div>не нужен, работаем от root только в bootstrap</div>
+        </div>
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; color: #8b949e">
+          <div style="font-weight: 700">Дальше</div>
+          <div>4 · проверка: матрица до хоста и от него к выходам, проба по IP, сертификат есть</div>
+          <div>5 · переключение: DNS → 95.xx.xx.41, старый сутки «уходящий», потом <span style="color: #e6edf3">host rm ru-msk-1</span></div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #58a6ff; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow: hidden">
+        <div style="color: #8b949e; font-weight: 700; font-size: 14px">Шаг 3 · bootstrap <span style="font-weight: 400">· идёт 1:48 · всё по шаблонам из репо</span></div>
+        <div><span style="color: #3fb950">✓</span> apt update · security-репозитории доступны · <span style="color: #8b949e">зеркало не нужно</span></div>
+        <div><span style="color: #3fb950">✓</span> unattended-upgrades + таймер · окно перезагрузки 04:00–05:00 · <span style="color: #8b949e">вход: нечётные дни</span></div>
+        <div><span style="color: #3fb950">✓</span> nftables: 443 tcp/udp, 2053, 51820 udp, ssh только с 2 адресов · tproxy для awg0</div>
+        <div><span style="color: #3fb950">✓</span> sysctl: BBR, forwarding, лимиты fd</div>
+        <div><span style="color: #3fb950">✓</span> sing-box 1.12.4 · sha ✓ · geodata 2026-10-27 · sha ✓ · <span style="color: #8b949e">как в versions.yaml</span></div>
+        <div><span style="color: #3fb950">✓</span> amneziawg-dkms · модуль собран под 6.12.41</div>
+        <div><span style="color: #3fb950">✓</span> mtg 2.1.7</div>
+        <div><span style="color: #3fb950">✓</span> caddy 2.10.0 · сайт-прикрытие из шаблона</div>
+        <div><span style="color: #58a6ff">⠹</span> сертификат · DNS-01 через Cloudflare · <span style="color: #8b949e">ждём ACME, обычно 20–60 с</span></div>
+        <div style="color: #8b949e">  A-запись пока на старом хосте — поэтому DNS-01, а не HTTP-01</div>
+        <div style="color: #8b949e">  systemd-юниты sing-box, awg0, mtg, caddy · включены, не запущены до apply</div>
+        <div style="color: #8b949e">  маркер /etc/vpnctl/bootstrap = c4d7e02</div>
+        <div style="color: #8b949e">  → apply ru-spb-2: конфиги, запуск служб, проба по IP</div>
+        <div style="margin-top: auto; border-top: 1px solid #30363d; padding-top: 4px; color: #8b949e">
+          <div>повторный запуск безопасен: каждый шаг проверяет «уже сделано» · <span style="color: #e6edf3">l</span> лог · <span style="color: #e6edf3">Esc</span> прервать, повтор доделает</div>
+          <div>CLI: <span style="color: #e6edf3">vpnctl host bootstrap ru-spb-2 --ssh root@95.xx.xx.41</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 16px; border-top: 1px solid #30363d; padding-top: 8px">
+      <div style="color: #8b949e">после bootstrap:</div>
+      <div style="padding: 0 12px; border: 1px solid #30363d; border-radius: 4px; color: #8b949e">Enter → шаг 4 проверка</div>
+      <div style="margin-left: auto; color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0">для выхода мастер короче: без домена, сертификата, caddy и mtg</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# vpnctl · {{ host }} · не править руками: затрётся при apply
+{
+	admin off
+}
+
+https://{{ domain }}:{{ caddy_port }} {
+	bind 127.0.0.1
+	root * /var/www/site
+	file_server
+
+	@ws path {{ ws_path }}
+	reverse_proxy @ws 127.0.0.1:{{ ws_port }}
+
+	handle_path /s/* {
+		root * /var/www/sub
+		header profile-title "{{ profile_title }}"
+		header profile-update-interval "12"
+		header Cache-Control "no-store"
+		@singbox header User-Agent *sing-box*
+		@clash header User-Agent *lash*
+		rewrite @singbox {path}.json
+		rewrite @clash {path}.yaml
+		file_server
+	}
+}
+
+http://{{ domain }} {
+	redir https://{{ domain }}{uri} permanent
+}

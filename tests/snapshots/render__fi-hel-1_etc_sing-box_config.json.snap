@@ -1,0 +1,93 @@
+---
+source: tests/render.rs
+expression: body
+---
+{
+  "dns": {
+    "final": "dns-direct-1",
+    "servers": [
+      {
+        "server": "1.1.1.1",
+        "tag": "dns-direct-1",
+        "type": "udp"
+      }
+    ]
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090"
+    }
+  },
+  "inbounds": [
+    {
+      "listen": "::",
+      "listen_port": 443,
+      "tag": "reality",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.microsoft.com",
+            "server_port": 443
+          },
+          "private_key": "uWpjg0_vc4glQ_RhMk0WwQmlHDE2DvgPKxxCsNXi4iI",
+          "short_id": [
+            "70441a63b77c538a",
+            "b7c3d96efeeb6166"
+          ]
+        },
+        "server_name": "www.microsoft.com"
+      },
+      "type": "vless",
+      "users": [
+        {
+          "flow": "xtls-rprx-vision",
+          "name": "link-ru-msk-1",
+          "uuid": "3eca216e-ec5d-4a87-84a9-7469b95cba46"
+        }
+      ]
+    },
+    {
+      "listen": "::",
+      "listen_port": 443,
+      "tag": "hy2",
+      "tls": {
+        "certificate_path": "/etc/vpnctl/self.crt",
+        "enabled": true,
+        "key_path": "/etc/vpnctl/self.key"
+      },
+      "type": "hysteria2",
+      "users": [
+        {
+          "name": "link-ru-msk-1",
+          "password": "dovbOYwsFOeZ9G3wgp5UhmiqHSOSFzpb"
+        }
+      ]
+    }
+  ],
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "outbounds": [
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "final": "direct",
+    "rule_set": [],
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      }
+    ]
+  }
+}

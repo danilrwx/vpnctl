@@ -1,0 +1,6 @@
+# vpnctl · {{ host }} · MTProto-прокси, upstream — probe-socks движка
+secret = "{{ secret }}"
+bind-to = "0.0.0.0:{{ port }}"
+
+[network]
+proxies = ["socks5://127.0.0.1:{{ socks_port }}"]

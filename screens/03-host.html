@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>vpnctl · Хост</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<div style="width: 1120px; height: 720px; box-sizing: border-box; background: #0e1116; color: #e6edf3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; padding: 12px 16px; gap: 8px">
+
+  <div style="display: flex; align-items: center; gap: 24px; border-bottom: 1px solid #30363d; padding-bottom: 8px">
+    <div style="font-weight: 700; white-space: nowrap; flex-shrink: 0">vpnctl <span style="color: #8b949e; font-weight: 400">0.3.1</span></div>
+    <div style="display: flex; gap: 4px; flex-shrink: 0; white-space: nowrap">
+      <div style="padding: 0 10px; color: #8b949e">1 Обзор</div>
+      <div style="padding: 0 10px; color: #8b949e">2 Пользователи</div>
+      <div style="padding: 0 10px; background: #1f6feb; color: #ffffff; border-radius: 4px; font-weight: 700">3 Хост</div>
+      <div style="padding: 0 10px; color: #8b949e">4 План</div>
+      <div style="padding: 0 10px; color: #8b949e">5 Топология</div>
+      <div style="padding: 0 10px; color: #8b949e">6 Маршрут</div>
+    </div>
+    <div style="margin-left: auto; color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0"><span style="color: #e6edf3">ru-msk-1</span> · вход · джамп · gw.example.ru</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px">
+    <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px">
+      <div style="color: #8b949e; font-weight: 700">Состояние</div>
+      <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0 8px">
+        <div style="color: #8b949e">коммит</div><div><span style="color: #3fb950">a1f3c9e</span> = HEAD</div>
+        <div style="color: #8b949e">дрейф</div><div><span style="color: #3fb950">нет</span></div>
+        <div style="color: #8b949e">sing-box</div><div>1.12.4 <span style="color: #8b949e">· есть 1.12.9</span></div>
+        <div style="color: #8b949e">geodata</div><div>2026-10-27 <span style="color: #3fb950">sha ✓</span></div>
+        <div style="color: #8b949e">caddy</div><div>2.10.0 · <span style="color: #3fb950">active</span></div>
+        <div style="color: #8b949e">awg</div><div>модуль ядра · <span style="color: #3fb950">active</span></div>
+        <div style="color: #8b949e">mtg</div><div>2.1.7 · <span style="color: #3fb950">active</span> · через socks движка</div>
+      </div>
+    </div>
+    <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px">
+      <div style="color: #8b949e; font-weight: 700">Машина</div>
+      <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0 8px">
+        <div style="color: #8b949e">load</div><div>0,21 0,18 0,15 · 2 ядра</div>
+        <div style="color: #8b949e">память</div><div>412 МБ из 2 ГБ</div>
+        <div style="color: #8b949e">диск</div><div>6,1 ГБ из 25 ГБ</div>
+        <div style="color: #8b949e">соединения</div><div>184 established</div>
+        <div style="color: #8b949e">uptime</div><div>9 дн · ядро 6.12.41</div>
+        <div style="color: #8b949e">обновления</div><div><span style="color: #3fb950">0 ожидают</span> · прогон 04:12 ✓</div>
+      </div>
+    </div>
+    <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px">
+      <div style="color: #8b949e; font-weight: 700">Домен и сертификат</div>
+      <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0 8px">
+        <div style="color: #8b949e">домен</div><div>gw.example.ru</div>
+        <div style="color: #8b949e">A-запись</div><div><span style="color: #3fb950">✓</span> совпадает · TTL 120</div>
+        <div style="color: #8b949e">ACME</div><div>Caddy · DNS-01</div>
+        <div style="color: #8b949e">истекает</div><div>через 61 дн</div>
+        <div style="color: #8b949e">обновлён</div><div>30.09 03:41</div>
+        <div style="color: #8b949e">SSH</div><div>ключ ed25519 · <span style="color: #3fb950">отпечаток ✓</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1 1 auto; min-height: 0">
+    <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px; display: flex; flex-direction: column; gap: 4px">
+      <div style="color: #8b949e; font-weight: 700">Inbound'ы и выходы</div>
+      <div style="display: grid; grid-template-columns: 120px 120px 1fr; gap: 0 8px">
+        <div>reality</div><div>tcp 443</div><div><span style="color: #3fb950">вкл</span> · 11 польз. · 2,9 ГБ/сутки</div>
+        <div>ws (caddy)</div><div>tcp 443 →8443</div><div><span style="color: #3fb950">вкл</span> · 11 польз. · 0,4 ГБ/сутки</div>
+        <div>hysteria2</div><div>udp 443</div><div><span style="color: #d29922">вкл · 0 за 10 дн</span></div>
+        <div>awg</div><div>udp 51820</div><div><span style="color: #3fb950">вкл</span> · 2 пира · 0,3 ГБ/сутки</div>
+        <div>mtproto (mtg)</div><div>tcp 2053</div><div><span style="color: #3fb950">вкл</span> · fake-TLS · 9 подкл. · 0,8 ГБ/сутки → линк</div>
+        <div>probe (socks)</div><div>127.0.0.1:1080</div><div style="color: #8b949e">служебный · upstream для mtg</div>
+      </div>
+      <div style="border-top: 1px solid #30363d; margin-top: 4px; padding-top: 4px; display: grid; grid-template-columns: 120px 120px 1fr; gap: 0 8px">
+        <div>direct</div><div>—</div><div>11,2 ГБ/сутки</div>
+        <div>fi-hel-1</div><div>awg0</div><div><span style="color: #3fb950">активный</span> · 27,2 ГБ/сутки</div>
+        <div>nl-ams-1</div><div>awg1</div><div style="color: #8b949e">резерв · 0</div>
+      </div>
+    </div>
+    <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px; display: flex; flex-direction: column; gap: 4px">
+      <div style="color: #8b949e; font-weight: 700">Проба цепочки за сутки <span style="font-weight: 400">· время ответа generate_204 через fi-hel-1</span></div>
+      <div style="display: flex; align-items: flex-end; gap: 3px; height: 72px; padding: 0 2px">
+        <div style="width: 18px; height: 40%; background: #3fb950"></div><div style="width: 18px; height: 42%; background: #3fb950"></div><div style="width: 18px; height: 38%; background: #3fb950"></div><div style="width: 18px; height: 45%; background: #3fb950"></div><div style="width: 18px; height: 41%; background: #3fb950"></div><div style="width: 18px; height: 39%; background: #3fb950"></div><div style="width: 18px; height: 44%; background: #3fb950"></div><div style="width: 18px; height: 70%; background: #d29922"></div><div style="width: 18px; height: 85%; background: #d29922"></div><div style="width: 18px; height: 48%; background: #3fb950"></div><div style="width: 18px; height: 40%; background: #3fb950"></div><div style="width: 18px; height: 37%; background: #3fb950"></div><div style="width: 18px; height: 43%; background: #3fb950"></div><div style="width: 18px; height: 41%; background: #3fb950"></div><div style="width: 18px; height: 40%; background: #3fb950"></div><div style="width: 18px; height: 46%; background: #3fb950"></div><div style="width: 18px; height: 39%; background: #3fb950"></div><div style="width: 18px; height: 42%; background: #3fb950"></div><div style="width: 18px; height: 44%; background: #3fb950"></div><div style="width: 18px; height: 38%; background: #3fb950"></div><div style="width: 18px; height: 40%; background: #3fb950"></div><div style="width: 18px; height: 41%; background: #3fb950"></div><div style="width: 18px; height: 43%; background: #3fb950"></div><div style="width: 18px; height: 41%; background: #3fb950"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; color: #8b949e; font-size: 12px"><div>15:00 вчера</div><div>ось: 0 — 1,0 с · жёлтый: > 0,7 с</div><div>14:00</div></div>
+      <div style="border-top: 1px solid #30363d; margin-top: 4px; padding-top: 4px; color: #8b949e; font-weight: 700">journalctl -u sing-box · хвост</div>
+      <div style="color: #8b949e; font-size: 12px; line-height: 16px; white-space: pre-wrap">14:51:02 sing-box[812] INFO inbound/vless[reality]: tcp server started at [::]:443
+14:51:02 sing-box[812] INFO sing-box started (0.12s)
+14:52:40 sing-box[812] INFO [1842] inbound/vless[reality]: [olga-split-reality] inbound connection to api.telegram.org:443
+14:52:41 sing-box[812] INFO [1842] outbound/direct[fi-awg]: outbound connection to api.telegram.org:443 via awg0</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 16px; border-top: 1px solid #30363d; padding-top: 6px; color: #8b949e; white-space: nowrap; overflow: hidden">
+    <div><span style="color: #e6edf3">x</span> вкл/выкл inbound</div>
+    <div><span style="color: #e6edf3">o</span> сменить выход</div>
+    <div><span style="color: #e6edf3">C</span> сертификат</div>
+    <div><span style="color: #e6edf3">U</span> обновить ОС</div>
+    <div><span style="color: #e6edf3">R</span> перезагрузить</div>
+    <div><span style="color: #e6edf3">l</span> полный журнал</div>
+    <div style="margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis">x o — коммит · C U R — без</div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>vpnctl · Диалог: набор доменов</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<div style="width: 1120px; height: 720px; box-sizing: border-box; background: #0e1116; color: #e6edf3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; position: relative; overflow: hidden">
+
+  <div style="position: absolute; left: 16px; top: 12px; right: 16px; color: #3a414b; display: flex; gap: 24px">
+    <div style="font-weight: 700">vpnctl 0.3.1</div><div>1 Обзор · 2 Пользователи · 3 Хост · 4 План · 5 Топология · <span style="color: #4a5568">6 Маршрут</span></div>
+  </div>
+
+  <div style="position: absolute; left: 60px; top: 48px; width: 1000px; height: 640px; box-sizing: border-box; background: #161b22; border: 1px solid #58a6ff; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 16px 48px rgba(0,0,0,0.6)">
+    <div style="display: flex; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 8px">
+      <div style="font-weight: 700; white-space: nowrap; flex-shrink: 0">Набор <span style="color: #e6edf3">ru-direct</span> <span style="color: #8b949e; font-weight: 400">· домены · в 2 правилах на 1 хосте</span></div>
+      <div style="margin-left: auto; color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1">Tab панель · / поиск · Space добавить/убрать · Enter сохранить</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 400px 1fr; gap: 16px; flex: 1 1 auto; min-height: 0">
+      <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0">
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px">
+          <div style="color: #8b949e; font-weight: 700">Что входит в набор <span style="font-weight: 400">· итого ≈ 3 180 доменов</span></div>
+          <div><span style="color: #3fb950">●</span> geosite:category-ru <span style="color: #8b949e">· 2 450</span></div>
+          <div><span style="color: #3fb950">●</span> geosite:yandex <span style="color: #8b949e">· 180</span></div>
+          <div><span style="color: #3fb950">●</span> geosite:vk <span style="color: #8b949e">· 95</span></div>
+          <div><span style="color: #3fb950">●</span> geosite:category-gov-ru <span style="color: #8b949e">· 312 · добавлено сейчас</span></div>
+          <div><span style="color: #3fb950">●</span> свои домены <span style="color: #8b949e">· 14, ниже</span></div>
+          <div style="color: #8b949e; font-size: 12px">источник geosite: v2fly community · релиз 2026-10-27 · sha ✓</div>
+        </div>
+
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 0">
+          <div style="color: #8b949e; font-weight: 700">Свои домены <span style="font-weight: 400">· один на строку · суффикс, full:, keyword:, regexp:</span></div>
+          <div style="display: grid; grid-template-columns: 1fr 120px; gap: 0 8px; font-size: 13px; line-height: 18px">
+            <div>gosuslugi.ru</div><div style="color: #8b949e">суффикс</div>
+            <div>sberbank.ru</div><div style="color: #8b949e">суффикс</div>
+            <div>tinkoff.ru</div><div style="color: #8b949e">суффикс</div>
+            <div>full:api.mts.ru</div><div style="color: #8b949e">точно</div>
+            <div>keyword:wildberries</div><div style="color: #8b949e">подстрока</div>
+            <div>regexp:^cdn\d+\.ozon\.ru$</div><div style="color: #8b949e">regex</div>
+            <div style="background: #1f2630; border-left: 3px solid #58a6ff; padding-left: 6px">2gis.ru_</div><div style="color: #8b949e">суффикс</div>
+            <div style="color: #f85149">gosusligi.ru</div><div style="color: #f85149">не резолвится</div>
+          </div>
+          <div style="color: #8b949e; font-size: 12px; margin-top: auto">… ещё 6 · <span style="color: #e6edf3">p</span> вставить из буфера · <span style="color: #e6edf3">D</span> удалить · проверка резолва и дублей с geosite на лету</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0">
+        <div style="border: 1px solid #58a6ff; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 0; overflow: hidden">
+          <div style="display: flex; gap: 12px; align-items: center">
+            <div style="color: #8b949e; font-weight: 700">Категории geosite</div>
+            <div style="background: #0e1116; border-radius: 4px; padding: 0 8px; flex: 1 1 auto">/ ru_</div>
+            <div style="color: #8b949e">31 из 1 400</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 24px 1fr 70px 1fr; gap: 0 8px; color: #8b949e; font-weight: 700; margin-top: 4px">
+            <div></div><div>категория</div><div>доменов</div><div>примеры</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 24px 1fr 70px 1fr; gap: 0 8px; font-size: 13px; line-height: 19px">
+            <div style="color: #3fb950">[x]</div><div>category-ru</div><div>2 450</div><div style="color: #8b949e">mail.ru, avito.ru, rt.ru …</div>
+            <div style="color: #3fb950">[x]</div><div>category-gov-ru</div><div>312</div><div style="color: #8b949e">gosuslugi.ru, nalog.gov.ru …</div>
+            <div style="background: #1f2630">[ ]</div><div style="background: #1f2630">category-ru-media</div><div style="background: #1f2630">640</div><div style="background: #1f2630; color: #8b949e">kinopoisk.ru, ivi.ru, okko.tv …</div>
+            <div>[ ]</div><div>category-bank-ru</div><div>88</div><div style="color: #8b949e">sberbank.ru, vtb.ru, alfabank.ru …</div>
+            <div>[ ]</div><div>category-shopping-ru</div><div>210</div><div style="color: #8b949e">ozon.ru, wildberries.ru …</div>
+            <div style="color: #3fb950">[x]</div><div>yandex</div><div>180</div><div style="color: #8b949e">yandex.ru, ya.ru, dzen.ru …</div>
+            <div style="color: #3fb950">[x]</div><div>vk</div><div>95</div><div style="color: #8b949e">vk.com, vk.ru, userapi.com …</div>
+            <div>[ ]</div><div>sber</div><div>60</div><div style="color: #8b949e">sber.ru, sbermarket.ru …</div>
+            <div>[ ]</div><div>ru-blocked <span style="color: #8b949e">(antifilter)</span></div><div>5 100</div><div style="color: #8b949e">— сайты, заблокированные в РФ</div>
+          </div>
+          <div style="color: #8b949e; font-size: 12px; margin-top: auto"><span style="color: #e6edf3">Enter</span> на категории — показать все домены · для IP-наборов то же окно с geoip: ru, private, cn, cloudflare …</div>
+        </div>
+
+        <div style="border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px">
+          <div style="color: #8b949e; font-weight: 700">Проверить домен против набора</div>
+          <div><span style="background: #0e1116; padding: 0 6px; border-radius: 4px">lk.nalog.gov.ru</span> → <span style="color: #3fb950">входит</span> <span style="color: #8b949e">· geosite:category-gov-ru · суффикс nalog.gov.ru</span></div>
+          <div><span style="background: #0e1116; padding: 0 6px; border-radius: 4px">www.youtube.com</span> → <span style="color: #8b949e">не входит</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 16px; border-top: 1px solid #30363d; padding-top: 8px">
+      <div style="color: #8b949e">затронет:</div>
+      <div style="flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">ru-msk-1 · split #1, DNS · <span style="color: #d29922">+1 категория, +1 домен, 1 ошибка</span></div>
+      <div style="padding: 0 12px; background: #1f6feb; color: #ffffff; border-radius: 4px; font-weight: 700; white-space: nowrap; flex-shrink: 0">Enter сохранить</div>
+      <div style="color: #8b949e; white-space: nowrap">коммит: sets: ru-direct + gov-ru</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
