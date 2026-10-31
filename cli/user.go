@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"flag"
@@ -13,7 +13,7 @@ import (
 	"github.com/danilrwx/vpnctl-go/validate"
 )
 
-const usage = `usage: user <add|rm|list|link|share> -dir <state> [flags]
+const userUsage = `usage: vpnctl user <add|rm|list|link|share> -dir <state> [flags]
 
   add   -name <name> [-modes split,full] [-protos reality,ws,hy2] [-tg] [-entry <host>] [-nocommit]
   rm    -name <name> [-nocommit]
@@ -22,12 +22,13 @@ const usage = `usage: user <add|rm|list|link|share> -dir <state> [flags]
   share -name <name>
 `
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+// User runs the user subcommands.
+func User(args []string) error {
+	if len(args) < 1 {
+		fmt.Fprint(os.Stderr, userUsage)
+		return ErrSilent
 	}
-	op := os.Args[1]
+	op := args[0]
 	fs := flag.NewFlagSet(op, flag.ExitOnError)
 	dir := fs.String("dir", ".", "state directory")
 	name := fs.String("name", "", "user name")
@@ -36,20 +37,22 @@ func main() {
 	tg := fs.Bool("tg", false, "the user gets the Telegram proxy")
 	entry := fs.String("entry", "", "entry host, when the state has several")
 	nocommit := fs.Bool("nocommit", false, "do not commit")
-	_ = fs.Parse(os.Args[2:])
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
 
 	st, err := state.Load(*dir)
 	if err != nil {
-		die(err)
+		return err
 	}
 
 	switch op {
 	case "add":
 		if *name == "" {
-			die(fmt.Errorf("-name is required"))
+			return fmt.Errorf("-name is required")
 		}
 		if _, ok := st.Users[*name]; ok {
-			die(fmt.Errorf("user %q already exists", *name))
+			return fmt.Errorf("user %q already exists", *name)
 		}
 		u := state.User{
 			Modes:     splitList(*modes),
@@ -59,24 +62,28 @@ func main() {
 		}
 		msg, err := ops.UserAdd(st, *name, u.Modes, u.Protocols, u.TG)
 		if err != nil {
-			die(err)
+			return err
 		}
 		if *entry != "" {
 			nu := st.Users[*name]
 			nu.Entry = *entry
 			st.Users[*name] = nu
 		}
-		write(st, *dir, msg, *nocommit)
+		if err := write(st, *dir, msg, *nocommit); err != nil {
+			return err
+		}
 		fmt.Printf("✓ %s: %s (%s)\n", msg, strings.Join(u.Modes, ","), strings.Join(u.Protocols, ","))
 	case "rm":
 		if *name == "" {
-			die(fmt.Errorf("-name is required"))
+			return fmt.Errorf("-name is required")
 		}
 		msg, err := ops.UserRm(st, *name)
 		if err != nil {
-			die(err)
+			return err
 		}
-		write(st, *dir, msg, *nocommit)
+		if err := write(st, *dir, msg, *nocommit); err != nil {
+			return err
+		}
 		fmt.Printf("✓ %s\n", msg)
 	case "list":
 		for _, n := range ops.SortedUsers(st) {
@@ -91,7 +98,7 @@ func main() {
 	case "link":
 		entryName, err := st.Entry()
 		if err != nil {
-			die(err)
+			return err
 		}
 		u := st.Users[*name]
 		mode := "split"
@@ -100,12 +107,12 @@ func main() {
 		}
 		sub, err := render.SubURL(st, entryName, *name, mode)
 		if err != nil {
-			die(err)
+			return err
 		}
 		fmt.Printf("sub: %s\n", sub)
 		links, err := render.Links(st, entryName, *name, mode)
 		if err != nil {
-			die(err)
+			return err
 		}
 		for _, l := range links {
 			fmt.Println(l)
@@ -115,43 +122,42 @@ func main() {
 		}
 	case "share":
 		if *name == "" {
-			die(fmt.Errorf("-name is required"))
+			return fmt.Errorf("-name is required")
 		}
 		msg, err := render.Share(st, *name)
 		if err != nil {
-			die(err)
+			return err
 		}
 		fmt.Print(msg)
 	default:
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+		fmt.Fprint(os.Stderr, userUsage)
+		return ErrSilent
 	}
+	return nil
 }
 
-func write(st *state.State, dir, msg string, nocommit bool) {
+func write(st *state.State, dir, msg string, nocommit bool) error {
 	if err := state.SaveUsers(dir, st.Users); err != nil {
-		die(err)
+		return err
 	}
 	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
-		die(err)
+		return err
 	}
 	if errs := validate.State(st); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, "  ✗", e)
 		}
-		die(fmt.Errorf("%d errors in the state", len(errs)))
+		return fmt.Errorf("%d errors in the state", len(errs))
 	}
 	if nocommit {
 		fmt.Println("(not committed)")
-		return
+		return nil
 	}
 	repo, err := gitsync.Open(dir)
 	if err != nil {
-		die(err)
+		return err
 	}
-	if err := repo.Commit(msg); err != nil {
-		die(err)
-	}
+	return repo.Commit(msg)
 }
 
 func splitList(s string) []string {
@@ -162,9 +168,4 @@ func splitList(s string) []string {
 		}
 	}
 	return out
-}
-
-func die(err error) {
-	fmt.Fprintln(os.Stderr, err)
-	os.Exit(1)
 }

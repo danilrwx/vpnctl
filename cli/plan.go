@@ -1,9 +1,8 @@
-package main
+package cli
 
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/danilrwx/vpnctl-go/plan"
@@ -12,50 +11,47 @@ import (
 	"github.com/danilrwx/vpnctl-go/validate"
 )
 
-// plan reports what differs between the state and the hosts: plan -dir <state> [-host name]
-func main() {
-	dir := flag.String("dir", ".", "state directory")
-	host := flag.String("host", "", "only this host")
-	diff := flag.String("diff", "", "show a file diff: -diff host:/path")
-	adopt := flag.String("adopt", "", "take a file from a host into overrides/: -adopt host:/path")
-	flag.Parse()
-
+// Plan reports what differs between the state and the hosts.
+func Plan(args []string) error {
+	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
+	dir := fs.String("dir", ".", "state directory")
+	host := fs.String("host", "", "only this host")
+	diff := fs.String("diff", "", "show a file diff: -diff host:/path")
+	adopt := fs.String("adopt", "", "take a file from a host into overrides/: -adopt host:/path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	st, err := state.Load(*dir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 	if errs := validate.State(st); len(errs) > 0 {
 		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, "  ✗", e)
+			fmt.Println("  ✗", e)
 		}
-		fmt.Fprintf(os.Stderr, "Error: %d errors in the state\n", len(errs))
-		os.Exit(1)
+		return fmt.Errorf("%d errors in the state", len(errs))
 	}
 	rendered, err := render.Check(st)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 	if *adopt != "" {
 		h, p := splitTarget(*adopt)
 		msg, err := plan.Adopt(st, h, p)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Println(msg)
-		return
+		return nil
 	}
 	if *diff != "" {
 		h, p := splitTarget(*diff)
 		out, err := plan.Diff(st, rendered, h, p)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Print(out)
-		return
+		return nil
 	}
 	one := render.Rendered{}
 	for name, files := range rendered {
@@ -65,10 +61,10 @@ func main() {
 	}
 	plans, err := plan.Plan(st, one)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 	plan.Print(plans)
+	return nil
 }
 
 func splitTarget(s string) (string, string) {
