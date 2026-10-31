@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/danilrwx/vpnctl-go/sopsio"
+	"github.com/danilrwx/vpnctl-go/ageio"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,5 +24,5 @@ func SaveSecrets(dir string, sec Secrets) error {
 	if err != nil {
 		return fmt.Errorf("marshal secrets: %w", err)
 	}
-	return sopsio.Write(filepath.Join(dir, "secrets.sops.yaml"), b)
+	return ageio.Write(filepath.Join(dir, "secrets.age.yaml"), KeyPath(), b)
 }
