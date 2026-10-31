@@ -31,6 +31,7 @@ const FOOTER: [&[(&str, &str)]; 6] = [
         ("x", "disable"),
         ("D", "delete"),
         ("y", "copy"),
+        ("M", "copy message"),
         ("Q", "big QR"),
         ("T", "tg QR"),
         ("f", "files"),
@@ -615,7 +616,7 @@ impl App {
         }
         lines.push(Line::from(""));
         for (k, d) in [
-            ("y", "copy link · Q big QR · T QR for tg"),
+            ("y", "copy link · M copy message · Q big QR · T QR for tg"),
             (
                 "e",
                 "edit (modes, protocols, expiry) · x disable · D delete",

@@ -784,6 +784,13 @@ impl App {
                 }
             }
             KeyCode::Char('Q') if s == 1 => self.big_qr = !self.big_qr,
+            KeyCode::Char('M') if s == 1 => {
+                if let Some(n) = self.user_name()
+                    && let Ok(msg) = share_message(&self.st, &n)
+                {
+                    self.copy(&msg);
+                }
+            }
             KeyCode::Char('y') if s == 1 => {
                 if let Some(n) = self.user_name()
                     && let Ok(links) = user_links(&self.st, &n)

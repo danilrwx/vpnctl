@@ -810,3 +810,23 @@ fn preview_on_the_fly() {
     assert!(rows.is_empty());
     assert!(!st.users.contains_key("sergey"));
 }
+
+/// Сообщение для пересылки: подписка, резервная ссылка на IP, проверка и Telegram.
+#[test]
+fn share_message_has_subscription_and_fallbacks() {
+    let st = fixture();
+    let m = share_message(&st, "brat").unwrap();
+    assert!(m.contains("https://gw.example.ru/s/"), "подписка: {m}");
+    assert!(m.contains("Karing"), "клиенты: {m}");
+    assert!(m.contains("vless://"), "резервная ссылка: {m}");
+    assert!(
+        m.contains("@5.6.7.8:443"),
+        "резервная ссылка идёт на IP, а не на домен: {m}"
+    );
+    assert!(m.contains("sni=gw.example.ru"), "SNI остаётся доменом: {m}");
+    assert!(m.contains("ifconfig.me"), "проверка: {m}");
+    assert!(
+        m.contains("tg://proxy?server=5.6.7.8"),
+        "Telegram по IP: {m}"
+    );
+}

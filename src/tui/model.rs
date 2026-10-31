@@ -1241,7 +1241,10 @@ pub enum FieldKind {
     Text,
     Bool,
     /// Список опций с отметками; `value` — выбранные через запятую, `cursor` — подсветка.
-    Multi { options: Vec<String>, cursor: usize },
+    Multi {
+        options: Vec<String>,
+        cursor: usize,
+    },
 }
 
 #[derive(Clone)]
@@ -1304,7 +1307,8 @@ impl Field {
                     picked.remove(pos);
                 } else {
                     picked.push(opt);
-                    picked.sort_by_key(|x| options.iter().position(|o| o == x).unwrap_or(usize::MAX));
+                    picked
+                        .sort_by_key(|x| options.iter().position(|o| o == x).unwrap_or(usize::MAX));
                 }
                 self.value = picked.join(",");
             }
@@ -1449,7 +1453,8 @@ pub fn user_form(st: &State, edit: Option<&str>) -> Form {
         // пир имеет смысл только если на входе вообще есть awg-инбаунд
         let has_awg = st.hosts.iter().any(|(n, h)| {
             h.role == Role::Entry
-                && st.inbounds
+                && st
+                    .inbounds
                     .get(n)
                     .and_then(|m| m.get(&Proto::Awg))
                     .is_some_and(|i| i.enabled)
@@ -1744,6 +1749,59 @@ pub fn user_links(st: &State, name: &str) -> Result<Vec<(String, String)>> {
         v.push(("Telegram proxy".into(), t));
     }
     Ok(v)
+}
+
+/// Готовое к пересылке сообщение: клиенты, подписка, резервная прямая ссылка, Telegram.
+/// Домены заменяются на IP вручную — у части операторов домен резолвится в заглушку.
+pub fn share_message(st: &State, name: &str) -> Result<String> {
+    use crate::render::subs;
+    let u = st
+        .users
+        .get(name)
+        .with_context(|| format!("user «{name}» is not described"))?;
+    let entry = st.entry_of(u).context("the user has no entry")?;
+    let h = st.host(&entry)?;
+    let ip = h.ip.to_string();
+    let domain = h.domain.clone().unwrap_or_else(|| ip.clone());
+    let mut out = String::new();
+    out.push_str("VPN\n\n");
+    out.push_str("1) Установи клиент:\n");
+    out.push_str("   Android       — Karing, Hiddify или v2rayNG\n");
+    out.push_str("   iOS           — Karing или Streisand\n");
+    out.push_str("   Windows/macOS — Karing или Hiddify\n\n");
+    let mode = u.modes.first().copied().unwrap_or(Mode::Split);
+    if let Ok(url) = subs::sub_url(st, &entry, name, mode) {
+        out.push_str(&format!(
+            "2) Добавь подписку (одна ссылка, по ней подтянутся профили):\n   {url}\n\n   Во всех клиентах это «+» → «Импорт из буфера обмена».\n   Karing: плюс на главном экране → «Импорт».\n\n"
+        ));
+    }
+    if let Ok(links) = subs::links(st, &entry, name, u, mode)
+        && let Some(direct) = links.iter().find(|l| l.contains("security=reality"))
+    {
+        let direct = direct.replace(&format!("@{domain}:"), &format!("@{ip}:"));
+        out.push_str("Если подписка не загружается (у части операторов домен блокируется),\nдобавь профиль вручную — вставь эту ссылку в клиент как есть:\n\n");
+        out.push_str(&direct);
+        out.push_str("\n\n");
+    }
+    let exit_ip = st
+        .links
+        .iter()
+        .find(|l| l.from == entry)
+        .and_then(|l| st.hosts.get(&l.to))
+        .map(|x| x.ip.to_string())
+        .unwrap_or_else(|| ip.clone());
+    out.push_str(&format!(
+        "Проверка: после включения открой https://ifconfig.me — должен показать\n{exit_ip} (Нидерланды).\n"
+    ));
+    if u.tg
+        && let Some(t) = subs::tg_link(st, &entry)
+    {
+        let t = t.replace(&format!("server={domain}"), &format!("server={ip}"));
+        out.push_str("\n---\nДля Telegram без VPN-клиента можно добавить прокси отдельно:\n");
+        out.push_str(&t);
+        out.push_str("\nНастройки → Данные и память → Прокси → Добавить прокси.\n");
+    }
+    Ok(out)
 }
 
 fn mb(b: u64) -> String {
