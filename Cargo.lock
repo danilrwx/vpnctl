@@ -2025,6 +2025,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vpnctl-mobile"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "vpnctl-core",
+]
+
+[[package]]
 name = "vtparse"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

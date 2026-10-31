@@ -1,0 +1,12 @@
+[package]
+name = "vpnctl-mobile"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "vpnctl_mobile"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+vpnctl-core = { path = "../core" }
+anyhow = "1.0.104"
