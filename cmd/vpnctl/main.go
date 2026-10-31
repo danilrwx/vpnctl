@@ -157,6 +157,7 @@ func main() {
 							dirFlag(),
 							&ucli.StringFlag{Name: "format", Value: "text", Usage: "text or markdown"},
 							&ucli.StringFlag{Name: "mode", Usage: "split or full, default: every mode"},
+							&ucli.StringFlag{Name: "lang", Usage: "ru or en, default: the system locale"},
 							&ucli.BoolFlag{Name: "ip", Usage: "use the entry IP instead of the domain"},
 							&ucli.BoolFlag{Name: "no-links", Usage: "omit the direct links block"},
 							&ucli.BoolFlag{Name: "no-tg", Usage: "omit the Telegram proxy block"},
@@ -166,8 +167,16 @@ func main() {
 							if name == "" {
 								return errors.New("the user name is required")
 							}
-							return cli.UserMessage(c.String("dir"), name, c.String("format"),
-								c.String("mode"), c.Bool("ip"), c.Bool("no-links"), c.Bool("no-tg"))
+							return cli.UserMessage(cli.MessageOpts{
+								Dir:     c.String("dir"),
+								Name:    name,
+								Format:  c.String("format"),
+								Mode:    c.String("mode"),
+								Lang:    c.String("lang"),
+								IP:      c.Bool("ip"),
+								NoLinks: c.Bool("no-links"),
+								NoTG:    c.Bool("no-tg"),
+							})
 						},
 					},
 					{
