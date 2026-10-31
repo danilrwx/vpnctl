@@ -288,7 +288,14 @@ impl App {
     // ---------- background jobs ----------
 
     fn vpnctl(&self, args: &[&str]) -> Result<Command> {
-        let exe = std::env::current_exe().context("path to vpnctl")?;
+        let mut exe = std::env::current_exe().context("path to vpnctl")?;
+        // Linux: если бинарь пересобрали при запущенном TUI, /proc/self/exe отдаёт
+        // «…/vpnctl (deleted)», и запуск такого пути падает с ENOENT
+        if let Some(s) = exe.to_str()
+            && let Some(path) = s.strip_suffix(" (deleted)")
+        {
+            exe = std::path::PathBuf::from(path);
+        }
         let mut c = Command::new(exe);
         c.arg("-C").arg(&self.st.dir).args(args);
         Ok(c)
