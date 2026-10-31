@@ -1,0 +1,411 @@
+// Package plan compares the render with the hosts: pending changes, drift, reachability.
+package plan
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+
+	"github.com/danilrwx/vpnctl-go/gitsync"
+	"github.com/danilrwx/vpnctl-go/remote"
+	"github.com/danilrwx/vpnctl-go/render"
+	"github.com/danilrwx/vpnctl-go/state"
+)
+
+const (
+	// Marker is the commit the host runs.
+	Marker = "/etc/vpnctl/applied-commit"
+	// Bootstrap is the marker of a finished bootstrap.
+	Bootstrap = "/etc/vpnctl/bootstrap"
+)
+
+// Status is the file state against the applied commit and the host.
+type Status int
+
+const (
+	Unchanged Status = iota
+	Changed
+	New
+	// Drift: the host has neither the applied nor the upcoming content.
+	Drift
+	Removed
+)
+
+// Mark is the one-letter status used by the report.
+func (s Status) Mark() string {
+	switch s {
+	case Changed:
+		return "~"
+	case New:
+		return "+"
+	case Drift:
+		return "!"
+	case Removed:
+		return "-"
+	}
+	return "="
+}
+
+// HostPlan is the plan of one host.
+type HostPlan struct {
+	Name         string
+	Unreachable  string
+	Bootstrapped bool
+	Marker       string
+	Files        []FileStatus
+	Notes        []string
+}
+
+// FileStatus is one path with its status.
+type FileStatus struct {
+	Path   string
+	Status Status
+}
+
+// Changes is the number of files that are not unchanged.
+func (p HostPlan) Changes() int {
+	n := 0
+	for _, f := range p.Files {
+		if f.Status != Unchanged {
+			n++
+		}
+	}
+	return n
+}
+
+// Classify is the file status from three hashes: previously applied, upcoming, on the host.
+func Classify(old, new, host string, hasOld, hasNew, hasHost bool) Status {
+	switch {
+	case hasNew && hasHost && new == host:
+		return Unchanged
+	case !hasNew && hasHost:
+		return Removed
+	case hasNew && !hasHost:
+		return New
+	case hasOld && hasNew && hasHost && old == host:
+		return Changed
+	case !hasOld && hasNew && hasHost:
+		return Changed // first apply: no history yet
+	case hasNew && hasHost:
+		return Drift
+	case !hasNew && !hasHost:
+		return Unchanged
+	}
+	return Drift
+}
+
+// ProbeScript asks the host for its marker, bootstrap flag and the hashes of the paths.
+func ProbeScript(paths []string) string {
+	quoted := make([]string, len(paths))
+	for i, p := range paths {
+		quoted[i] = "'" + p + "'"
+	}
+	return fmt.Sprintf(
+		"cat %s 2>/dev/null || echo -; test -e %s && echo yes || echo no; for f in %s; do if [ -e \"$f\" ]; then printf '%%s %%s\\n' \"$(sha256sum \"$f\" | cut -d' ' -f1)\" \"$f\"; else printf 'missing %%s\\n' \"$f\"; fi; done",
+		Marker, Bootstrap, strings.Join(quoted, " "))
+}
+
+// Probe is the parsed answer of one host.
+type Probe struct {
+	Marker       string
+	HasMarker    bool
+	Bootstrapped bool
+	Hashes       map[string]string
+	Missing      map[string]bool
+}
+
+// ParseProbe reads the marker line, the bootstrap flag and the hashes.
+func ParseProbe(out string) Probe {
+	p := Probe{Hashes: map[string]string{}, Missing: map[string]bool{}}
+	lines := strings.Split(out, "\n")
+	if len(lines) > 0 && lines[0] != "-" && lines[0] != "" {
+		p.Marker, p.HasMarker = lines[0], true
+	}
+	if len(lines) > 1 && lines[1] == "yes" {
+		p.Bootstrapped = true
+	}
+	for _, l := range lines[2:] {
+		i := strings.IndexByte(l, ' ')
+		if i < 0 {
+			continue
+		}
+		h, path := l[:i], l[i+1:]
+		if h == "missing" {
+			p.Missing[path] = true
+			continue
+		}
+		p.Hashes[path] = h
+	}
+	return p
+}
+
+// ErrPreMigration is returned when the commit still holds the sops secrets file.
+var ErrPreMigration = errors.New("secrets at that commit are still in the sops file: render is impossible without the old core")
+
+// RenderAt is the render of the state at the marker commit, for drift.
+func RenderAt(st *state.State, commit, host string) (render.HostFiles, error) {
+	repo, err := gitsync.Open(st.Dir)
+	if err != nil {
+		return nil, err
+	}
+	files, err := repo.FilesAt(commit)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := files["secrets.age.yaml"]; !ok {
+		if _, sops := files["secrets.sops.yaml"]; sops {
+			return nil, ErrPreMigration
+		}
+	}
+	tmp, err := os.MkdirTemp("", "vpnctl-at-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	for name, body := range files {
+		p := filepath.Join(tmp, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(p, body, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	old, err := state.Load(tmp)
+	if err != nil {
+		return nil, err
+	}
+	return render.RenderHost(old, host)
+}
+
+func hashMap(f render.HostFiles) map[string]string {
+	out := make(map[string]string, len(f))
+	for p, b := range f {
+		out[p] = render.Sha256(b)
+	}
+	return out
+}
+
+// Plan queries the hosts in parallel and builds the plan, in host name order.
+func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
+	names := make([]string, 0, len(rendered))
+	for name := range rendered {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	type answer struct {
+		probe Probe
+		err   error
+	}
+	answers := make(map[string]answer, len(names))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, name := range names {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			a := answer{}
+			defer func() {
+				mu.Lock()
+				answers[name] = a
+				mu.Unlock()
+			}()
+			files := rendered[name]
+			c, err := remote.Dial(st, name)
+			if err != nil {
+				a.err = err
+				return
+			}
+			defer c.Close()
+			if err := c.Reachable(); err != nil {
+				a.err = err
+				return
+			}
+			paths := make([]string, 0, len(files))
+			for p := range files {
+				paths = append(paths, p)
+			}
+			sort.Strings(paths)
+			out, err := c.SH(ProbeScript(paths))
+			if err != nil {
+				a.err = err
+				return
+			}
+			p := ParseProbe(out)
+			// plus old paths when the marker is known: they need hashing too
+			if p.HasMarker {
+				if old, err := RenderAt(st, p.Marker, name); err == nil {
+					var extra []string
+					for path := range old {
+						if _, ok := files[path]; !ok {
+							extra = append(extra, path)
+						}
+					}
+					if len(extra) > 0 {
+						sort.Strings(extra)
+						out2, err := c.SH(ProbeScript(extra))
+						if err != nil {
+							a.err = err
+							return
+						}
+						p2 := ParseProbe(out2)
+						for k, v := range p2.Hashes {
+							p.Hashes[k] = v
+						}
+						for k, v := range p2.Missing {
+							p.Missing[k] = v
+						}
+					}
+				}
+			}
+			a.probe = p
+		}(name)
+	}
+	wg.Wait()
+
+	plans := make([]HostPlan, 0, len(names))
+	for _, name := range names {
+		hp := HostPlan{Name: name}
+		a := answers[name]
+		next := hashMap(rendered[name])
+		if a.err != nil {
+			hp.Unreachable = a.err.Error()
+			paths := make([]string, 0, len(next))
+			for p := range next {
+				paths = append(paths, p)
+			}
+			sort.Strings(paths)
+			for _, p := range paths {
+				hp.Files = append(hp.Files, FileStatus{Path: p, Status: Changed})
+			}
+			plans = append(plans, hp)
+			continue
+		}
+		hp.Bootstrapped = a.probe.Bootstrapped
+		hp.Marker = a.probe.Marker
+		var old map[string]string
+		if a.probe.HasMarker {
+			if f, err := RenderAt(st, a.probe.Marker, name); err == nil {
+				old = hashMap(f)
+			} else if errors.Is(err, ErrPreMigration) {
+				hp.Notes = append(hp.Notes, fmt.Sprintf(
+					"applied commit %s predates the age migration: drift cannot be determined, the next apply fixes the marker",
+					a.probe.Marker))
+			} else {
+				hp.Notes = append(hp.Notes, fmt.Sprintf(
+					"applied commit %s cannot be rendered (%v): drift cannot be determined", a.probe.Marker, err))
+			}
+		}
+		paths := make([]string, 0, len(next))
+		for p := range next {
+			paths = append(paths, p)
+		}
+		for p := range old {
+			if _, ok := next[p]; !ok {
+				paths = append(paths, p)
+			}
+		}
+		sort.Strings(paths)
+		for _, path := range paths {
+			o, hasO := old[path]
+			n, hasN := next[path]
+			h, hasH := a.probe.Hashes[path]
+			hp.Files = append(hp.Files, FileStatus{Path: path, Status: Classify(o, n, h, hasO, hasN, hasH)})
+		}
+		if !a.probe.Bootstrapped {
+			hp.Notes = append(hp.Notes, "bootstrap not done: the host will be skipped")
+		}
+		plans = append(plans, hp)
+	}
+	// reachability through the jump: recomputed once the jump is known
+	down := map[string]bool{}
+	for _, p := range plans {
+		if p.Unreachable != "" {
+			down[p.Name] = true
+		}
+	}
+	for i := range plans {
+		if plans[i].Unreachable == "" {
+			continue
+		}
+		if via := st.Hosts[plans[i].Name].Via; via != "" && down[via] {
+			plans[i].Unreachable = "unreachable via " + via
+		}
+	}
+	return plans, nil
+}
+
+// Print writes the report.
+func Print(plans []HostPlan) {
+	for _, p := range plans {
+		if p.Unreachable != "" {
+			fmt.Printf("%s · ✗ %s\n", p.Name, p.Unreachable)
+			continue
+		}
+		applied := "not applied yet"
+		if p.Marker != "" {
+			applied = "applied " + p.Marker
+		}
+		fmt.Printf("%s · %s · %d changes\n", p.Name, applied, p.Changes())
+		for _, f := range p.Files {
+			if f.Status == Unchanged {
+				continue
+			}
+			note := ""
+			if f.Status == Drift {
+				note = "   drift: edited on the host, will be overwritten (--adopt to take it into the repo)"
+			}
+			fmt.Printf("  %s %s%s\n", f.Status.Mark(), f.Path, note)
+		}
+		for _, n := range p.Notes {
+			fmt.Printf("  ! %s\n", n)
+		}
+	}
+}
+
+// Fetch reads a file from the host.
+func Fetch(st *state.State, host, path string) (string, error) {
+	c, err := remote.Dial(st, host)
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	return c.SH("cat '" + path + "'")
+}
+
+// Diff is the unified diff between the render and the file on the host.
+func Diff(st *state.State, rendered render.Rendered, host, path string) (string, error) {
+	next, ok := rendered[host][path]
+	if !ok {
+		return "", fmt.Errorf("%s: file %s is not rendered", host, path)
+	}
+	cur, err := Fetch(st, host, path)
+	if err != nil {
+		return "", err
+	}
+	return unifiedDiff(host+":"+path, "render", cur, next), nil
+}
+
+// Adopt moves a file from the host into the state's overrides/<host>/<path>: the render picks it up.
+func Adopt(st *state.State, host, path string) (string, error) {
+	if !strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("the path must be absolute")
+	}
+	cur, err := Fetch(st, host, path)
+	if err != nil {
+		return "", err
+	}
+	dst := filepath.Join(st.Dir, "overrides", host, filepath.FromSlash(strings.TrimPrefix(path, "/")))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(dst, []byte(cur), 0o644); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("overrides(%s): %s from the host", host, path), nil
+}
