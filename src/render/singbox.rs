@@ -401,8 +401,11 @@ pub fn config(st: &State, host: &str) -> Result<String> {
             .split_once('/')
             .map(|(s, p)| (s.to_string(), format!("/{p}")))
             .unwrap_or((server.to_string(), "/dns-query".into()));
-        let mut remote =
-            json!({ "type": proto, "tag": "dns-remote", "server": server, "detour": exit_tag });
+        let mut remote = json!({ "type": proto, "tag": "dns-remote", "server": server });
+        // «direct» без настроек — пустой outbound: sing-box 1.12 отвергает detour на него
+        if exit_tag != "direct" {
+            remote["detour"] = json!(exit_tag);
+        }
         if proto == "https" {
             remote["path"] = json!(path);
         }
