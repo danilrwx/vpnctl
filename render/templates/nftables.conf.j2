@@ -1,0 +1,37 @@
+#!/usr/sbin/nft -f
+# vpnctl · {{ host }}
+flush ruleset
+
+table inet filter {
+	chain input {
+		type filter hook input priority 0; policy drop;
+		iif lo accept
+		ct state established,related accept
+		ip protocol icmp accept
+		ip6 nexthdr icmpv6 accept
+		tcp dport 22 accept
+{% for p in tcp_ports %}		tcp dport {{ p }} accept
+{% endfor %}{% for p in udp_ports %}		udp dport {{ p }} accept
+{% endfor %}{% for i in awg_ifaces %}		iifname "{{ i }}" accept
+{% endfor %}	}
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+		ct state established,related accept
+{% for i in awg_ifaces %}		iifname "{{ i }}" accept
+{% endfor %}	}
+}
+{% if tproxy_port %}
+table ip mangle {
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "awg0" meta l4proto { tcp, udp } tproxy to 127.0.0.1:{{ tproxy_port }} meta mark set 1 accept
+	}
+}
+{% endif %}{% if masquerade %}
+table ip nat {
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+{% for n in masquerade %}		ip saddr {{ n }} oifname != "awg0" masquerade
+{% endfor %}	}
+}
+{% endif %}

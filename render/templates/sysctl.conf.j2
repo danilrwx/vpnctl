@@ -1,0 +1,7 @@
+# vpnctl · {{ host }}
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.ip_forward = 1
+{% if awg %}net.ipv6.conf.all.forwarding = 1
+net.ipv6.conf.default.accept_ra = 2
+{% endif %}fs.file-max = 1048576
