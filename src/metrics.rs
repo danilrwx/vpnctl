@@ -706,6 +706,17 @@ pub fn edge_script(st: &State, host: &str) -> String {
                         l.to
                     ));
                 }
+                Proto::Hy2 => s.push_str(&format!(
+                    // hysteria2 — UDP: TCP-коннект к порту не пройдёт никогда. Проверяем сам линк:
+                    // проба через socks движка идёт по маршруту, то есть через этот выход.
+                    "s=$(date +%s%N); c=$(curl -s -o /dev/null -w '%{{http_code}}' --max-time 8 --socks5-hostname 127.0.0.1:{} {}); if [ \"$c\" = 204 ]; then echo \"{} {} ok $(( ($(date +%s%N)-s)/1000000 ))\"; else echo \"{} {} fail udp\"; fi\n",
+                    render::PROBE_PORT,
+                    render::PROBE_URL,
+                    l.to,
+                    p.name(),
+                    l.to,
+                    p.name()
+                )),
                 _ => s.push_str(&format!(
                     "s=$(date +%s%N); if timeout 5 bash -c 'exec 3<>/dev/tcp/{}/{port}' 2>/dev/null; then echo \"{} {} ok $(( ($(date +%s%N)-s)/1000000 ))\"; else echo \"{} {} fail\"; fi\n",
                     to.ip,
