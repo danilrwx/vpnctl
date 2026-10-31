@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"strings"
 
@@ -12,16 +11,8 @@ import (
 )
 
 // Plan reports what differs between the state and the hosts.
-func Plan(args []string) error {
-	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
-	dir := fs.String("dir", ".", "state directory")
-	host := fs.String("host", "", "only this host")
-	diff := fs.String("diff", "", "show a file diff: -diff host:/path")
-	adopt := fs.String("adopt", "", "take a file from a host into overrides/: -adopt host:/path")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	st, err := state.Load(*dir)
+func Plan(dir, host, diff, adopt string) error {
+	st, err := state.Load(dir)
 	if err != nil {
 		return err
 	}
@@ -35,8 +26,8 @@ func Plan(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *adopt != "" {
-		h, p := splitTarget(*adopt)
+	if adopt != "" {
+		h, p := splitTarget(adopt)
 		msg, err := plan.Adopt(st, h, p)
 		if err != nil {
 			return err
@@ -44,8 +35,8 @@ func Plan(args []string) error {
 		fmt.Println(msg)
 		return nil
 	}
-	if *diff != "" {
-		h, p := splitTarget(*diff)
+	if diff != "" {
+		h, p := splitTarget(diff)
 		out, err := plan.Diff(st, rendered, h, p)
 		if err != nil {
 			return err
@@ -55,7 +46,7 @@ func Plan(args []string) error {
 	}
 	one := render.Rendered{}
 	for name, files := range rendered {
-		if *host == "" || *host == name {
+		if host == "" || host == name {
 			one[name] = files
 		}
 	}
