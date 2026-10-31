@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getsops/sops/v3/decrypt"
+	"github.com/danilrwx/vpnctl-go/ageio"
 	"gopkg.in/yaml.v3"
 )
 
@@ -221,7 +221,7 @@ func Load(dir string) (*State, error) {
 		}
 	}
 
-	if b, err := decrypt.File(filepath.Join(dir, "secrets.sops.yaml"), "yaml"); err == nil {
+	if b, err := ageio.Decrypt(filepath.Join(dir, "secrets.age.yaml"), KeyPath()); err == nil {
 		if err := yaml.Unmarshal(b, &st.Secrets); err != nil {
 			return nil, fmt.Errorf("parse secrets: %w", err)
 		}
@@ -257,4 +257,13 @@ func (s *State) Entry() (string, error) {
 	default:
 		return "", fmt.Errorf("the state has %d entries, specify one", len(names))
 	}
+}
+
+// KeyPath is the age identity used for the secrets file.
+func KeyPath() string {
+	if p := os.Getenv("VPNCTL_AGE_KEY"); p != "" {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config/sops/age/keys.txt")
 }
