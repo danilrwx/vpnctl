@@ -12,6 +12,8 @@ import (
 	ucli "github.com/urfave/cli/v3"
 
 	"github.com/danilrwx/vpnctl-go/cli"
+	"github.com/danilrwx/vpnctl-go/ops"
+	"github.com/danilrwx/vpnctl-go/state"
 )
 
 func dirFlag() ucli.Flag {
@@ -20,8 +22,9 @@ func dirFlag() ucli.Flag {
 
 func main() {
 	app := &ucli.Command{
-		Name:  "vpnctl",
-		Usage: "VPN infrastructure as a git state",
+		Name:                  "vpnctl",
+		Usage:                 "VPN infrastructure as a git state",
+		EnableShellCompletion: true,
 		Description: "Hosts, links, users and routing live in git. `plan` compares the render with\n" +
 			"the hosts, `apply` installs it leaves first, `user config` hands out client profiles.",
 		Commands: []*ucli.Command{
@@ -52,8 +55,9 @@ func main() {
 				},
 			},
 			{
-				Name:  "plan",
-				Usage: "what will change on the hosts: diff, drift, unreachable",
+				Name:          "plan",
+				Usage:         "what will change on the hosts: diff, drift, unreachable",
+				ShellComplete: completeHosts,
 				Flags: []ucli.Flag{
 					dirFlag(),
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
@@ -65,8 +69,9 @@ func main() {
 				},
 			},
 			{
-				Name:  "apply",
-				Usage: "apply the state on the hosts, leaves first",
+				Name:          "apply",
+				Usage:         "apply the state on the hosts, leaves first",
+				ShellComplete: completeHosts,
 				Flags: []ucli.Flag{
 					dirFlag(),
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
@@ -104,9 +109,10 @@ func main() {
 						},
 					},
 					{
-						Name:      "rm",
-						Usage:     "remove a user and its secrets",
-						ArgsUsage: "<name>",
+						Name:          "rm",
+						Usage:         "remove a user and its secrets",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
 						Flags: []ucli.Flag{
 							dirFlag(),
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
@@ -128,10 +134,11 @@ func main() {
 						},
 					},
 					{
-						Name:      "link",
-						Usage:     "subscription URL, direct links and the Telegram proxy",
-						ArgsUsage: "<name>",
-						Flags:     []ucli.Flag{dirFlag()},
+						Name:          "link",
+						Usage:         "subscription URL, direct links and the Telegram proxy",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags:         []ucli.Flag{dirFlag()},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							name := c.Args().First()
 							if name == "" {
@@ -141,22 +148,33 @@ func main() {
 						},
 					},
 					{
-						Name:      "share",
-						Usage:     "a ready-to-forward message",
-						ArgsUsage: "<name>",
-						Flags:     []ucli.Flag{dirFlag()},
+						Name:          "message",
+						Aliases:       []string{"share"},
+						Usage:         "a ready-to-forward message for the user",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags: []ucli.Flag{
+							dirFlag(),
+							&ucli.StringFlag{Name: "format", Value: "text", Usage: "text or markdown"},
+							&ucli.StringFlag{Name: "mode", Usage: "split or full, default: every mode"},
+							&ucli.BoolFlag{Name: "ip", Usage: "use the entry IP instead of the domain"},
+							&ucli.BoolFlag{Name: "no-links", Usage: "omit the direct links block"},
+							&ucli.BoolFlag{Name: "no-tg", Usage: "omit the Telegram proxy block"},
+						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the user name is required")
 							}
-							return cli.UserShare(c.String("dir"), name)
+							return cli.UserMessage(c.String("dir"), name, c.String("format"),
+								c.String("mode"), c.Bool("ip"), c.Bool("no-links"), c.Bool("no-tg"))
 						},
 					},
 					{
-						Name:      "config",
-						Usage:     "client profile: the same bytes the subscription endpoint serves",
-						ArgsUsage: "<name>",
+						Name:          "config",
+						Usage:         "client profile: the same bytes the subscription endpoint serves",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
 						Flags: []ucli.Flag{
 							dirFlag(),
 							&ucli.StringFlag{Name: "mode", Usage: "split or full, default: all user modes"},
@@ -180,6 +198,42 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 		}
 		os.Exit(1)
+	}
+}
+
+// stateDir reads -dir for the shell completion, where flags may still be unparsed.
+func stateDir(c *ucli.Command) string {
+	if d := c.String("dir"); d != "" {
+		return d
+	}
+	args := c.Args().Slice()
+	for i, a := range args {
+		if (a == "-dir" || a == "--dir" || a == "-C" || a == "--C") && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return "."
+}
+
+// completeUsers suggests the user names of the state.
+func completeUsers(_ context.Context, c *ucli.Command) {
+	st, err := state.Load(stateDir(c))
+	if err != nil {
+		return
+	}
+	for _, n := range ops.SortedUsers(st) {
+		fmt.Fprintln(c.Root().Writer, n)
+	}
+}
+
+// completeHosts suggests the host names of the state.
+func completeHosts(_ context.Context, c *ucli.Command) {
+	st, err := state.Load(stateDir(c))
+	if err != nil {
+		return
+	}
+	for name := range st.Hosts {
+		fmt.Fprintln(c.Root().Writer, name)
 	}
 }
 
