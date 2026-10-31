@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/danilrwx/vpnctl-go/gitsync"
 	"github.com/danilrwx/vpnctl-go/render"
 	"github.com/danilrwx/vpnctl-go/state"
 )
 
 func main() {
-	st, err := state.Load(os.Args[1])
+	dir := os.Args[1]
+	st, err := state.Load(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -26,7 +28,12 @@ func main() {
 	for _, l := range links {
 		fmt.Println(" ", l)
 	}
-	if tg, ok := render.TGLink(st, entry); ok {
-		fmt.Println(tg)
+	repo, err := gitsync.Open(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
+	head, _ := repo.Head()
+	clean, _ := repo.Clean()
+	fmt.Printf("head=%s clean=%v\n", head, clean)
 }
