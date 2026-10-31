@@ -18,13 +18,26 @@ func SaveUsers(dir string, users map[string]User) error {
 	return os.WriteFile(filepath.Join(dir, "users.yaml"), b, 0o644)
 }
 
-// SaveSecrets writes the secrets file, encrypted when .sops.yaml is present.
+// SaveSecrets writes the secrets file for every recipient listed in age.yaml,
+// or for the local identity alone when the state has no age.yaml yet.
 func SaveSecrets(dir string, sec Secrets) error {
 	b, err := yaml.Marshal(sec)
 	if err != nil {
 		return fmt.Errorf("marshal secrets: %w", err)
 	}
-	return ageio.Write(filepath.Join(dir, "secrets.age.yaml"), KeyPath(), b)
+	path := filepath.Join(dir, "secrets.age.yaml")
+	recs, err := ageio.LoadRecipients(dir)
+	if err != nil {
+		return err
+	}
+	if recs != nil && len(recs.Recipients) > 0 {
+		keys, err := recs.Keys()
+		if err != nil {
+			return err
+		}
+		return ageio.EncryptTo(path, keys, b)
+	}
+	return ageio.Write(path, KeyPath(), b)
 }
 
 // SaveLinks writes links.yaml.
