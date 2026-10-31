@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
 pub type Map<T> = BTreeMap<String, T>;
 
@@ -659,17 +658,8 @@ impl State {
             let plain: serde_yaml::Value =
                 serde_yaml::from_str(&raw).context("parse secrets.sops.yaml")?;
             if plain.get("sops").is_some() {
-                let out = Command::new("sops")
-                    .arg("-d")
-                    .arg(&sp)
-                    .stderr(Stdio::inherit())
-                    .output()
-                    .context("run sops")?;
-                if !out.status.success() {
-                    bail!("sops -d failed");
-                }
-                st.secrets =
-                    serde_yaml::from_slice(&out.stdout).context("parse decrypted secrets")?;
+                let out = crate::secrets_io::current().decrypt(&sp)?;
+                st.secrets = serde_yaml::from_str(&out).context("parse decrypted secrets")?;
                 st.secrets_encrypted = true;
             } else {
                 st.secrets =
@@ -724,30 +714,8 @@ impl State {
         if !self.dir.join(".sops.yaml").exists() {
             return std::fs::write(&sp, plain).context("write secrets");
         }
-        use std::io::Write;
-        let mut child = Command::new("sops")
-            .args([
-                "-e",
-                "--input-type",
-                "yaml",
-                "--output-type",
-                "yaml",
-                "--filename-override",
-            ])
-            .arg(&sp)
-            .arg("/dev/stdin")
-            .current_dir(&self.dir)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .context("run sops -e")?;
-        child.stdin.take().unwrap().write_all(plain.as_bytes())?;
-        let out = child.wait_with_output()?;
-        if !out.status.success() {
-            bail!("sops -e failed");
-        }
-        std::fs::write(&sp, out.stdout).context("write secrets")
+        let out = crate::secrets_io::current().encrypt(&sp, &plain)?;
+        std::fs::write(&sp, out).context("write secrets")
     }
 
     pub fn host(&self, name: &str) -> Result<&Host> {

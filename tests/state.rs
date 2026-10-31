@@ -123,10 +123,7 @@ fn link_without_receiver_inbound() {
         .enabled = false;
     let e = validate(&st);
     assert!(
-        has(
-            &e,
-            "receiver «fi-hel-1» has no enabled inbound reality"
-        ),
+        has(&e, "receiver «fi-hel-1» has no enabled inbound reality"),
         "{e:?}"
     );
 }

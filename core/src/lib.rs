@@ -8,5 +8,6 @@
 pub mod ops;
 pub mod render;
 pub mod secrets;
+pub mod secrets_io;
 pub mod state;
 pub mod validate;
