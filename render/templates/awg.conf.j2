@@ -1,0 +1,27 @@
+# vpnctl · {{ host }} · interface {{ iface }} · {{ purpose }}
+[Interface]
+Address = {{ addresses | join(", ") }}
+PrivateKey = {{ private_key }}
+{% if listen_port %}ListenPort = {{ listen_port }}
+{% endif %}{% if table_off %}Table = off
+{% endif %}Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 0
+S2 = 0
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+{% for cmd in post_up %}PostUp = {{ cmd }}
+{% endfor %}{% for cmd in post_down %}PostDown = {{ cmd }}
+{% endfor %}
+{% for p in peers %}
+# {{ p.name }}
+[Peer]
+PublicKey = {{ p.public_key }}
+{% if p.preshared %}PresharedKey = {{ p.preshared }}
+{% endif %}AllowedIPs = {{ p.allowed_ips | join(", ") }}
+{% if p.endpoint %}Endpoint = {{ p.endpoint }}
+PersistentKeepalive = 25
+{% endif %}{% endfor %}

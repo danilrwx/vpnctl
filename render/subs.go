@@ -3,7 +3,6 @@ package render
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/danilrwx/vpnctl-go/state"
@@ -12,10 +11,6 @@ import (
 // Email is the engine account name: <user>-<mode>-<protocol>.
 func Email(user, mode, proto string) string {
 	return user + "-" + mode + "-" + proto
-}
-
-func enabled(i state.Inbound) bool {
-	return i.Enabled == nil || *i.Enabled
 }
 
 // SubURL is the public subscription link served by Caddy on the entry.
@@ -34,51 +29,30 @@ func SubURL(st *state.State, entry, user, mode string) (string, error) {
 	return fmt.Sprintf("https://%s/s/%s/%s", h.Domain, sec.SubID, mode), nil
 }
 
-// Links returns one vless link per protocol enabled for the user on the entry.
+// Links returns one link per protocol enabled for the user on the entry.
 func Links(st *state.State, entry, user, mode string) ([]string, error) {
-	h, ok := st.Hosts[entry]
-	if !ok {
-		return nil, fmt.Errorf("host %q is not described", entry)
-	}
-	if h.Domain == "" {
-		return nil, fmt.Errorf("the entry has no domain")
-	}
 	u, ok := st.Users[user]
 	if !ok {
 		return nil, fmt.Errorf("user %q is not described", user)
 	}
-	sec, ok := st.Secrets.Users[user]
-	if !ok {
-		return nil, fmt.Errorf("no secrets for user %s", user)
+	accs, err := SubAccounts(st, entry, user, u, mode)
+	if err != nil {
+		return nil, err
 	}
-	hs := st.Secrets.Hosts[entry]
-	inb := st.Inbounds[entry]
-
 	var out []string
-	for _, p := range u.Protocols {
-		i, ok := inb[p]
-		if !ok || !enabled(i) {
-			continue
-		}
-		switch p {
+	for _, a := range accs {
+		switch a.Proto {
 		case "reality":
-			sni := i.SNI
-			if sni == "" {
-				sni = h.Domain
-			}
 			out = append(out, fmt.Sprintf(
 				"vless://%s@%s:%d?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#%s",
-				sec.UUID, h.Domain, i.Port, sni, hs.Reality.Public, hs.Reality.ShortIDs[0],
-				Email(user, mode, p)))
+				a.UUID, a.Domain, a.Port, a.SNI, a.PBK, a.SID, a.Email))
 		case "ws":
-			path := i.Path
-			if path == "" {
-				path = "/ws"
-			}
 			out = append(out, fmt.Sprintf(
-				"vless://%s@%s:443?encryption=none&security=tls&sni=%s&type=ws&host=%s&path=%s#%s",
-				sec.UUID, h.Domain, h.Domain, h.Domain, url.QueryEscape(path),
-				Email(user, mode, p)))
+				"vless://%s@%s:%d?encryption=none&security=tls&sni=%s&type=ws&host=%s&path=%s#%s",
+				a.UUID, a.Domain, a.Port, a.Domain, a.Domain, enc(a.Path), a.Email))
+		case "hy2":
+			out = append(out, fmt.Sprintf(
+				"hysteria2://%s@%s:%d?sni=%s#%s", a.Password, a.Domain, a.Port, a.SNI, a.Email))
 		}
 	}
 	return out, nil
@@ -91,7 +65,7 @@ func TGLink(st *state.State, entry string) (string, bool) {
 		return "", false
 	}
 	i, ok := st.Inbounds[entry]["mtg"]
-	if !ok || !enabled(i) {
+	if !ok || !i.IsEnabled() {
 		return "", false
 	}
 	sec := st.Secrets.Hosts[entry].MTG

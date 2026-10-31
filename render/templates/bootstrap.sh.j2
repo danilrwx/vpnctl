@@ -1,0 +1,132 @@
+#!/bin/sh
+# vpnctl · bootstrap {{ host }} ({{ role }}) · idempotent: every step checks for "already done"
+set -eu
+export DEBIAN_FRONTEND=noninteractive LC_ALL=C
+ok()   { printf '  ✓ %s\n' "$1"; }
+skip() { printf '  = %s · already done\n' "$1"; }
+warn() { printf '  ! %s\n' "$1"; }
+die()  { printf '  ✗ %s\n' "$1"; exit 1; }
+mkdir -p /etc/vpnctl /var/lib/vpnctl/dl
+
+# --- packages and security repositories
+if ! grep -rqs 'security.debian.org' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+  . /etc/os-release
+  echo "deb http://security.debian.org/debian-security ${VERSION_CODENAME}-security main" > /etc/apt/sources.list.d/security.list
+  ok "security repository added"
+fi
+apt-get update -qq
+apt-get install -y -qq curl ca-certificates unzip tar nftables unattended-upgrades openssl{% if awg %} dkms build-essential "linux-headers-$(uname -r)" git{% endif %} >/dev/null
+ok "packages: curl nftables unattended-upgrades{% if awg %} dkms linux-headers git{% endif %}"
+
+# --- unattended upgrades and reboot window
+cat > /etc/apt/apt.conf.d/51vpnctl <<'CONF'
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+CONF
+mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d
+cat > /etc/systemd/system/apt-daily-upgrade.timer.d/vpnctl.conf <<'CONF'
+[Timer]
+OnCalendar=
+OnCalendar=*-*-{{ reboot_days }} 04:00
+RandomizedDelaySec=15m
+CONF
+systemctl daemon-reload
+systemctl enable -q --now unattended-upgrades apt-daily-upgrade.timer
+ok "unattended-upgrades · reboot at 04:30 on days {{ reboot_days }}"
+
+# --- downloads pinned in versions.yaml with sha256 checks
+fetch() { # name url sha file
+  if [ -n "$3" ]; then
+    curl -fsSL --retry 3 -o "$4" "$2"
+    echo "$3  $4" | sha256sum -c --quiet || die "$1: sha256 does not match versions.yaml"
+  else
+    warn "$1: sha256 is not pinned in versions.yaml, installing without a check"
+    curl -fsSL --retry 3 -o "$4" "$2"
+  fi
+}
+{% for d in downloads %}
+if {{ d.check }}; then skip "{{ d.name }} {{ d.version }}"; else
+  fetch "{{ d.name }}" "{{ d.url }}" "{{ d.sha }}" "/var/lib/vpnctl/dl/{{ d.file }}"
+  {{ d.install }}
+  ok "{{ d.name }} {{ d.version }}"
+fi
+{% endfor %}
+{% if rule_sets %}
+# --- engine rule sets · release {{ geodata }}
+mkdir -p /etc/sing-box/rules
+{% for r in rule_sets %}if [ -s /etc/sing-box/rules/{{ r.tag }}.srs ]; then :; else curl -fsSL --retry 3 -o /etc/sing-box/rules/{{ r.tag }}.srs "{{ r.url }}"; fi
+{% endfor %}ok "rule sets: {{ rule_sets | length }} files"
+{% endif %}
+{% if awg %}# --- AmneziaWG via DKMS · v{{ awg_version }}
+if awg --version 2>/dev/null | grep -q '{{ awg_version }}' && modinfo amneziawg >/dev/null 2>&1; then skip "amneziawg {{ awg_version }}"; else
+  rm -rf /usr/src/amneziawg-src && git clone -q --depth 1 --branch "v{{ awg_version }}" https://github.com/amnezia-vpn/amneziawg-linux-kernel-module /usr/src/amneziawg-src
+  if [ -f /usr/src/amneziawg-src/src/dkms.conf ]; then
+    rm -rf "/usr/src/amneziawg-{{ awg_version }}" && cp -r /usr/src/amneziawg-src/src "/usr/src/amneziawg-{{ awg_version }}"
+    dkms add -m amneziawg -v "{{ awg_version }}" >/dev/null 2>&1 || true
+    dkms build -m amneziawg -v "{{ awg_version }}" >/dev/null && dkms install -m amneziawg -v "{{ awg_version }}" >/dev/null
+  else
+    make -s -C /usr/src/amneziawg-src/src && make -s -C /usr/src/amneziawg-src/src install
+  fi
+  rm -rf /usr/src/amneziawg-tools && git clone -q --depth 1 --branch "v{{ awg_version }}" https://github.com/amnezia-vpn/amneziawg-tools /usr/src/amneziawg-tools
+  make -s -C /usr/src/amneziawg-tools/src && make -s -C /usr/src/amneziawg-tools/src install
+  ok "amneziawg {{ awg_version }} · module built for $(uname -r)"
+fi
+mkdir -p /etc/amnezia/amneziawg && chmod 700 /etc/amnezia/amneziawg
+{% endif %}{% if role == "entry" %}
+# --- web server: user, cover site, unit
+id caddy >/dev/null 2>&1 || useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy
+mkdir -p /var/lib/caddy /var/www/site /var/www/sub /etc/caddy && chown -R caddy:caddy /var/lib/caddy /var/www
+[ -s /var/www/site/index.html ] || printf '<!doctype html><title>{{ domain }}</title><h1>{{ domain }}</h1>\n' > /var/www/site/index.html
+cat > /etc/systemd/system/caddy.service <<'UNIT'
+[Unit]
+Description=Caddy
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=caddy
+Group=caddy
+Environment=HOME=/var/lib/caddy
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --force
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+LimitNOFILE=1048576
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+UNIT
+mkdir -p /etc/mtg /var/www/sub
+ok "caddy: user, /var/www/site, unit"
+{% else %}
+# --- self-signed certificate for Hysteria2 on the exit
+if [ -s /etc/vpnctl/self.crt ]; then skip "self-signed certificate"; else
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 -subj "/CN={{ host }}" -keyout /etc/vpnctl/self.key -out /etc/vpnctl/self.crt >/dev/null 2>&1
+  chmod 600 /etc/vpnctl/self.key
+  ok "self-signed certificate /etc/vpnctl/self.crt"
+fi
+{% endif %}
+# --- network and kernel: rendered configs if missing (apply overwrites them)
+mkdir -p /etc/sysctl.d /etc/systemd/system
+[ -s /etc/nftables.conf ] && grep -q vpnctl /etc/nftables.conf || cat > /etc/nftables.conf <<'NFT'
+{{ nftables }}NFT
+[ -s /etc/sysctl.d/90-vpnctl.conf ] || cat > /etc/sysctl.d/90-vpnctl.conf <<'SYS'
+{{ sysctl }}SYS
+sysctl --system >/dev/null
+# IPv6: with forwarding enabled the kernel disables accept_ra and stops renewing the provider address
+for f in /proc/sys/net/ipv6/conf/*/accept_ra; do
+  if [ -w "$f" ]; then echo 2 > "$f" 2>/dev/null || true; fi
+done
+systemctl enable -q --now nftables
+nft -f /etc/nftables.conf
+ok "nftables and sysctl"
+
+# --- units: enabled but not started until apply
+{% for u in units %}cat > /etc/systemd/system/{{ u.name }} <<'UNIT'
+{{ u.body }}UNIT
+{% endfor %}systemctl daemon-reload
+systemctl enable -q {{ enable | join(" ") }}
+ok "units enabled, not started: {{ enable | join(" ") }}"
+
+echo "{{ commit }}" > /etc/vpnctl/bootstrap
+ok "marker /etc/vpnctl/bootstrap = {{ commit }}"
+echo "→ apply {{ host }}: configs, service start, probe"
