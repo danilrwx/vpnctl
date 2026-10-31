@@ -168,4 +168,24 @@ impl Ssh {
             .and_then(|l| l.split_once(' ').map(|(_, k)| k.to_string()))
             .context("ssh-keyscan ничего не вернул")
     }
+
+    /// Публичный ключ хоста, снятый через его джамп: хост может быть виден только оттуда
+    /// (типичный случай — нода, доступная лишь по IPv6 из сети джампа).
+    pub fn scan_key_in_state(st: &State, host: &str) -> Result<String> {
+        let h = st.host(host)?;
+        let ip = h.ip.to_string();
+        let Some(jump_name) = Self::jump_chain(st, host)?.first().cloned() else {
+            return Self::scan_key(&ip);
+        };
+        let jump = Self::for_host(st, &jump_name)?;
+        let out = jump.run(
+            &format!("ssh-keyscan -t ed25519 -T 5 {ip} 2>/dev/null"),
+            &[],
+        )?;
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find(|l| !l.starts_with('#') && !l.trim().is_empty())
+            .and_then(|l| l.split_once(' ').map(|(_, k)| k.to_string()))
+            .with_context(|| format!("ssh-keyscan {ip} через джамп {jump_name} ничего не вернул"))
+    }
 }

@@ -196,9 +196,19 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         }
     }
     let bin = engine_bin(host.engine);
+    // sing-box понимает -D (каталог ресурсов), xray — нет: ему нужен только -c
+    let exec = match host.engine {
+        Engine::SingBox => {
+            format!("/usr/local/bin/{bin} run -D /etc/{bin} -c /etc/{bin}/config.json")
+        }
+        Engine::Xray => format!("/usr/local/bin/{bin} run -c /etc/{bin}/config.json"),
+    };
     f.insert(
         format!("/etc/systemd/system/{bin}.service"),
-        r("engine.service.j2", context! { host => name, engine => bin, exec => format!("/usr/local/bin/{bin} run -D /etc/{bin} -c /etc/{bin}/config.json") })?,
+        r(
+            "engine.service.j2",
+            context! { host => name, engine => bin, exec => exec },
+        )?,
     );
 
     // веб-сервер и подписки
@@ -358,10 +368,12 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
     udp.sort();
     udp.dedup();
     let tproxy = client_awg.map(|_| TPROXY_PORT);
+    // IPv6-форвардинг нужен только L3-клиентам (awg): с ним ядро само выключает accept_ra
+    let awg_used = !awg_ifaces.is_empty();
     f.insert("/etc/nftables.conf".into(), r("nftables.conf.j2", context! { host => name, tcp_ports => tcp, udp_ports => udp, awg_ifaces => awg_ifaces, tproxy_port => tproxy, masquerade => masquerade })?);
     f.insert(
         "/etc/sysctl.d/90-vpnctl.conf".into(),
-        r("sysctl.conf.j2", context! { host => name })?,
+        r("sysctl.conf.j2", context! { host => name, awg => awg_used })?,
     );
 
     // overrides/<host>/<путь>: файл берётся как есть (перенесённый с хоста дрейф)

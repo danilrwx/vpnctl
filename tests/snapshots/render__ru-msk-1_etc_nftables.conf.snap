@@ -19,20 +19,20 @@ table inet filter {
 		tcp dport 2053 accept
 		udp dport 443 accept
 		udp dport 51820 accept
-		iif "awg0" accept
-		iif "awg1" accept
+		iifname "awg0" accept
+		iifname "awg1" accept
 	}
 	chain forward {
 		type filter hook forward priority 0; policy drop;
 		ct state established,related accept
-		iif "awg0" accept
-		iif "awg1" accept
+		iifname "awg0" accept
+		iifname "awg1" accept
 	}
 }
 
 table ip mangle {
 	chain prerouting {
 		type filter hook prerouting priority mangle; policy accept;
-		iif "awg0" meta l4proto { tcp, udp } tproxy to 127.0.0.1:7893 meta mark set 1 accept
+		iifname "awg0" meta l4proto { tcp, udp } tproxy to 127.0.0.1:7893 meta mark set 1 accept
 	}
 }

@@ -17,18 +17,18 @@ table inet filter {
 		tcp dport 443 accept
 		udp dport 443 accept
 		udp dport 51820 accept
-		iif "awg0" accept
+		iifname "awg0" accept
 	}
 	chain forward {
 		type filter hook forward priority 0; policy drop;
 		ct state established,related accept
-		iif "awg0" accept
+		iifname "awg0" accept
 	}
 }
 
 table ip nat {
 	chain postrouting {
 		type nat hook postrouting priority srcnat; policy accept;
-		ip saddr 10.9.1.0/30 oif != "awg0" masquerade
+		ip saddr 10.9.1.0/30 oifname != "awg0" masquerade
 	}
 }

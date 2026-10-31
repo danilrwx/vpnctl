@@ -85,6 +85,20 @@ pub fn script(st: &State, host: &str) -> Result<String> {
             let p = pin(st, "xray")?;
             let v = &p.version;
             downloads.push(download("xray", p, XRAY_URL, format!("xray version 2>/dev/null | grep -q '^Xray {v} '"), format!("rm -rf {dl}/xray && mkdir -p {dl}/xray && unzip -qo {dl}/Xray-linux-64.zip -d {dl}/xray && install -m 0755 {dl}/xray/xray /usr/local/bin/xray && mkdir -p /etc/xray")));
+            // xray, в отличие от sing-box, читает geosite.dat/geoip.dat из каталога рядом с бинарём
+            let g = pin(st, "geodata")?;
+            for f in ["geosite", "geoip"] {
+                let url = format!(
+                    "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/{{v}}/download/{f}.dat"
+                );
+                downloads.push(download(
+                    f,
+                    g,
+                    &url,
+                    format!("test -s /usr/local/bin/{f}.dat"),
+                    format!("install -m 0644 {dl}/{f}.dat /usr/local/bin/{f}.dat"),
+                ));
+            }
         }
     }
     if h.role == Role::Entry {
@@ -153,8 +167,7 @@ pub fn run(st: &mut State, host: &str, ssh_override: Option<String>) -> Result<(
     }
     let h = st.host(host)?.clone();
     if h.host_key.is_none() {
-        let key =
-            Ssh::scan_key(&h.ip.to_string()).with_context(|| format!("ssh-keyscan {}", h.ip))?;
+        let key = Ssh::scan_key_in_state(st, host)?;
         println!(
             "  ✓ host key {} принят, записан в состояние",
             key.split_whitespace()

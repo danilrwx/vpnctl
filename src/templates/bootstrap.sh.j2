@@ -112,6 +112,10 @@ mkdir -p /etc/sysctl.d /etc/systemd/system
 [ -s /etc/sysctl.d/90-vpnctl.conf ] || cat > /etc/sysctl.d/90-vpnctl.conf <<'SYS'
 {{ sysctl }}SYS
 sysctl --system >/dev/null
+# IPv6: при включённом forwarding ядро само выключает accept_ra и перестаёт продлевать адрес от провайдера
+for f in /proc/sys/net/ipv6/conf/*/accept_ra; do
+  if [ -w "$f" ]; then echo 2 > "$f" 2>/dev/null || true; fi
+done
 systemctl enable -q --now nftables
 nft -f /etc/nftables.conf
 ok "nftables и sysctl"

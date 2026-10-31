@@ -12,26 +12,26 @@ table inet filter {
 		tcp dport 22 accept
 {% for p in tcp_ports %}		tcp dport {{ p }} accept
 {% endfor %}{% for p in udp_ports %}		udp dport {{ p }} accept
-{% endfor %}{% for i in awg_ifaces %}		iif "{{ i }}" accept
+{% endfor %}{% for i in awg_ifaces %}		iifname "{{ i }}" accept
 {% endfor %}	}
 	chain forward {
 		type filter hook forward priority 0; policy drop;
 		ct state established,related accept
-{% for i in awg_ifaces %}		iif "{{ i }}" accept
+{% for i in awg_ifaces %}		iifname "{{ i }}" accept
 {% endfor %}	}
 }
 {% if tproxy_port %}
 table ip mangle {
 	chain prerouting {
 		type filter hook prerouting priority mangle; policy accept;
-		iif "awg0" meta l4proto { tcp, udp } tproxy to 127.0.0.1:{{ tproxy_port }} meta mark set 1 accept
+		iifname "awg0" meta l4proto { tcp, udp } tproxy to 127.0.0.1:{{ tproxy_port }} meta mark set 1 accept
 	}
 }
 {% endif %}{% if masquerade %}
 table ip nat {
 	chain postrouting {
 		type nat hook postrouting priority srcnat; policy accept;
-{% for n in masquerade %}		ip saddr {{ n }} oif != "awg0" masquerade
+{% for n in masquerade %}		ip saddr {{ n }} oifname != "awg0" masquerade
 {% endfor %}	}
 }
 {% endif %}
