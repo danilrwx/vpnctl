@@ -478,11 +478,7 @@ func Apply(st *state.State, opts *Opts) error {
 				c.Close()
 				return fmt.Errorf("%s: check of %s failed:\n%s", name, f.Path, strings.TrimSpace(string(res.Stderr)))
 			}
-			fields := strings.Fields(cmd)
-			if len(fields) > 2 {
-				fields = fields[:2]
-			}
-			fmt.Printf("  ✓ %s\n", strings.Join(fields, " "))
+			fmt.Printf("  ✓ check %s\n", f.Path)
 		}
 		backup := "/var/lib/vpnctl/backup/" + head
 		res, err = c.Run(InstallScript(hp, backup), nil)
