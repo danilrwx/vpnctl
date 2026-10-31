@@ -5,78 +5,74 @@ use vpnctl::ops;
 use vpnctl::state::*;
 
 #[derive(Parser)]
-#[command(
-    name = "vpnctl",
-    version,
-    about = "VPN-инфраструктура как состояние в git"
-)]
+#[command(name = "vpnctl", version, about = "VPN infrastructure as state in git")]
 struct Cli {
-    /// Каталог состояния
+    /// State directory
     #[arg(short = 'C', long, global = true, default_value = ".")]
     dir: PathBuf,
-    /// Не коммитить после изменения (пакетные правки)
+    /// Do not commit after a change (batch edits)
     #[arg(long, global = true)]
     no_commit: bool,
-    /// Не читать секреты, подставить заглушки (CI без ключа age; только validate/render)
+    /// Do not read secrets, use stubs instead (CI without an age key; validate/render only)
     #[arg(long, global = true)]
     stub_secrets: bool,
-    /// Без подкоманды — TUI
+    /// Without a subcommand the TUI starts
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Интерактивный интерфейс (по умолчанию)
+    /// Interactive interface (default)
     Tui,
-    /// Создать пустое состояние и git-репозиторий
+    /// Create an empty state and a git repository
     Init {
-        /// Получатель age для sops; без него секреты пишутся открытым текстом
+        /// age recipient for sops; without it secrets are written as plaintext
         #[arg(long)]
         age: Option<String>,
     },
-    /// Проверить состояние
+    /// Validate the state
     Validate,
-    /// Отрендерить конфиги в каталог
+    /// Render configs into a directory
     Render {
         #[arg(long)]
         host: Option<String>,
         #[arg(long, default_value = "out")]
         out: PathBuf,
-        /// Два прогона, сравнение побайтно; ничего не пишет
+        /// Two runs compared byte for byte; writes nothing
         #[arg(long)]
         check: bool,
     },
-    /// Что изменится на хостах: диф, дрейф, недоступные
+    /// What changes on the hosts: diff, drift, unreachable
     Plan {
         #[arg(long)]
         host: Option<String>,
-        /// Показать диф файла: --diff <хост> <путь>
-        #[arg(long, num_args = 2, value_names = ["ХОСТ", "ПУТЬ"])]
+        /// Show a file diff: --diff <host> <path>
+        #[arg(long, num_args = 2, value_names = ["HOST", "PATH"])]
         diff: Option<Vec<String>>,
-        /// Забрать файл с хоста в overrides/: --adopt <хост> <путь>
-        #[arg(long, num_args = 2, value_names = ["ХОСТ", "ПУТЬ"])]
+        /// Take a file from a host into overrides/: --adopt <host> <path>
+        #[arg(long, num_args = 2, value_names = ["HOST", "PATH"])]
         adopt: Option<Vec<String>>,
     },
-    /// Применить состояние на хосты по SSH
+    /// Apply the state to the hosts over SSH
     Apply {
         #[arg(long)]
         host: Option<String>,
-        /// Применять не с main
+        /// Apply from a branch other than main
         #[arg(long)]
         branch: Option<String>,
-        /// Не останавливаться на мёртвом линке и отсутствии сертификата
+        /// Do not stop on a dead link or a missing certificate
         #[arg(long)]
         force: bool,
     },
-    /// Снять метрики и пробу цепочки с хостов в metrics.sqlite
+    /// Collect metrics and the chain probe into metrics.sqlite
     Collect,
-    /// Проба цепочки с входов; --matrix — рёбра ноутбук→хост и вход→выход по протоколам
+    /// Chain probe from the entries; --matrix adds laptop->host and entry->exit edges per protocol
     Probe {
         #[arg(long)]
         matrix: bool,
     },
-    /// Сводка из metrics.sqlite без обращения к хостам
+    /// Summary from metrics.sqlite without touching the hosts
     Status {
         #[arg(long)]
         json: bool,
@@ -99,7 +95,7 @@ enum Cmd {
 enum HostCmd {
     Add {
         name: String,
-        /// user@ip для ssh
+        /// user@ip for ssh
         #[arg(long)]
         ssh: String,
         #[arg(long, default_value = "entry")]
@@ -112,17 +108,17 @@ enum HostCmd {
         via: Option<String>,
         #[arg(long, default_value = "sing-box")]
         engine: String,
-        /// Добавить инбаунд AmneziaWG (по умолчанию не добавляется)
+        /// Add an AmneziaWG inbound (not added by default)
         #[arg(long)]
         awg: bool,
     },
     Rm {
         name: String,
     },
-    /// Подготовить хост: пакеты, бинарники по versions.yaml, фаервол, AWG, юниты, маркер
+    /// Prepare the host: packages, binaries from versions.yaml, firewall, AWG, units, marker
     Bootstrap {
         name: String,
-        /// user@ip, если отличается от записанного
+        /// user@ip when it differs from the recorded one
         #[arg(long)]
         ssh: Option<String>,
     },
@@ -149,7 +145,7 @@ enum UserCmd {
         name: String,
         #[command(flatten)]
         f: UserFields,
-        /// AWG-пир в режиме split|full
+        /// AWG peer in split|full mode
         #[arg(long)]
         awg: Option<Mode>,
         #[arg(long)]
@@ -175,7 +171,7 @@ enum UserCmd {
     Rm {
         name: String,
     },
-    /// Ссылки на подписки, QR, tg-прокси, профиль awg
+    /// Subscription links, QR, tg proxy, awg profile
     Link {
         name: String,
         #[arg(long)]
@@ -192,7 +188,7 @@ enum LinkCmd {
     Add {
         from: String,
         to: String,
-        /// awg,reality,hy2 (по умолчанию awg,reality)
+        /// awg,reality,hy2 (defaults to awg,reality)
         #[arg(long, value_delimiter = ',')]
         protos: Vec<Proto>,
         #[arg(long, default_value = "auto")]
@@ -216,7 +212,7 @@ enum LinkCmd {
 
 #[derive(Subcommand)]
 enum ExitCmd {
-    /// Политика выбора выхода для входа
+    /// Exit selection policy for the entry
     Set {
         host: String,
         #[arg(long)]
@@ -294,12 +290,12 @@ enum RuleCmd {
     Add {
         #[command(flatten)]
         r: RuleRef,
-        /// Позиция 1..n+1; по умолчанию перед правилом «всё остальное»
+        /// Position 1..n+1; by default before the catch-all rule
         #[arg(long)]
         pos: Option<usize>,
         #[command(flatten)]
         m: MatchArgs,
-        /// direct | block | link:auto | link:<хост>
+        /// direct | block | link:auto | link:<host>
         #[arg(long)]
         action: Action,
         #[arg(long)]
@@ -344,7 +340,7 @@ fn parse_policy(s: &str) -> Result<Policy> {
         "auto" => Policy::Auto,
         "fixed" => Policy::Fixed,
         "rr" => Policy::Rr,
-        _ => bail!("policy: auto, fixed или rr"),
+        _ => bail!("policy: auto, fixed or rr"),
     })
 }
 
@@ -355,7 +351,7 @@ fn report(errors: &[String]) -> Result<()> {
     for e in errors {
         eprintln!("  ✗ {e}");
     }
-    bail!("{} ошибок в состоянии", errors.len())
+    bail!("{} errors in the state", errors.len())
 }
 
 fn main() -> Result<()> {
@@ -365,7 +361,7 @@ fn main() -> Result<()> {
         let msg = ops::init(&cli.dir, age.as_deref())?;
         vpnctl::git::init(&cli.dir)?;
         vpnctl::git::commit(&cli.dir, &msg)?;
-        println!("состояние создано в {}", cli.dir.display());
+        println!("state created in {}", cli.dir.display());
         return Ok(());
     }
     let mut st = if cli.stub_secrets {
@@ -377,7 +373,7 @@ fn main() -> Result<()> {
         let errs = vpnctl::validate::validate(&st);
         report(&errs)?;
         println!(
-            "✓ состояние валидно: {} хостов, {} линков, {} пользователей",
+            "✓ state is valid: {} hosts, {} links, {} users",
             st.hosts.len(),
             st.links.len(),
             st.users.len()
@@ -387,7 +383,7 @@ fn main() -> Result<()> {
     match &cmd {
         Cmd::Tui => {
             if cli.stub_secrets {
-                bail!("--stub-secrets только для validate и render");
+                bail!("--stub-secrets is only valid for validate and render");
             }
             return vpnctl::tui::run(st);
         }
@@ -400,14 +396,14 @@ fn main() -> Result<()> {
             };
             if *check {
                 println!(
-                    "✓ рендер воспроизводим: {} хостов, {} файлов",
+                    "✓ render is reproducible: {} hosts, {} files",
                     r.hosts.len(),
                     r.hosts.values().map(|f| f.len()).sum::<usize>()
                 );
             } else {
                 vpnctl::render::write(&r, out)?;
                 for (h, files) in &r.hosts {
-                    println!("{h}: {} файлов → {}", files.len(), out.join(h).display());
+                    println!("{h}: {} files → {}", files.len(), out.join(h).display());
                 }
             }
             return Ok(());
@@ -423,7 +419,7 @@ fn main() -> Result<()> {
             if let Some(a) = adopt {
                 let msg = vpnctl::plan::adopt(&st, &a[0], &a[1])?;
                 if cli.no_commit {
-                    println!("{msg} (без коммита)");
+                    println!("{msg} (not committed)");
                 } else {
                     vpnctl::git::commit(&st.dir, &msg)?;
                     println!("{msg}");
@@ -472,7 +468,7 @@ fn main() -> Result<()> {
             let errs = vpnctl::validate::validate(&st);
             if errs.is_empty() {
                 println!(
-                    "статическая проверка ✓ · {} хостов, {} линков · via без циклов, выходы, ключи, подсети",
+                    "static check ✓ · {} hosts, {} links · acyclic via, exits, keys, subnets",
                     st.hosts.len(),
                     st.links.len()
                 );
@@ -497,8 +493,8 @@ fn main() -> Result<()> {
             let u = st
                 .users
                 .get(name)
-                .with_context(|| format!("пользователь «{name}» не описан"))?;
-            let entry = st.entry_of(u).context("у пользователя нет входа")?;
+                .with_context(|| format!("user «{name}» is not described"))?;
+            let entry = st.entry_of(u).context("the user has no entry")?;
             for m in &u.modes {
                 let url = subs::sub_url(&st, &entry, name, *m)?;
                 println!("{} · {}", m.name(), url);
@@ -522,7 +518,7 @@ fn main() -> Result<()> {
                 let p = format!("/etc/vpnctl/profiles/{name}/awg.conf");
                 match files.get(&p) {
                     Some(c) => print!("{c}"),
-                    None => eprintln!("у пользователя нет awg-пира"),
+                    None => eprintln!("the user has no awg peer"),
                 }
             }
             return Ok(());
@@ -530,7 +526,7 @@ fn main() -> Result<()> {
         _ => {}
     }
     if cli.stub_secrets {
-        bail!("--stub-secrets только для validate и render");
+        bail!("--stub-secrets is only valid for validate and render");
     }
     let msg = match cmd {
         Cmd::Tui
@@ -559,12 +555,12 @@ fn main() -> Result<()> {
             let role = match role.as_str() {
                 "entry" => Role::Entry,
                 "exit" => Role::Exit,
-                _ => bail!("role: entry или exit"),
+                _ => bail!("role: entry or exit"),
             };
             let engine = match engine.as_str() {
                 "sing-box" => Engine::SingBox,
                 "xray" => Engine::Xray,
-                _ => bail!("engine: sing-box или xray"),
+                _ => bail!("engine: sing-box or xray"),
             };
             ops::host_add(&mut st, &name, role, &ssh, ip, domain, via, engine, awg)?
         }
@@ -642,7 +638,7 @@ fn main() -> Result<()> {
                 None => None,
                 Some("auto") => Some(ExitPolicy::Auto),
                 Some("fixed") => Some(ExitPolicy::Fixed),
-                Some(_) => bail!("policy: auto или fixed"),
+                Some(_) => bail!("policy: auto or fixed"),
             };
             ops::exit_set(&mut st, &host, prefer, policy)?
         }
@@ -695,12 +691,12 @@ fn main() -> Result<()> {
     };
     let errs = vpnctl::validate::validate(&st);
     if !errs.is_empty() {
-        eprintln!("изменение не записано:");
+        eprintln!("change was not saved:");
         report(&errs)?;
     }
     st.save()?;
     if cli.no_commit {
-        println!("{msg} (без коммита)");
+        println!("{msg} (not committed)");
     } else {
         vpnctl::git::commit(&st.dir, &msg)?;
         println!("{msg}");

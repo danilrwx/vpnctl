@@ -61,7 +61,7 @@ fn init_and_ops_commit() {
         true,
     )
     .unwrap();
-    assert_eq!(msg, "hosts: + ru (вход)");
+    assert_eq!(msg, "hosts: + ru (entry)");
     ops::host_add(
         &mut st,
         "fi",
@@ -109,7 +109,7 @@ fn has(errs: &[String], needle: &str) -> bool {
 fn via_cycle() {
     let mut st = fixture();
     st.hosts.get_mut("ru-msk-1").unwrap().via = Some("fi-hel-1".into());
-    assert!(has(&validate(&st), "цикл в графе via"));
+    assert!(has(&validate(&st), "cycle in the via graph"));
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn link_without_receiver_inbound() {
     assert!(
         has(
             &e,
-            "на приёмнике «fi-hel-1» нет включённого inbound reality"
+            "receiver «fi-hel-1» has no enabled inbound reality"
         ),
         "{e:?}"
     );
@@ -135,16 +135,19 @@ fn link_without_receiver_inbound() {
 fn duplicate_domain_needs_retiring() {
     let mut st = fixture();
     st.hosts.get_mut("fi-hel-1").unwrap().domain = Some("gw.example.ru".into());
-    assert!(has(&validate(&st), "только на время переезда"));
+    assert!(has(&validate(&st), "only during a migration"));
     st.hosts.get_mut("ru-msk-1").unwrap().retiring = true;
-    assert!(!has(&validate(&st), "только на время переезда"));
+    assert!(!has(&validate(&st), "only during a migration"));
 }
 
 #[test]
 fn xray_cannot_hy2() {
     let mut st = fixture();
     st.hosts.get_mut("ru-msk-1").unwrap().engine = Engine::Xray;
-    assert!(has(&validate(&st), "engine xray не умеет hysteria2"));
+    assert!(has(
+        &validate(&st),
+        "engine xray does not support hysteria2"
+    ));
 }
 
 #[test]
@@ -154,12 +157,12 @@ fn awg_peer_checks() {
         mode: Mode::Full,
         ip: "10.8.1.2".parse().unwrap(),
     });
-    assert!(has(&validate(&st), "вне подсети режима full"));
+    assert!(has(&validate(&st), "is outside the full mode subnet"));
     st.users.get_mut("brat").unwrap().awg = Some(AwgPeer {
         mode: Mode::Split,
         ip: "10.8.1.1".parse().unwrap(),
     });
-    assert!(has(&validate(&st), "зарезервирован за шлюзом"));
+    assert!(has(&validate(&st), "is reserved for the gateway"));
     let mut st = fixture();
     st.users.get_mut("olga").unwrap().awg = Some(AwgPeer {
         mode: Mode::Split,
@@ -167,8 +170,8 @@ fn awg_peer_checks() {
     });
     st.users.get_mut("olga").unwrap().protocols.push(Proto::Awg);
     let e = validate(&st);
-    assert!(has(&e, "адрес awg 10.8.1.2 и у"), "{e:?}");
-    assert!(has(&e, "нет ключей awg"), "{e:?}");
+    assert!(has(&e, "awg address 10.8.1.2 is used by both"), "{e:?}");
+    assert!(has(&e, "no awg keys"), "{e:?}");
 }
 
 #[test]
@@ -177,7 +180,7 @@ fn rules_and_sets() {
     st.routing.get_mut("ru-msk-1").unwrap().groups.split[0]
         .match_
         .sets = vec!["nope".into()];
-    assert!(has(&validate(&st), "набор «nope» не описан"));
+    assert!(has(&validate(&st), "set «nope» is not described"));
     let mut st = fixture();
     let r = ops::rule_add(
         &mut st,
@@ -190,7 +193,7 @@ fn rules_and_sets() {
     )
     .unwrap();
     assert!(r.contains("split #1"));
-    assert!(has(&validate(&st), "правила ниже недостижимы"));
+    assert!(has(&validate(&st), "rules below are unreachable"));
     let mut st = fixture();
     assert!(
         ops::rule_add(
@@ -204,7 +207,7 @@ fn rules_and_sets() {
         )
         .is_ok()
     );
-    assert!(has(&validate(&st), "линка ru-msk-1->nl нет"));
+    assert!(has(&validate(&st), "there is no link ru-msk-1->nl"));
     assert!(ops::rule_move(&mut st, "ru-msk-1", Group::Split, 1, 9).is_err());
 }
 
@@ -223,7 +226,7 @@ fn link_set_and_exit() {
         )
         .is_ok()
     );
-    assert!(has(&validate(&st), "нет протоколов"));
+    assert!(has(&validate(&st), "no protocols"));
     let mut st = fixture();
     ops::exit_set(&mut st, "ru-msk-1", Some("nl".into()), None).unwrap();
     assert!(has(&validate(&st), "exit.prefer «nl»"));

@@ -7,6 +7,6 @@ pub mod plan;
 pub mod ssh;
 pub mod tui;
 
-// Чистое ядро вынесено в отдельный крейт и реэкспортируется под прежними путями,
-// чтобы существующий код продолжал работать без массовой правки путей.
+// The pure core lives in its own crate and is re-exported under the old paths,
+// so existing code keeps working without a mass path rewrite.
 pub use vpnctl_core::{ops, render, secrets, state, validate};

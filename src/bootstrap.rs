@@ -1,4 +1,4 @@
-//! bootstrap хоста: один идемпотентный shell-скрипт из шаблона, выполняется по SSH.
+//! Host bootstrap: one idempotent shell script from the template, executed over SSH.
 use crate::render;
 use crate::ssh::Ssh;
 use crate::state::*;
@@ -14,7 +14,7 @@ pub const CADDY_URL: &str =
 pub const MTG_URL: &str =
     "https://github.com/9seconds/mtg/releases/download/v{v}/mtg-{v}-linux-amd64.tar.gz";
 
-/// Теги локальных rule-set'ов из отрендеренного config.json sing-box.
+/// Local rule set tags from the rendered sing-box config.json.
 pub fn rule_set_tags(config_json: &str) -> Vec<String> {
     let v: serde_json::Value = serde_json::from_str(config_json).unwrap_or_default();
     let mut tags: Vec<String> = v["route"]["rule_set"]
@@ -31,7 +31,7 @@ pub fn rule_set_tags(config_json: &str) -> Vec<String> {
     tags
 }
 
-/// URL rule-set'а: `geosite-x` → sing-geosite, `geoip-x` → sing-geoip; `latest` или тег релиза.
+/// Rule set URL: `geosite-x` -> sing-geosite, `geoip-x` -> sing-geoip; `latest` or a release tag.
 pub fn rule_set_url(tag: &str, release: &str) -> String {
     let repo = if tag.starts_with("geoip-") {
         "sing-geoip"
@@ -45,7 +45,7 @@ pub fn rule_set_url(tag: &str, release: &str) -> String {
     }
 }
 
-/// Дни автоперезагрузки: вход — нечётные, выходы — чётные.
+/// Auto-reboot days: odd for the entry, even for exits.
 pub fn reboot_days(role: Role) -> String {
     let start = if role == Role::Entry { 1 } else { 2 };
     (start..=31)
@@ -58,7 +58,7 @@ pub fn reboot_days(role: Role) -> String {
 fn pin<'a>(st: &'a State, name: &str) -> Result<&'a Pin> {
     st.versions
         .get(name)
-        .with_context(|| format!("в versions.yaml нет «{name}»"))
+        .with_context(|| format!("versions.yaml has no «{name}»"))
 }
 
 fn download(name: &str, p: &Pin, url: &str, check: String, install: String) -> minijinja::Value {
@@ -68,7 +68,7 @@ fn download(name: &str, p: &Pin, url: &str, check: String, install: String) -> m
     context! { name => name, version => v.clone(), url => url, sha => p.sha256.clone().unwrap_or_default(), file => file, check => check, install => install }
 }
 
-/// Скрипт bootstrap для хоста: чистая функция от состояния и рендера.
+/// Bootstrap script for a host: a pure function of the state and the render.
 pub fn script(st: &State, host: &str) -> Result<String> {
     let h = st.host(host)?;
     let files = render::render_host(st, host)?;
@@ -85,7 +85,7 @@ pub fn script(st: &State, host: &str) -> Result<String> {
             let p = pin(st, "xray")?;
             let v = &p.version;
             downloads.push(download("xray", p, XRAY_URL, format!("xray version 2>/dev/null | grep -q '^Xray {v} '"), format!("rm -rf {dl}/xray && mkdir -p {dl}/xray && unzip -qo {dl}/Xray-linux-64.zip -d {dl}/xray && install -m 0755 {dl}/xray/xray /usr/local/bin/xray && mkdir -p /etc/xray")));
-            // xray, в отличие от sing-box, читает geosite.dat/geoip.dat из каталога рядом с бинарём
+            // unlike sing-box, xray reads geosite.dat/geoip.dat from the binary directory
             let g = pin(st, "geodata")?;
             for f in ["geosite", "geoip"] {
                 let url = format!(
@@ -132,7 +132,7 @@ pub fn script(st: &State, host: &str) -> Result<String> {
         enable.push("caddy".into());
     }
     enable.sort();
-    // AWG нужен, если есть awg inbound или awg-линк с участием хоста
+    // AWG is needed when there is an awg inbound or an awg link involving the host
     let awg = st
         .inbounds
         .get(host)
@@ -157,19 +157,19 @@ pub fn script(st: &State, host: &str) -> Result<String> {
     })?)
 }
 
-/// Host key в состояние (если нет), затем скрипт по SSH с живым выводом.
+/// Records the host key (if missing), then runs the script over SSH with live output.
 pub fn run(st: &mut State, host: &str, ssh_override: Option<String>) -> Result<()> {
     if let Some(s) = ssh_override {
         st.hosts
             .get_mut(host)
-            .with_context(|| format!("хост «{host}» не описан"))?
+            .with_context(|| format!("host «{host}» is not described"))?
             .ssh = s;
     }
     let h = st.host(host)?.clone();
     if h.host_key.is_none() {
         let key = Ssh::scan_key_in_state(st, host)?;
         println!(
-            "  ✓ host key {} принят, записан в состояние",
+            "  ✓ host key {} accepted, recorded in the state",
             key.split_whitespace()
                 .nth(1)
                 .map(|k| format!("{}…", &k[..12.min(k.len())]))
@@ -183,7 +183,7 @@ pub fn run(st: &mut State, host: &str, ssh_override: Option<String>) -> Result<(
     println!("▸ bootstrap {host} · {}", h.ssh);
     let status = Ssh::for_host(st, host)?.stream("sh -s", script.as_bytes())?;
     if !status.success() {
-        anyhow::bail!("bootstrap {host} завершился с ошибкой; повторный запуск доделает");
+        anyhow::bail!("bootstrap {host} failed; a re-run will finish the rest");
     }
     Ok(())
 }

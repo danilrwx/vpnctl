@@ -2,7 +2,7 @@
 source: tests/render.rs
 expression: body
 ---
-# vpnctl · brat · режим split · вход gw.example.ru
+# vpnctl · brat · mode split · entry gw.example.ru
 [Interface]
 Address = 10.8.1.2/32
 PrivateKey = L8VYEl7s39tpNE8ba/Z8S5cH0VD0dN8UYN7oeIfQm5U=

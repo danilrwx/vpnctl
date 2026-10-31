@@ -2,7 +2,7 @@
 source: tests/render.rs
 expression: body
 ---
-# vpnctl · ru-msk-1 · не править руками: затрётся при apply
+# vpnctl · ru-msk-1 · do not edit by hand: overwritten by apply
 {
 	admin off
 }

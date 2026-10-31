@@ -1,8 +1,8 @@
-//! Чистое ядро: состояние, валидация, рендер конфигов и операции над состоянием.
+//! Pure core: state, validation, config rendering and state operations.
 //!
-//! Здесь нет ни одного запуска внешних процессов и ничего, что зависит от ОС, —
-//! только файлы и данные. Всё, что требует `git`, `sops`, `ssh` или терминала,
-//! живёт в CLI-крейте и в будущем в мобильном крейте.
+//! Nothing here spawns external processes or depends on the OS —
+//! only files and data. Anything that needs `git`, `sops`, `ssh` or a terminal
+//! lives in the CLI crate and, later, in the mobile crate.
 #![allow(clippy::too_many_arguments)]
 
 pub mod ops;

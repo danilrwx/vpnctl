@@ -1,4 +1,4 @@
-//! Конфиг xray для хостов с `engine: xray`: без Hysteria2 и DNS-сервера.
+//! xray config for hosts with `engine: xray`: no Hysteria2 and no DNS server.
 use super::singbox::domain_parts;
 use super::*;
 use serde_json::{Value, json};
@@ -58,7 +58,7 @@ pub fn config(st: &State, host: &str) -> Result<String> {
         json!({ "tag": "api", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door", "settings": { "address": "127.0.0.1" } }),
     ];
     if let Some(i) = inb.get(&Proto::Reality).filter(|i| i.enabled) {
-        let keys = hs.reality.clone().context("нет ключей reality")?;
+        let keys = hs.reality.clone().context("no reality keys")?;
         let mut clients: Vec<Value> = accounts(Proto::Reality)
             .into_iter()
             .map(|(e, s)| json!({ "email": e, "id": s.uuid, "flow": "xtls-rprx-vision" }))
@@ -92,7 +92,7 @@ pub fn config(st: &State, host: &str) -> Result<String> {
         inbounds.push(json!({ "tag": "probe", "listen": "127.0.0.1", "port": PROBE_PORT, "protocol": "socks", "settings": { "udp": true }, "sniffing": { "enabled": true, "destOverride": ["http", "tls", "quic"] } }));
     }
 
-    // outbound'ы линков и балансеры
+    // link outbounds and balancers
     let mut outbounds = vec![
         json!({ "tag": "direct", "protocol": "freedom" }),
         json!({ "tag": "block", "protocol": "blackhole" }),
@@ -110,13 +110,13 @@ pub fn config(st: &State, host: &str) -> Result<String> {
             match p {
                 Proto::Awg => outbounds.push(json!({ "tag": tag, "protocol": "freedom", "streamSettings": { "sockopt": { "interface": format!("awg{i}") } } })),
                 Proto::Reality => {
-                    let r = ls.reality.clone().context("нет секретов reality линка")?;
+                    let r = ls.reality.clone().context("no reality secrets for the link")?;
                     let pk = st.secrets.hosts.get(&l.to).and_then(|h| h.reality.as_ref()).map(|k| k.public.clone()).unwrap_or_default();
                     let port = to_inb.get(p).map(|x| x.port).unwrap_or(443);
                     outbounds.push(json!({ "tag": tag, "protocol": "vless", "settings": { "vnext": [{ "address": to.ip.to_string(), "port": port, "users": [{ "id": r.uuid, "encryption": "none", "flow": "xtls-rprx-vision" }] }] },
                         "streamSettings": { "network": "tcp", "security": "reality", "realitySettings": { "serverName": to_inb.get(p).map(|x| reality_target(st, &l.to, x).0).unwrap_or_default(), "fingerprint": "chrome", "publicKey": pk, "shortId": r.keys.short_ids.first().cloned().unwrap_or_default() } } }));
                 }
-                _ => continue, // hy2 на xray недоступен
+                _ => continue, // hy2 is unavailable on xray
             }
             tags.push(tag);
         }

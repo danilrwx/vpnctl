@@ -105,7 +105,7 @@ fn guards_need_clean_main() {
     let e = apply::guards(&st, &apply::Opts::default())
         .unwrap_err()
         .to_string();
-    assert!(e.contains("грязное дерево"), "{e}");
+    assert!(e.contains("dirty worktree"), "{e}");
 }
 
 #[test]

@@ -1,4 +1,4 @@
-//! Подписки и ссылки пользователя: base64-список, sing-box JSON, Clash YAML, tg://proxy.
+//! User subscriptions and links: base64 list, sing-box JSON, Clash YAML, tg://proxy.
 use super::*;
 use base64::Engine as _;
 use serde_json::{Value, json};
@@ -16,7 +16,7 @@ pub struct Acc<'a> {
     pub sid: String,
 }
 
-/// Учётки пользователя в режиме на входе: только включённые inbound'ы движка.
+/// User accounts in a mode on the entry: only enabled engine inbounds.
 pub fn accounts<'a>(
     st: &'a State,
     entry: &str,
@@ -25,14 +25,14 @@ pub fn accounts<'a>(
     mode: Mode,
 ) -> Result<Vec<Acc<'a>>> {
     let h = st.host(entry)?;
-    let domain = h.domain.as_deref().context("у входа нет домена")?;
+    let domain = h.domain.as_deref().context("the entry has no domain")?;
     let inb = st.inbounds.get(entry).cloned().unwrap_or_default();
     let hs = st.secrets.hosts.get(entry).cloned().unwrap_or_default();
     let us = st
         .secrets
         .users
         .get(user)
-        .with_context(|| format!("нет секретов пользователя {user}"))?;
+        .with_context(|| format!("no secrets for user {user}"))?;
     let mut v = vec![];
     for p in [Proto::Reality, Proto::Ws, Proto::Hy2] {
         if !u.protocols.contains(&p) {
@@ -46,7 +46,7 @@ pub fn accounts<'a>(
             proto: p,
             email: State::email(user, mode, p),
             domain,
-            // ws идёт через веб-сервер на 443, остальные — на своём порту
+            // ws goes through the web server on 443, the others use their own port
             port: if p == Proto::Ws { 443 } else { i.port },
             sni: match p {
                 Proto::Reality => reality_target(st, entry, i).0,
@@ -121,18 +121,18 @@ pub fn clash_yaml(st: &State, entry: &str, user: &str, u: &User, mode: Mode) -> 
     Ok(serde_yaml::to_string(&cfg)?)
 }
 
-/// Публичная ссылка на подписку.
+/// Public subscription link.
 pub fn sub_url(st: &State, entry: &str, user: &str, mode: Mode) -> Result<String> {
     let domain = st
         .host(entry)?
         .domain
         .as_deref()
-        .context("у входа нет домена")?;
+        .context("the entry has no domain")?;
     let us = st
         .secrets
         .users
         .get(user)
-        .with_context(|| format!("нет секретов пользователя {user}"))?;
+        .with_context(|| format!("no secrets for user {user}"))?;
     Ok(format!("https://{domain}/s/{}/{}", us.sub_id, mode.name()))
 }
 
@@ -157,6 +157,6 @@ pub fn qr(text: &str) -> String {
             .render::<qrcode::render::unicode::Dense1x2>()
             .quiet_zone(true)
             .build(),
-        Err(_) => "(слишком длинно для QR)".into(),
+        Err(_) => "(too long for a QR code)".into(),
     }
 }

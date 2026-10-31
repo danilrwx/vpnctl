@@ -1240,7 +1240,7 @@ pub enum Kind {
 pub enum FieldKind {
     Text,
     Bool,
-    /// Список опций с отметками; `value` — выбранные через запятую, `cursor` — подсветка.
+    /// Options with check marks; `value` holds the selected ones comma-separated, `cursor` is the highlight.
     Multi {
         options: Vec<String>,
         cursor: usize,
@@ -1291,7 +1291,7 @@ impl Field {
         csv(&self.value).iter().any(|x| x == opt)
     }
 
-    /// Bool — переключить, Multi — снять/поставить отметку под курсором.
+    /// Bool toggles; Multi toggles the option under the cursor.
     pub fn toggle(&mut self) {
         match &mut self.kind {
             FieldKind::Text => {}
@@ -1356,7 +1356,7 @@ impl Form {
             f.value.push(c);
         }
     }
-    /// Пробел: в текстовом поле — символ, в остальных — переключение.
+    /// Space inserts a character in text fields and toggles everywhere else.
     pub fn space(&mut self) {
         let f = &mut self.fields[self.cur];
         if f.is_text() {
@@ -1405,7 +1405,7 @@ fn join<T: Copy>(v: &[T], f: impl Fn(T) -> &'static str) -> String {
 
 pub fn user_form(st: &State, edit: Option<&str>) -> Form {
     let u = edit.and_then(|n| st.users.get(n));
-    // в списке только то, что реально есть на входе: иначе форма предлагает выбрать несуществующий инбаунд
+    // only inbounds that really exist on the entry are listed, so the form cannot offer a missing one
     let mut protos: Vec<String> = vec![];
     for (n, h) in &st.hosts {
         if h.role != Role::Entry {
@@ -1413,7 +1413,7 @@ pub fn user_form(st: &State, edit: Option<&str>) -> Form {
         }
         if let Some(m) = st.inbounds.get(n) {
             for (p, i) in m {
-                // mtg — не пользовательский протокол: для Telegram есть отдельный переключатель
+                // mtg is not a user protocol: Telegram has its own toggle
                 if i.enabled && !matches!(p, Proto::Mtg) {
                     protos.push(p.name().to_string());
                 }
@@ -1450,7 +1450,7 @@ pub fn user_form(st: &State, edit: Option<&str>) -> Form {
         Field::text("note", u.and_then(|u| u.note.clone()).unwrap_or_default()),
     ];
     if u.is_none() {
-        // пир имеет смысл только если на входе вообще есть awg-инбаунд
+        // a peer only makes sense when the entry has an awg inbound at all
         let has_awg = st.hosts.iter().any(|(n, h)| {
             h.role == Role::Entry
                 && st
@@ -1751,8 +1751,8 @@ pub fn user_links(st: &State, name: &str) -> Result<Vec<(String, String)>> {
     Ok(v)
 }
 
-/// Готовое к пересылке сообщение: клиенты, подписка, резервная прямая ссылка, Telegram.
-/// Домены заменяются на IP вручную — у части операторов домен резолвится в заглушку.
+/// Ready-to-forward message: clients, subscription, fallback direct link, Telegram.
+/// Domains are replaced with IPs — some carriers resolve the domain to a sinkhole.
 pub fn share_message(st: &State, name: &str) -> Result<String> {
     use crate::render::subs;
     let u = st
@@ -1775,8 +1775,8 @@ pub fn share_message(st: &State, name: &str) -> Result<String> {
             "2) Добавь подписку (одна ссылка, по ней подтянутся профили):\n   {url}\n\n   Во всех клиентах это «+» → «Импорт из буфера обмена».\n   Karing: плюс на главном экране → «Импорт».\n\n"
         ));
     }
-    // прямые ссылки: нужны Podkop, роутерам и клиентам без поддержки подписок,
-    // а также когда домен у оператора резолвится в заглушку — адрес сервера здесь IP
+    // direct links: needed by Podkop, routers and clients without subscription support,
+    // and when the carrier resolves the domain to a sinkhole — the server address here is an IP
     if let Ok(links) = subs::links(st, &entry, name, u, mode)
         && !links.is_empty()
     {
@@ -1798,8 +1798,8 @@ pub fn share_message(st: &State, name: &str) -> Result<String> {
             out.push_str("\n\n");
         }
     }
-    // адрес выхода — только если он IPv4: клиент через туннель увидит именно IPv4,
-    // а у выхода в state может стоять IPv6 (он нужен для доступа по SSH)
+    // the exit address only when it is IPv4: through the tunnel the client sees IPv4,
+    // while the state may hold IPv6 for the exit (needed for SSH access)
     let exit_ip = st
         .links
         .iter()

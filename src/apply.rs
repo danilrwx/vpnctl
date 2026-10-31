@@ -1,5 +1,5 @@
-//! apply: guard'ы → копия через stdin → проверка конфигов → атомарная подмена → проба → маркер.
-//! Порядок хостов от листьев к джамп-хосту; откат и стоп серии при неудаче.
+//! apply: guards -> copy over stdin -> config check -> atomic swap -> probe -> marker.
+//! Hosts are ordered leaves first; rollback and series stop on failure.
 use crate::plan::{self, HostPlan, MARKER, Status};
 use crate::render::{self, Rendered};
 use crate::ssh::Ssh;
@@ -13,7 +13,7 @@ pub struct Opts {
     pub force: bool,
 }
 
-/// Хосты от листьев к джампу: чем длиннее цепочка via, тем раньше.
+/// Hosts from leaves to the jump: the longer the via chain, the earlier.
 pub fn order(st: &State, names: &[String]) -> Vec<String> {
     let mut v: Vec<(usize, String)> = names
         .iter()
@@ -30,17 +30,17 @@ pub fn order(st: &State, names: &[String]) -> Vec<String> {
 
 pub fn guards(st: &State, opts: &Opts) -> Result<()> {
     if !crate::git::is_clean(&st.dir)? {
-        bail!("грязное дерево: закоммитьте изменения перед apply");
+        bail!("dirty worktree: commit your changes before apply");
     }
     let branch = crate::git::branch(&st.dir)?;
     let want = opts.branch.as_deref().unwrap_or("main");
     if branch != want {
-        bail!("ветка {branch}, применяется только {want} (или --branch {branch} явно)");
+        bail!("branch {branch}, only {want} is applied (or pass --branch {branch} explicitly)");
     }
     Ok(())
 }
 
-/// Службы, которые надо перечитать после изменения пути.
+/// Services to reload after a path changes.
 pub fn service_for(path: &str) -> Option<String> {
     let p = path;
     if p.starts_with("/etc/sing-box/") {
@@ -80,7 +80,7 @@ fn check_cmd(engine: Engine, path: &str) -> Option<String> {
     let tmp = format!("/tmp/.vpnctl{path}");
     match path {
         p if p == render::engine_config_path(Engine::SingBox) && engine == Engine::SingBox => {
-            // rule-set'ы относительные: свои уже в tmp, скачанные .srs подкладываем с хоста
+            // rule sets are relative: ours are already in tmp, downloaded .srs come from the host
             Some(format!(
                 "mkdir -p /tmp/.vpnctl/etc/sing-box/rules && cp -n /etc/sing-box/rules/*.srs /tmp/.vpnctl/etc/sing-box/rules/ 2>/dev/null; sing-box check -D /tmp/.vpnctl/etc/sing-box -c {tmp}"
             ))
@@ -96,7 +96,7 @@ fn check_cmd(engine: Engine, path: &str) -> Option<String> {
     }
 }
 
-/// tar со всеми файлами хоста; пути относительные от корня.
+/// tar with all host files; paths are relative to the root.
 fn tarball(files: &render::HostFiles) -> Result<Vec<u8>> {
     let tmp = std::env::temp_dir().join(format!("vpnctl-tar-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
@@ -135,7 +135,7 @@ fn mode_for(path: &str) -> &'static str {
     }
 }
 
-/// Скрипт установки: бэкап, подмена, удаление лишнего, перезапуск затронутых служб.
+/// Install script: backup, swap, remove extras, restart affected services.
 pub fn install_script(hp: &HostPlan, backup: &str) -> String {
     let mut s = String::from("set -e\n");
     s.push_str(&format!("mkdir -p {backup}\n"));
@@ -160,7 +160,7 @@ pub fn install_script(hp: &HostPlan, backup: &str) -> String {
             }
         }
         let mut affected = service_for(path).into_iter().collect::<Vec<_>>();
-        // изменённый юнит перезапускает свою службу, а не только daemon-reload
+        // a changed unit restarts its service, not just daemon-reload
         if let Some(unit) = path
             .strip_prefix("/etc/systemd/system/")
             .and_then(|u| u.strip_suffix(".service"))
@@ -173,7 +173,7 @@ pub fn install_script(hp: &HostPlan, backup: &str) -> String {
             }
         }
     }
-    // systemd и сеть раньше служб, движок — последним
+    // systemd and network before services, engine last
     services.sort_by_key(|s| match s.as_str() {
         "systemd" => 0,
         "sysctl" => 1,
@@ -191,7 +191,7 @@ pub fn install_script(hp: &HostPlan, backup: &str) -> String {
     s
 }
 
-/// Откат: вернуть бэкап, удалить новые файлы, перечитать те же службы.
+/// Rollback: restore the backup, drop new files, reload the same services.
 pub fn rollback_script(hp: &HostPlan, backup: &str) -> String {
     let mut s = String::from("set +e\n");
     s.push_str(&format!(
@@ -220,7 +220,7 @@ pub fn probe_script(role: Role) -> String {
             render::PROBE_PORT,
             render::PROBE_URL
         ),
-        // на выходе движок не в пути пробы, поэтому отдельно требуем, что он жив
+        // on an exit the engine is not in the probe path, so require it to be alive
         Role::Exit => format!(
             "systemctl is-active --quiet sing-box 2>/dev/null || systemctl is-active --quiet xray 2>/dev/null || exit 1; curl -sS -o /dev/null -w '%{{http_code}}' --max-time 10 {}",
             render::PROBE_URL
@@ -228,7 +228,7 @@ pub fn probe_script(role: Role) -> String {
     }
 }
 
-/// Проверки на хосте до подмены: сертификат на месте, активный протокол линка жив.
+/// Pre-swap checks on the host: certificate present, active link protocol alive.
 fn preflight(
     st: &State,
     ssh: &Ssh,
@@ -241,8 +241,9 @@ fn preflight(
     if files.values().any(|b| b.contains(&cert)) {
         let ok = ssh.run(&format!("test -s '{cert}'"), &[])?.status.success();
         if !ok {
-            let msg =
-                format!("сертификата {cert} нет на хосте: сначала C (выпуск) или дождитесь ACME");
+            let msg = format!(
+                "certificate {cert} is missing on the host: issue it first or wait for ACME"
+            );
             if !force {
                 bail!("{msg}");
             }
@@ -262,8 +263,8 @@ fn preflight(
             Proto::Awg => format!(
                 "ip link show awg{i} >/dev/null 2>&1 || exit 0; h=$(awg show awg{i} latest-handshakes 2>/dev/null | awk '{{print $2}}' | head -1); [ -n \"$h\" ] && [ $(( $(date +%s) - h )) -lt 180 ]"
             ),
-            // hysteria2 — UDP: TCP-коннект к его порту не пройдёт никогда. Живость линка
-            // проверит проба цепочки после подмены конфигов.
+            // hysteria2 is UDP: a TCP connect to its port never succeeds. Liveness of the link
+            // is checked by the chain probe after the configs are swapped.
             Proto::Hy2 => "true".into(),
             _ => format!(
                 "timeout 5 bash -c 'exec 3<>/dev/tcp/{}/{port}' 2>/dev/null",
@@ -273,12 +274,12 @@ fn preflight(
         let ok = ssh.run(&check, &[])?.status.success();
         if !ok {
             let msg = format!(
-                "линк {}: активный протокол {} не отвечает",
+                "link {}: active protocol {} is not responding",
                 l.key(),
                 active.name()
             );
             if !force {
-                bail!("{msg} (--force чтобы применить всё равно)");
+                bail!("{msg} (use --force to apply anyway)");
             }
             notes.push(format!("{msg} · --force"));
         }
@@ -297,11 +298,11 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
         .filter(|n| opts.host.as_ref().is_none_or(|h| h == n))
         .collect();
     if names.is_empty() {
-        bail!("нечего применять: хост не найден");
+        bail!("nothing to apply: host not found");
     }
     let order = order(st, &names);
     println!(
-        "план для {} @ {head} · порядок: {}",
+        "plan for {} @ {head} · order: {}",
         crate::git::branch(&st.dir)?,
         order.join(" → ")
     );
@@ -311,17 +312,17 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
         let host = &st.hosts[name];
         println!("▸ {name}");
         if let Some(e) = &hp.unreachable {
-            bail!("{name}: {e} — серия остановлена");
+            bail!("{name}: {e} — series stopped");
         }
         if !hp.bootstrapped {
-            println!("  – пропущен: bootstrap не выполнен");
+            println!("  – skipped: bootstrap not done");
             continue;
         }
         let ssh = Ssh::for_host(st, name)?;
         let files = &rendered.hosts[name];
         if hp.changes() == 0 {
             ssh.sh(&format!("mkdir -p /etc/vpnctl && echo {head} > {MARKER}"))?;
-            println!("  – без изменений, маркер {head} обновлён");
+            println!("  – no changes, marker {head} updated");
             done += 1;
             continue;
         }
@@ -329,7 +330,7 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
             println!("  ! {n}");
         }
         println!(
-            "  ✓ рендер · {} файлов, изменений {}",
+            "  ✓ render · {} files, {} changes",
             files.len(),
             hp.changes()
         );
@@ -340,11 +341,11 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
         )?;
         if !out.status.success() {
             bail!(
-                "{name}: копирование не удалось: {}",
+                "{name}: copy failed: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             );
         }
-        println!("  ✓ копирование через stdin → /tmp/.vpnctl/");
+        println!("  ✓ copied over stdin → /tmp/.vpnctl/");
         for (path, s) in &hp.files {
             if *s == Status::Unchanged || *s == Status::Removed {
                 continue;
@@ -354,7 +355,7 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
                 if !out.status.success() {
                     ssh.run("rm -rf /tmp/.vpnctl", &[]).ok();
                     bail!(
-                        "{name}: проверка {path} не прошла:\n{}",
+                        "{name}: check of {path} failed:\n{}",
                         String::from_utf8_lossy(&out.stderr).trim()
                     );
                 }
@@ -368,40 +369,36 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
         let out = ssh.run(&install_script(hp, &backup), &[])?;
         if !out.status.success() {
             eprintln!("{}", String::from_utf8_lossy(&out.stderr).trim());
-            println!("  ✗ подмена не удалась, откат на бэкап");
+            println!("  ✗ swap failed, rolled back to the backup");
             ssh.run(&rollback_script(hp, &backup), &[]).ok();
-            bail!("{name}: подмена не удалась — серия остановлена");
+            bail!("{name}: swap failed — series stopped");
         }
-        println!("  ✓ атомарная подмена · службы перечитаны");
+        println!("  ✓ atomic swap · services reloaded");
         let code = ssh
             .run(&probe_script(host.role), &[])
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
         if code != "204" {
             println!(
-                "  ✗ проба: {} вместо 204 · откат",
-                if code.is_empty() {
-                    "нет ответа"
-                } else {
-                    &code
-                }
+                "  ✗ probe: {} instead of 204 · rollback",
+                if code.is_empty() { "no answer" } else { &code }
             );
             let out = ssh.run(&rollback_script(hp, &backup), &[])?;
             if !out.status.success() {
                 eprintln!("{}", String::from_utf8_lossy(&out.stderr).trim());
             }
-            bail!("{name}: проба цепочки не прошла, конфиг возвращён — серия остановлена");
+            bail!("{name}: chain probe failed, config restored — series stopped");
         }
         println!(
-            "  ✓ проба: 204 через {}",
+            "  ✓ probe: 204 via {}",
             if host.role == Role::Entry {
-                "цепочку"
+                "the chain"
             } else {
-                "выход"
+                "the exit"
             }
         );
         ssh.sh(&format!("mkdir -p /etc/vpnctl && echo {head} > {MARKER}"))?;
-        println!("  ✓ маркер {head} записан");
+        println!("  ✓ marker {head} written");
         done += 1;
     }
     if done > 0 && opts.host.is_none() {
@@ -412,9 +409,9 @@ pub fn apply(st: &State, opts: &Opts) -> Result<()> {
             .context("date")?;
         let tag = format!("applied/{ts}");
         crate::git::tag(&st.dir, &tag)?;
-        println!("готово {done} из {} · тег {tag}", order.len());
+        println!("done {done} of {} · tag {tag}", order.len());
     } else {
-        println!("готово {done} из {}", order.len());
+        println!("done {done} of {}", order.len());
     }
     Ok(())
 }

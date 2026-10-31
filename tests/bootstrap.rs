@@ -39,14 +39,14 @@ fn entry_script() {
         "systemctl enable -q awg-quick@awg0 awg-quick@awg1 caddy mtg.service sing-box.service"
     ));
     assert!(
-        s.contains("sha256 не закреплён"),
-        "без sha — предупреждение"
+        s.contains("sha256 is not pinned"),
+        "without sha there is a warning"
     );
     assert!(
         s.contains("\" > /etc/vpnctl/bootstrap"),
-        "маркер — HEAD репозитория или «-» вне git"
+        "marker is the repo HEAD or - outside git"
     );
-    assert!(s.contains("table inet filter"), "nftables из рендера");
+    assert!(s.contains("table inet filter"), "nftables from the render");
 }
 
 #[test]

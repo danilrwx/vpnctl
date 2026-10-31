@@ -1,4 +1,4 @@
-//! Статическая проверка состояния. Возвращает список ошибок; пустой — состояние валидно.
+//! Static state validation. Returns a list of errors; an empty list means the state is valid.
 use crate::state::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -22,18 +22,18 @@ pub fn validate(st: &State) -> Vec<String> {
     let mut e = Vec::new();
     let mut err = |s: String| e.push(s);
 
-    // --- хосты ---
+    // --- hosts ---
     let mut domains: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for (name, h) in &st.hosts {
         if !ident_ok(name) {
-            err(format!("хост «{name}»: имя — только [a-z0-9-_]"));
+            err(format!("host «{name}»: name must match [a-z0-9-_]"));
         }
         if let Some(v) = &h.via {
             if !st.hosts.contains_key(v) {
-                err(format!("хост «{name}»: via «{v}» не описан"));
+                err(format!("host «{name}»: via «{v}» is not described"));
             }
             if v == name {
-                err(format!("хост «{name}»: via указывает на самого себя"));
+                err(format!("host «{name}»: via points to the host itself"));
             }
         }
         if let Some(d) = &h.domain {
@@ -42,12 +42,12 @@ pub fn validate(st: &State) -> Vec<String> {
         let inb = st.inbounds.get(name).cloned().unwrap_or_default();
         if h.engine == Engine::Xray && inb.contains_key(&Proto::Hy2) {
             err(format!(
-                "хост «{name}»: engine xray не умеет hysteria2 — уберите inbound hy2 или переключите engine"
+                "host «{name}»: engine xray does not support hysteria2 — drop the hy2 inbound or switch the engine"
             ));
         }
         if h.engine == Engine::Xray && inb.contains_key(&Proto::Awg) && h.role == Role::Entry {
             err(format!(
-                "хост «{name}»: engine xray не умеет DNS-сервер для L3-клиентов — awg на входе требует sing-box"
+                "host «{name}»: engine xray cannot serve DNS for L3 clients — awg on the entry requires sing-box"
             ));
         }
         let mut tcp = BTreeMap::new();
@@ -60,7 +60,7 @@ pub fn validate(st: &State) -> Vec<String> {
             };
             if let Some(other) = table.insert(i.port, *p) {
                 err(format!(
-                    "хост «{name}»: порт {} занят и {} и {}",
+                    "host «{name}»: port {} is used by both {} and {}",
                     i.port,
                     other.name(),
                     p.name()
@@ -69,14 +69,14 @@ pub fn validate(st: &State) -> Vec<String> {
             if *p == Proto::Awg && h.role == Role::Entry {
                 match &i.subnets {
                     None => err(format!(
-                        "хост «{name}»: awg на входе требует subnets (split/full)"
+                        "host «{name}»: awg on the entry requires subnets (split/full)"
                     )),
                     Some(s)
                         if s.split.contains(&s.full.network())
                             || s.full.contains(&s.split.network()) =>
                     {
                         err(format!(
-                            "хост «{name}»: подсети awg split {} и full {} пересекаются",
+                            "host «{name}»: awg subnets split {} and full {} overlap",
                             s.split, s.full
                         ))
                     }
@@ -86,34 +86,34 @@ pub fn validate(st: &State) -> Vec<String> {
         }
         let hs = st.secrets.hosts.get(name);
         if inb.contains_key(&Proto::Reality) && hs.and_then(|s| s.reality.as_ref()).is_none() {
-            err(format!("хост «{name}»: нет ключей reality в секретах"));
+            err(format!("host «{name}»: no reality keys in secrets"));
         }
         if inb.contains_key(&Proto::Awg) && hs.and_then(|s| s.awg.as_ref()).is_none() {
-            err(format!("хост «{name}»: нет ключей awg в секретах"));
+            err(format!("host «{name}»: no awg keys in secrets"));
         }
         if inb.contains_key(&Proto::Mtg) && hs.and_then(|s| s.mtg_secret.as_ref()).is_none() {
-            err(format!("хост «{name}»: нет секрета mtg в секретах"));
+            err(format!("host «{name}»: no mtg secret in secrets"));
         }
         if h.role == Role::Entry && h.domain.is_none() {
-            err(format!("хост «{name}»: входу нужен домен"));
+            err(format!("host «{name}»: the entry requires a domain"));
         }
     }
     for (d, hs) in &domains {
         if hs.len() > 1 && !hs.iter().any(|h| st.hosts[*h].retiring) {
             err(format!(
-                "домен {d} у хостов {}: допустимо только на время переезда, пометьте старый retiring: true",
+                "domain {d} on hosts {}: allowed only during a migration, mark the old host retiring: true",
                 hs.join(", ")
             ));
         }
     }
-    // цикл в графе via
+    // cycle in the via graph
     for start in st.hosts.keys() {
         let mut seen = vec![start.as_str()];
         let mut cur = st.hosts[start].via.as_deref();
         while let Some(v) = cur {
             if seen.contains(&v) {
                 seen.push(v);
-                err(format!("цикл в графе via: {}", seen.join(" → ")));
+                err(format!("cycle in the via graph: {}", seen.join(" → ")));
                 break;
             }
             seen.push(v);
@@ -121,35 +121,32 @@ pub fn validate(st: &State) -> Vec<String> {
         }
     }
 
-    // --- линки ---
+    // --- links ---
     let mut keys = HashSet::new();
     for l in &st.links {
         let k = l.key();
         if !keys.insert(k.clone()) {
-            err(format!("линк {k} описан дважды"));
+            err(format!("link {k} is described twice"));
         }
         if l.from == l.to {
-            err(format!("линк {k}: from и to совпадают"));
+            err(format!("link {k}: from and to are the same"));
         }
         for side in [&l.from, &l.to] {
             if !st.hosts.contains_key(side) {
-                err(format!("линк {k}: хост «{side}» не описан"));
+                err(format!("link {k}: host «{side}» is not described"));
             }
         }
         if l.protocols.is_empty() {
-            err(format!("линк {k}: нет протоколов"));
+            err(format!("link {k}: no protocols"));
         }
         let to_inb = st.inbounds.get(&l.to).cloned().unwrap_or_default();
         for p in &l.protocols {
             if !p.is_link() {
-                err(format!(
-                    "линк {k}: {} не годится как транспорт линка",
-                    p.name()
-                ));
+                err(format!("link {k}: {} cannot carry a link", p.name()));
             }
             if !to_inb.get(p).is_some_and(|i| i.enabled) {
                 err(format!(
-                    "линк {k}: на приёмнике «{}» нет включённого inbound {}",
+                    "link {k}: receiver «{}» has no enabled inbound {}",
                     l.to,
                     p.name()
                 ));
@@ -158,27 +155,25 @@ pub fn validate(st: &State) -> Vec<String> {
         if let Some(a) = l.active {
             if !l.protocols.contains(&a) {
                 err(format!(
-                    "линк {k}: active {} нет среди протоколов",
+                    "link {k}: active {} is not among the protocols",
                     a.name()
                 ));
             }
         } else if l.policy == Policy::Fixed {
-            err(format!("линк {k}: policy fixed требует active"));
+            err(format!("link {k}: policy fixed requires active"));
         }
         if l.protocols.contains(&Proto::Awg) && l.tunnel.is_none() {
-            err(format!("линк {k}: awg требует tunnel (подсеть /30)"));
+            err(format!("link {k}: awg requires a tunnel (/30 subnet)"));
         }
         let ls = st.secrets.links.get(&k);
         if l.protocols.contains(&Proto::Awg) && ls.and_then(|s| s.awg.as_ref()).is_none() {
-            err(format!(
-                "линк {k}: нет ключей awg для обеих сторон в секретах"
-            ));
+            err(format!("link {k}: no awg keys for both sides in secrets"));
         }
         if l.protocols.contains(&Proto::Reality) && ls.and_then(|s| s.reality.as_ref()).is_none() {
-            err(format!("линк {k}: нет ключей reality в секретах"));
+            err(format!("link {k}: no reality keys in secrets"));
         }
         if l.protocols.contains(&Proto::Hy2) && ls.and_then(|s| s.hy2_password.as_ref()).is_none() {
-            err(format!("линк {k}: нет пароля hy2 в секретах"));
+            err(format!("link {k}: no hy2 password in secrets"));
         }
     }
     for (a, b) in st
@@ -191,47 +186,47 @@ pub fn validate(st: &State) -> Vec<String> {
             && (x.contains(&y.network()) || y.contains(&x.network()))
         {
             err(format!(
-                "линки {} и {}: подсети туннелей {x} и {y} пересекаются",
+                "links {} and {}: tunnel subnets {x} and {y} overlap",
                 a.key(),
                 b.key()
             ));
         }
     }
 
-    // --- пользователи ---
+    // --- users ---
     let mut peer_ips: BTreeMap<std::net::Ipv4Addr, &str> = BTreeMap::new();
     for (name, u) in &st.users {
         if !ident_ok(name) {
-            err(format!("пользователь «{name}»: имя — только [a-z0-9-_]"));
+            err(format!("user «{name}»: name must match [a-z0-9-_]"));
         }
         if u.modes.is_empty() {
-            err(format!("пользователь «{name}»: нет режимов"));
+            err(format!("user «{name}»: no modes"));
         }
         if u.protocols.is_empty() {
-            err(format!("пользователь «{name}»: нет протоколов"));
+            err(format!("user «{name}»: no protocols"));
         }
         if let Some(d) = &u.expires
             && !date_ok(d)
         {
-            err(format!(
-                "пользователь «{name}»: expires «{d}» не YYYY-MM-DD"
-            ));
+            err(format!("user «{name}»: expires «{d}» is not YYYY-MM-DD"));
         }
         let Some(entry) = st.entry_of(u) else {
             err(format!(
-                "пользователь «{name}»: не указан вход (entry), а входов не ровно один"
+                "user «{name}»: entry is not set and there is not exactly one entry"
             ));
             continue;
         };
         if !st.hosts.get(&entry).is_some_and(|h| h.role == Role::Entry) {
-            err(format!("пользователь «{name}»: entry «{entry}» не вход"));
+            err(format!(
+                "user «{name}»: entry «{entry}» is not an entry host"
+            ));
             continue;
         }
         let inb = st.inbounds.get(&entry).cloned().unwrap_or_default();
         for p in &u.protocols {
             if !inb.contains_key(p) {
                 err(format!(
-                    "пользователь «{name}»: на входе «{entry}» нет inbound {}",
+                    "user «{name}»: entry «{entry}» has no inbound {}",
                     p.name()
                 ));
             }
@@ -243,7 +238,7 @@ pub fn validate(st: &State) -> Vec<String> {
                     let net = s.for_mode(peer.mode);
                     if !net.contains(&peer.ip) {
                         err(format!(
-                            "пользователь «{name}»: адрес awg {} вне подсети режима {} ({net})",
+                            "user «{name}»: awg address {} is outside the {} mode subnet ({net})",
                             peer.ip,
                             peer.mode.name()
                         ));
@@ -252,19 +247,22 @@ pub fn validate(st: &State) -> Vec<String> {
                         || peer.ip == net.hosts().next().unwrap_or(net.network())
                     {
                         err(format!(
-                            "пользователь «{name}»: адрес awg {} зарезервирован за шлюзом",
+                            "user «{name}»: awg address {} is reserved for the gateway",
                             peer.ip
                         ));
                     }
                 }
                 if !u.modes.contains(&peer.mode) {
                     err(format!(
-                        "пользователь «{name}»: режим пира awg {} не входит в режимы пользователя",
+                        "user «{name}»: awg peer mode {} is not among the user's modes",
                         peer.mode.name()
                     ));
                 }
                 if let Some(other) = peer_ips.insert(peer.ip, name) {
-                    err(format!("адрес awg {} и у «{other}», и у «{name}»", peer.ip));
+                    err(format!(
+                        "awg address {} is used by both «{other}» and «{name}»",
+                        peer.ip
+                    ));
                 }
                 if st
                     .secrets
@@ -273,28 +271,28 @@ pub fn validate(st: &State) -> Vec<String> {
                     .and_then(|s| s.awg.as_ref())
                     .is_none()
                 {
-                    err(format!("пользователь «{name}»: нет ключей awg в секретах"));
+                    err(format!("user «{name}»: no awg keys in secrets"));
                 }
             }
             (None, true) => err(format!(
-                "пользователь «{name}»: протокол awg без описания пира (awg: {{mode, ip}})"
+                "user «{name}»: awg protocol without a peer description (awg: {{mode, ip}})"
             )),
             (Some(_), false) => err(format!(
-                "пользователь «{name}»: пир awg описан, но протокола awg нет"
+                "user «{name}»: an awg peer is described but the awg protocol is not set"
             )),
             (None, false) => {}
         }
         if !st.secrets.users.contains_key(name) {
             err(format!(
-                "пользователь «{name}»: нет секретов (uuid, hy2_password, sub_id)"
+                "user «{name}»: no secrets (uuid, hy2_password, sub_id)"
             ));
         }
     }
 
-    // --- маршрутизация и наборы ---
+    // --- routing and sets ---
     for (name, s) in &st.sets {
         if !ident_ok(name) {
-            err(format!("набор «{name}»: имя — только [a-z0-9-_]"));
+            err(format!("set «{name}»: name must match [a-z0-9-_]"));
         }
         for d in &s.domains {
             let body = d
@@ -308,25 +306,25 @@ pub fn validate(st: &State) -> Vec<String> {
                 })
                 .unwrap_or(d);
             if body.is_empty() || body.contains(char::is_whitespace) {
-                err(format!("набор «{name}»: домен «{d}» выглядит неверно"));
+                err(format!("set «{name}»: domain «{d}» does not look valid"));
             }
         }
     }
     for (host, r) in &st.routing {
         let Some(h) = st.hosts.get(host) else {
-            err(format!("routing/{host}.yaml: хост не описан"));
+            err(format!("routing/{host}.yaml: host is not described"));
             continue;
         };
         if let Some(p) = &r.exit.prefer
             && st.link(host, p).is_none()
         {
             err(format!(
-                "routing/{host}.yaml: exit.prefer «{p}», но линка {host}->{p} нет"
+                "routing/{host}.yaml: exit.prefer «{p}» but there is no link {host}->{p}"
             ));
         }
         if r.exit.policy == ExitPolicy::Fixed && r.exit.prefer.is_none() {
             err(format!(
-                "routing/{host}.yaml: exit.policy fixed требует prefer"
+                "routing/{host}.yaml: exit.policy fixed requires prefer"
             ));
         }
         let inbound_names: BTreeSet<&str> = st
@@ -341,30 +339,30 @@ pub fn validate(st: &State) -> Vec<String> {
         ] {
             if h.role != Role::Entry && !rules.is_empty() {
                 err(format!(
-                    "routing/{host}.yaml: правила маршрутизации только у входов"
+                    "routing/{host}.yaml: routing rules exist only on entries"
                 ));
             }
             for (i, rule) in rules.iter().enumerate() {
                 let at = format!("routing/{host}.yaml: {g} #{}", i + 1);
                 for s in &rule.match_.sets {
                     if !st.sets.contains_key(s) {
-                        err(format!("{at}: набор «{s}» не описан"));
+                        err(format!("{at}: set «{s}» is not described"));
                     }
                 }
                 for ib in &rule.match_.inbound {
                     if ib != "probe" && !inbound_names.contains(ib.as_str()) {
-                        err(format!("{at}: inbound «{ib}» не описан на хосте"));
+                        err(format!("{at}: inbound «{ib}» is not described on the host"));
                     }
                 }
                 if let Action::Link { link } = &rule.action
                     && link != "auto"
                     && st.link(host, link).is_none()
                 {
-                    err(format!("{at}: линка {host}->{link} нет"));
+                    err(format!("{at}: there is no link {host}->{link}"));
                 }
                 if rule.match_.is_empty() && i + 1 != rules.len() {
                     err(format!(
-                        "{at}: правило без условия ловит всё, правила ниже недостижимы"
+                        "{at}: a rule without conditions matches everything; rules below are unreachable"
                     ));
                 }
             }
@@ -373,23 +371,23 @@ pub fn validate(st: &State) -> Vec<String> {
     e
 }
 
-/// Предупреждения: состояние применимо, но что-то стоит доделать.
+/// Warnings: the state is applicable, but something deserves attention.
 pub fn warnings(st: &State) -> Vec<String> {
     let mut w = Vec::new();
     for (name, h) in &st.hosts {
         if h.role == Role::Entry && !h.retiring && st.links_from(name).next().is_none() {
             w.push(format!(
-                "хост «{name}»: у входа нет ни одного линка к выходу — весь трафик пойдёт напрямую"
+                "host «{name}»: the entry has no link to an exit — all traffic goes direct"
             ));
         }
         if h.host_key.is_none() {
             w.push(format!(
-                "хост «{name}»: host key ещё не записан (появится после bootstrap)"
+                "host «{name}»: host key is not recorded yet (appears after bootstrap)"
             ));
         }
     }
     if !st.secrets_encrypted && !st.secrets.users.is_empty() {
-        w.push("секреты лежат открытым текстом: нет .sops.yaml (init --age <получатель>)".into());
+        w.push("secrets are stored as plaintext: no .sops.yaml (init --age <recipient>)".into());
     }
     w
 }

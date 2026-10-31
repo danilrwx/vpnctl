@@ -1,5 +1,5 @@
-//! Метрики и пробы: pull по SSH в локальный SQLite, матрица топологии, сводка `status --json`.
-//! Парсеры и расчёт дельт — чистые функции; SSH только в `collect`, `probe`, `matrix`.
+//! Metrics and probes: pulled over SSH into a local SQLite, topology matrix, `status --json` summary.
+//! Parsers and delta math are pure functions; SSH only in `collect`, `probe` and `matrix`.
 use crate::plan;
 use crate::render::{self, PROBE_PORT, PROBE_URL};
 use crate::ssh::Ssh;
@@ -14,9 +14,9 @@ use std::time::{Duration, Instant};
 
 pub const DB_FILE: &str = "metrics.sqlite";
 pub const RETENTION_DAYS: i64 = 60;
-/// Рукопожатие awg старше — линк считается мёртвым (как в preflight apply).
+/// An older awg handshake means the link is considered dead (same as the apply preflight).
 pub const AWG_HANDSHAKE_MAX: i64 = 180;
-pub const LAPTOP: &str = "ноутбук";
+pub const LAPTOP: &str = "laptop";
 const DAY: i64 = 86_400;
 
 pub fn now() -> i64 {
@@ -26,8 +26,8 @@ pub fn now() -> i64 {
         .unwrap_or(0)
 }
 
-/// Адрес gRPC StatsService движка: xray `api`; sing-box — только в сборке с `with_v2ray_api`
-/// (в официальной её нет, тогда трафик по пользователям не собирается).
+/// Engine gRPC StatsService address: xray `api`; sing-box only in builds with `with_v2ray_api`
+/// (the official build lacks it, so per-user traffic is not collected).
 pub fn stats_addr(e: Engine) -> &'static str {
     match e {
         Engine::SingBox => "127.0.0.1:8080",
@@ -59,7 +59,7 @@ enum Field<'a> {
     Bytes(&'a [u8]),
 }
 
-/// Поля одного protobuf-сообщения: (номер, значение); fixed-поля пропускаются.
+/// Fields of one protobuf message: (number, value); fixed fields are skipped.
 fn fields(b: &[u8]) -> Option<Vec<(u64, Field<'_>)>> {
     let mut out = vec![];
     let mut i = 0;
@@ -80,8 +80,8 @@ fn fields(b: &[u8]) -> Option<Vec<(u64, Field<'_>)>> {
     Some(out)
 }
 
-/// Тело gRPC-ответа `QueryStats` (кадры: флаг, длина BE, `QueryStatsResponse{repeated Stat{name=1, value=2}}`)
-/// → имя счётчика → значение. Пустое тело или сжатый кадр — None.
+/// Body of a gRPC `QueryStats` response (frames: flag, BE length, `QueryStatsResponse{repeated Stat{name=1, value=2}}`)
+/// -> counter name -> value. An empty body or a compressed frame yields None.
 pub fn parse_stats(body: &[u8]) -> Option<BTreeMap<String, u64>> {
     if body.is_empty() {
         return None;
@@ -116,7 +116,7 @@ pub fn parse_stats(body: &[u8]) -> Option<BTreeMap<String, u64>> {
     Some(map)
 }
 
-/// Показания счётчиков: (вид, имя) → (вверх, вниз) в байтах.
+/// Counter readings: (kind, name) -> (up, down) in bytes.
 pub type Counters = BTreeMap<(String, String), (u64, u64)>;
 
 /// `user>>>brat-split-reality>>>traffic>>>uplink` → (("user", "brat-split-reality"), (up, down)).
@@ -139,7 +139,7 @@ pub fn fold_counters(stats: &BTreeMap<String, u64>) -> Counters {
     m
 }
 
-/// Дельта счётчика: после перезапуска движка счётчик начинается с нуля, тогда дельта — всё показание.
+/// Counter delta: after an engine restart the counter starts at zero, then the delta is the whole reading.
 pub fn delta(prev: Option<u64>, cur: u64) -> u64 {
     match prev {
         Some(p) if cur >= p => cur - p,
@@ -147,7 +147,7 @@ pub fn delta(prev: Option<u64>, cur: u64) -> u64 {
     }
 }
 
-// ---------- скрипт хоста ----------
+// ---------- host script ----------
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HostMetrics {
@@ -160,16 +160,16 @@ pub struct HostMetrics {
     pub uptime: Option<u64>,
     pub updates: Option<u64>,
     pub reboot: Option<bool>,
-    /// Истечение сертификата, epoch.
+    /// Certificate expiry, epoch.
     pub cert_expires: Option<i64>,
     pub probe_code: Option<u16>,
     pub probe_ms: Option<u64>,
-    /// Показания счётчиков движка; None — stats API не ответил.
+    /// Engine counter readings; None means the stats API did not answer.
     #[serde(skip)]
     pub counters: Option<Counters>,
 }
 
-/// Проба цепочки: код и время ответа `generate_204` (вход — через служебный socks).
+/// Chain probe: status code and response time of `generate_204` (entry via the service socks).
 pub fn probe_cmd(role: Role) -> String {
     let via = match role {
         Role::Entry => format!("--socks5-hostname 127.0.0.1:{PROBE_PORT} "),
@@ -180,7 +180,7 @@ pub fn probe_cmd(role: Role) -> String {
     )
 }
 
-/// gRPC `QueryStats` без паттерна через curl: тело — пустой кадр (5 нулевых байт), ответ в base64.
+/// gRPC `QueryStats` without a pattern via curl: the body is an empty frame (5 zero bytes), the reply is base64.
 pub fn stats_cmd(engine: Engine) -> String {
     format!(
         "printf '\\0\\0\\0\\0\\0' | curl -s --max-time 5 --http2-prior-knowledge -H 'content-type: application/grpc' -H 'te: trailers' --data-binary @- http://{}/v2ray.core.app.stats.command.StatsService/QueryStats | base64 -w0",
@@ -188,7 +188,7 @@ pub fn stats_cmd(engine: Engine) -> String {
     )
 }
 
-/// Один вызов на хост, вывод `ключ=значение` построчно; разбирает `parse_host`.
+/// One call per host, `key=value` lines parsed by `parse_host`.
 pub fn host_script(engine: Engine, role: Role, cert: &str) -> String {
     format!(
         r#"echo "load=$(cut -d' ' -f1 /proc/loadavg)"
@@ -245,9 +245,9 @@ pub fn parse_host(out: &str) -> HostMetrics {
     m
 }
 
-// ---------- база ----------
+// ---------- database ----------
 
-/// Снятие по хосту: достижимость и маркер из `plan`, машина из скрипта.
+/// One host sample: reachability and marker from `plan`, machine data from the script.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HostSample {
     pub ts: i64,
@@ -281,7 +281,7 @@ pub struct Traffic {
     pub down: u64,
 }
 
-/// Точка истории пробы: (ts, код ответа, мс).
+/// Probe history point: (ts, status code, ms).
 pub type ProbePoint = (i64, Option<u16>, Option<u64>);
 
 pub struct Db(Connection);
@@ -294,12 +294,12 @@ fn traffic(up: i64, down: i64) -> Traffic {
 }
 
 impl Db {
-    /// Открывает (создаёт) `metrics.sqlite` в каталоге состояния.
+    /// Opens (creates) `metrics.sqlite` in the state directory.
     pub fn open(dir: &Path) -> Result<Db> {
         let p = dir.join(DB_FILE);
-        let c = Connection::open(&p).with_context(|| format!("открытие {}", p.display()))?;
-        // ponytail: снятие хоста — JSON в одной колонке (поля меняются, запросы только по хосту и времени);
-        // трафик — колонками ради SUM по окнам.
+        let c = Connection::open(&p).with_context(|| format!("open {}", p.display()))?;
+        // the host sample is JSON in one column (fields change, queries go by host and time);
+        // traffic is stored in columns to allow SUM over windows.
         c.execute_batch(
             "CREATE TABLE IF NOT EXISTS samples(ts INTEGER NOT NULL, host TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
              CREATE INDEX IF NOT EXISTS samples_host ON samples(host, kind, ts);
@@ -314,7 +314,7 @@ impl Db {
         Ok(Db(c))
     }
 
-    /// `kind`: `collect` — полное снятие, `probe` — только проба цепочки.
+    /// `kind`: `collect` is a full sample, `probe` is the chain probe only.
     pub fn sample(&self, host: &str, kind: &str, s: &HostSample) -> Result<()> {
         self.0.execute(
             "INSERT INTO samples(ts, host, kind, data) VALUES(?1, ?2, ?3, ?4)",
@@ -323,7 +323,7 @@ impl Db {
         Ok(())
     }
 
-    /// Последнее снятие хоста: по виду, либо (kind None) последнее с результатом пробы.
+    /// Last host sample: by kind, or (kind None) the last one with a probe result.
     pub fn last_sample(&self, host: &str, kind: Option<&str>) -> Result<Option<HostSample>> {
         let cond = match kind {
             Some(_) => "kind = ?2",
@@ -342,7 +342,7 @@ impl Db {
         Ok(data.map(|d| serde_json::from_str(&d)).transpose()?)
     }
 
-    /// Дельты счётчиков относительно прошлого снятия того же хоста; итоги накапливаются в `totals`.
+    /// Counter deltas against the previous sample of the same host; totals accumulate in `totals`.
     pub fn traffic(&self, ts: i64, host: &str, counters: &Counters) -> Result<()> {
         for ((kind, name), (up_t, down_t)) in counters {
             let prev: Option<(u64, u64)> = self
@@ -376,7 +376,7 @@ impl Db {
         Ok(())
     }
 
-    /// Сумма дельт по имени с момента `since` по всем хостам.
+    /// Sum of deltas by name since `since` across all hosts.
     pub fn sum(&self, kind: &str, name: &str, since: i64) -> Result<Traffic> {
         Ok(self.0.query_row(
             "SELECT COALESCE(SUM(up), 0), COALESCE(SUM(down), 0) FROM traffic WHERE kind = ?1 AND name = ?2 AND ts >= ?3",
@@ -393,7 +393,7 @@ impl Db {
         )?)
     }
 
-    /// Трафик outbound'ов с момента `since`: хост → тег → трафик.
+    /// Outbound traffic since `since`: host -> tag -> traffic.
     pub fn outbounds(&self, since: i64) -> Result<BTreeMap<String, BTreeMap<String, Traffic>>> {
         let mut st = self.0.prepare(
             "SELECT host, name, SUM(up), SUM(down) FROM traffic WHERE kind = 'outbound' AND ts >= ?1 GROUP BY host, name",
@@ -431,7 +431,7 @@ impl Db {
         Ok(())
     }
 
-    /// Последний прогон матрицы: время и рёбра.
+    /// Last matrix run: time and edges.
     pub fn last_edges(&self) -> Result<(Option<i64>, Vec<Edge>)> {
         let ts: Option<i64> = self
             .0
@@ -455,7 +455,7 @@ impl Db {
         Ok((Some(ts), rows.collect::<Result<_, _>>()?))
     }
 
-    /// История пробы цепочки хоста с `since`: (ts, код, мс).
+    /// Chain probe history of a host since `since`: (ts, code, ms).
     pub fn probe_history(&self, host: &str, since: i64) -> Result<Vec<ProbePoint>> {
         let mut st = self.0.prepare(
             "SELECT ts, json_extract(data, '$.probe_code'), json_extract(data, '$.probe_ms') FROM samples WHERE host = ?1 AND ts >= ?2 ORDER BY ts",
@@ -470,7 +470,7 @@ impl Db {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// История ребра с `since`: (ts, ok, мс).
+    /// Edge history since `since`: (ts, ok, ms).
     pub fn edge_history(
         &self,
         src: &str,
@@ -491,7 +491,7 @@ impl Db {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Удаляет снятия старше ретеншна; `totals` не трогает.
+    /// Deletes samples older than the retention; `totals` is left alone.
     pub fn prune(&self, now: i64) -> Result<()> {
         let cut = now - RETENTION_DAYS * DAY;
         for t in ["samples", "traffic", "edges"] {
@@ -506,53 +506,53 @@ impl Db {
 
 pub fn summary(host: &str, s: &HostSample) -> String {
     if !s.reachable {
-        return format!("{host} · ✗ {}", s.error.as_deref().unwrap_or("нет ответа"));
+        return format!("{host} · ✗ {}", s.error.as_deref().unwrap_or("no answer"));
     }
     let m = &s.m;
     let mut p = vec![];
     if let Some(ms) = s.ssh_ms {
-        p.push(format!("ssh {ms} мс"));
+        p.push(format!("ssh {ms} ms"));
     }
     if let Some(l) = m.load1 {
         p.push(format!("load {l}"));
     }
     if let (Some(u), Some(t)) = (m.mem_used, m.mem_total) {
-        p.push(format!("память {}/{} МБ", u >> 20, t >> 20));
+        p.push(format!("memory {}/{} MB", u >> 20, t >> 20));
     }
     if let (Some(u), Some(t)) = (m.disk_used, m.disk_total) {
-        p.push(format!("диск {}/{} ГБ", u >> 30, t >> 30));
+        p.push(format!("disk {}/{} GB", u >> 30, t >> 30));
     }
     if let Some(c) = m.conns {
-        p.push(format!("{c} соед."));
+        p.push(format!("{c} conns"));
     }
     if let Some(u) = m.updates {
         p.push(format!(
-            "обновлений {u}{}",
+            "updates {u}{}",
             if m.reboot == Some(true) {
-                " · нужна перезагрузка"
+                " · reboot required"
             } else {
                 ""
             }
         ));
     }
     if let Some(e) = m.cert_expires {
-        p.push(format!("серт {} дн", (e - s.ts) / DAY));
+        p.push(format!("cert {} d", (e - s.ts) / DAY));
     }
     p.push(match (m.probe_code, m.probe_ms) {
-        (Some(c), Some(ms)) => format!("проба {c} за {ms} мс"),
-        _ => "проба: нет ответа".into(),
+        (Some(c), Some(ms)) => format!("probe {c} in {ms} ms"),
+        _ => "probe: no answer".into(),
     });
     p.push(match &m.counters {
-        Some(c) => format!("{} счётчиков", c.len()),
-        None => "stats недоступны".into(),
+        Some(c) => format!("{} counters", c.len()),
+        None => "stats unavailable".into(),
     });
     if s.drift == Some(true) {
-        p.push("дрейф".into());
+        p.push("drift".into());
     }
     format!("{host} · {}", p.join(" · "))
 }
 
-/// Снятие со всех хостов: `plan` (достижимость, маркер, дрейф) + скрипт хоста, запись дельт, ретеншн.
+/// Sample all hosts: `plan` (reachability, marker, drift) plus the host script, deltas, retention.
 pub fn collect(st: &State, db: &Db) -> Result<()> {
     let rendered = render::check(st)?;
     let plans = plan::plan(st, &rendered)?;
@@ -607,7 +607,7 @@ pub fn collect(st: &State, db: &Db) -> Result<()> {
     db.prune(ts)
 }
 
-/// Проба цепочки с каждого входа; результат — снятие вида `probe`.
+/// Chain probe from every entry; the result is a `probe` sample.
 pub fn probe(st: &State, db: &Db) -> Result<()> {
     let ts = now();
     for (name, h) in st.entries() {
@@ -629,8 +629,8 @@ pub fn probe(st: &State, db: &Db) -> Result<()> {
         println!(
             "{name} · {}",
             match (s.reachable, s.m.probe_code, s.m.probe_ms) {
-                (true, Some(c), Some(ms)) => format!("{c} за {ms} мс"),
-                (true, _, _) => "✗ нет ответа через цепочку".into(),
+                (true, Some(c), Some(ms)) => format!("{c} in {ms} ms"),
+                (true, _, _) => "✗ no answer through the chain".into(),
                 (false, _, _) => format!("✗ {}", s.error.as_deref().unwrap_or("")),
             }
         );
@@ -639,7 +639,7 @@ pub fn probe(st: &State, db: &Db) -> Result<()> {
     Ok(())
 }
 
-// ---------- матрица ----------
+// ---------- matrix ----------
 
 pub fn tcp_ms(addr: &str, timeout: Duration) -> Option<u64> {
     use std::net::{TcpStream, ToSocketAddrs};
@@ -649,7 +649,7 @@ pub fn tcp_ms(addr: &str, timeout: Duration) -> Option<u64> {
     Some(t.elapsed().as_millis() as u64)
 }
 
-/// Куда стучаться с ноутбука по каждому включённому inbound'у: адрес для TCP, None для UDP.
+/// Where the laptop connects for each enabled inbound: an address for TCP, None for UDP.
 pub fn laptop_targets(st: &State, host: &str) -> Vec<(Proto, Option<String>)> {
     let h = &st.hosts[host];
     st.inbounds
@@ -681,8 +681,8 @@ fn edge(src: &str, dst: &str, proto: &str, ms: Option<u64>, note: Option<&str>) 
     }
 }
 
-/// Скрипт на хосте: по каждому протоколу его исходящих линков — tcp-коннект (`bash`: в dash нет `/dev/tcp`)
-/// или рукопожатие awg и RTT до второго адреса туннеля. Строки `<to> <proto> ok <мс>|fail|hs <epoch> [<мс>]`.
+/// Script on the host: for each protocol of its outgoing links a TCP connect (`bash`: dash has no `/dev/tcp`)
+/// or an awg handshake plus RTT to the second tunnel address. Lines: `<to> <proto> ok <ms>|fail|hs <epoch> [<ms>]`.
 pub fn edge_script(st: &State, host: &str) -> String {
     let mut s = String::new();
     for (i, l) in render::out_links(st, host) {
@@ -707,8 +707,8 @@ pub fn edge_script(st: &State, host: &str) -> String {
                     ));
                 }
                 Proto::Hy2 => s.push_str(&format!(
-                    // hysteria2 — UDP: TCP-коннект к порту не пройдёт никогда. Проверяем сам линк:
-                    // проба через socks движка идёт по маршруту, то есть через этот выход.
+                    // hysteria2 is UDP: a TCP connect to the port never succeeds. The link itself is checked:
+                    // the probe via the engine socks follows the route, that is through this exit.
                     "s=$(date +%s%N); c=$(curl -s -o /dev/null -w '%{{http_code}}' --max-time 8 --socks5-hostname 127.0.0.1:{} {}); if [ \"$c\" = 204 ]; then echo \"{} {} ok $(( ($(date +%s%N)-s)/1000000 ))\"; else echo \"{} {} fail udp\"; fi\n",
                     render::PROBE_PORT,
                     render::PROBE_URL,
@@ -746,24 +746,24 @@ pub fn parse_edges(src: &str, out: &str, now: i64) -> Vec<Edge> {
                     if hs > 0 && age < AWG_HANDSHAKE_MAX {
                         edge(src, dst, proto, ms, None)
                     } else if hs == 0 {
-                        edge(src, dst, proto, ms, Some("нет рукопожатия"))
+                        edge(src, dst, proto, ms, Some("no handshake"))
                     } else {
                         edge(
                             src,
                             dst,
                             proto,
                             ms,
-                            Some(&format!("рукопожатие {} мин", age / 60)),
+                            Some(&format!("handshake {} min ago", age / 60)),
                         )
                     }
                 }
-                _ => edge(src, dst, proto, None, Some("таймаут")),
+                _ => edge(src, dst, proto, None, Some("timeout")),
             })
         })
         .collect()
 }
 
-/// Рёбра ноутбук→хост (tcp, ssh) и хост→выходы (скрипт на хосте), параллельно по хостам; пишет в базу.
+/// Laptop->host (tcp, ssh) and host->exit (script on the host) edges, parallel per host; writes to the DB.
 pub fn matrix(st: &State, db: &Db) -> Result<Vec<Edge>> {
     let ts = now();
     let per_host: Vec<Vec<Edge>> = std::thread::scope(|s| {
@@ -777,7 +777,7 @@ pub fn matrix(st: &State, db: &Db) -> Result<Vec<Edge>> {
                         v.push(match addr {
                             Some(a) => match tcp_ms(&a, Duration::from_secs(5)) {
                                 Some(ms) => edge(LAPTOP, name, p.name(), Some(ms), None),
-                                None => edge(LAPTOP, name, p.name(), None, Some("таймаут")),
+                                None => edge(LAPTOP, name, p.name(), None, Some("timeout")),
                             },
                             None => edge(LAPTOP, name, p.name(), None, Some("udp")),
                         });
@@ -796,7 +796,7 @@ pub fn matrix(st: &State, db: &Db) -> Result<Vec<Edge>> {
                             Some(ssh)
                         }
                         Err(_) => {
-                            v.push(edge(LAPTOP, name, "ssh", None, Some("нет ответа")));
+                            v.push(edge(LAPTOP, name, "ssh", None, Some("no answer")));
                             None
                         }
                     };
@@ -812,7 +812,7 @@ pub fn matrix(st: &State, db: &Db) -> Result<Vec<Edge>> {
                                             &l.to,
                                             p.name(),
                                             None,
-                                            Some("нет ответа"),
+                                            Some("no answer"),
                                         ));
                                     }
                                 }
@@ -832,14 +832,14 @@ pub fn matrix(st: &State, db: &Db) -> Result<Vec<Edge>> {
 
 pub fn cell(e: Option<&Edge>) -> String {
     match e {
-        None => "— не описан".into(),
-        Some(e) if e.ok => format!("● {} мс", e.ms.unwrap_or(0)),
+        None => "— not described".into(),
+        Some(e) if e.ok => format!("● {} ms", e.ms.unwrap_or(0)),
         Some(e) if e.note.as_deref() == Some("udp") => "— udp".into(),
-        Some(e) => format!("✗ {}", e.note.as_deref().unwrap_or("таймаут")),
+        Some(e) => format!("✗ {}", e.note.as_deref().unwrap_or("timeout")),
     }
 }
 
-/// Таблица «ребро × протокол» как в `screens/05-topology.html`.
+/// "edge x protocol" table as in `screens/05-topology.html`.
 pub fn table(edges: &[Edge]) -> String {
     let cols: Vec<&str> = Proto::ALL.iter().map(|p| p.name()).chain(["ssh"]).collect();
     let mut rows: Vec<(&str, &str)> = vec![];
@@ -848,7 +848,7 @@ pub fn table(edges: &[Edge]) -> String {
             rows.push((&e.src, &e.dst));
         }
     }
-    let mut s = format!("{:<24}", "ребро");
+    let mut s = format!("{:<24}", "edge");
     for c in &cols {
         s.push_str(&format!("{c:<20}"));
     }
@@ -872,10 +872,10 @@ pub fn table(edges: &[Edge]) -> String {
 pub struct HostOut {
     pub role: Role,
     pub domain: Option<String>,
-    /// Последнее полное снятие.
+    /// Last full sample.
     pub last: Option<HostSample>,
     pub cert_days: Option<i64>,
-    /// Последняя проба цепочки (collect или probe).
+    /// Last chain probe (collect or probe).
     pub probe: Option<ProbeOut>,
 }
 
@@ -899,13 +899,13 @@ pub struct Status {
     pub ts: i64,
     pub hosts: BTreeMap<String, HostOut>,
     pub users: BTreeMap<String, UserOut>,
-    /// Хост → тег outbound'а → трафик за сутки.
+    /// Host -> outbound tag -> traffic per day.
     pub outbounds: BTreeMap<String, BTreeMap<String, Traffic>>,
     pub matrix_ts: Option<i64>,
     pub matrix: Vec<Edge>,
 }
 
-/// Учётки пользователя в движке (awg — пир в ядре, в stats не попадает).
+/// User accounts in the engine (awg peers live in the kernel and never reach stats).
 pub fn accounts(name: &str, u: &User) -> Vec<String> {
     u.modes
         .iter()
@@ -925,7 +925,7 @@ fn add(a: Traffic, b: Traffic) -> Traffic {
     }
 }
 
-/// Сводка без обращения к хостам: состояние + база.
+/// Summary without touching the hosts: state plus database.
 pub fn status(st: &State, db: &Db, now: i64) -> Result<Status> {
     let mut hosts = BTreeMap::new();
     for (name, h) in &st.hosts {
@@ -979,19 +979,19 @@ fn gb(b: u64) -> String {
     format!("{:.1}", b as f64 / 1e9)
 }
 
-/// Человекочитаемая сводка для `status` без `--json`.
+/// Human-readable summary for `status` without `--json`.
 pub fn print_status(s: &Status) {
     for (name, h) in &s.hosts {
         match &h.last {
-            // срок сертификата уже в summary
+            // certificate expiry is already in the summary
             Some(l) => println!("{}", summary(name, l)),
-            None => println!("{name} · ещё не собирался"),
+            None => println!("{name} · not collected yet"),
         }
     }
     for (name, u) in &s.users {
         println!(
-            "{name}{} · сутки ↓{} ↑{} ГБ · неделя ↓{} ↑{} · всего ↓{} ↑{}",
-            if u.enabled { "" } else { " (выкл)" },
+            "{name}{} · day ↓{} ↑{} GB · week ↓{} ↑{} · total ↓{} ↑{}",
+            if u.enabled { "" } else { " (off)" },
             gb(u.day.down),
             gb(u.day.up),
             gb(u.week.down),

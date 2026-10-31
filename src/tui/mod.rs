@@ -289,8 +289,8 @@ impl App {
 
     fn vpnctl(&self, args: &[&str]) -> Result<Command> {
         let mut exe = std::env::current_exe().context("path to vpnctl")?;
-        // Linux: если бинарь пересобрали при запущенном TUI, /proc/self/exe отдаёт
-        // «…/vpnctl (deleted)», и запуск такого пути падает с ENOENT
+        // Linux: when the binary is rebuilt while the TUI runs, /proc/self/exe returns
+        // ".../vpnctl (deleted)" and spawning that path fails with ENOENT
         if let Some(s) = exe.to_str()
             && let Some(path) = s.strip_suffix(" (deleted)")
         {
@@ -588,9 +588,9 @@ impl App {
         });
     }
 
-    /// Системный буфер: wl-copy (Wayland), xclip (X11), pbcopy (macOS), clip.exe (WSL).
-    /// Процесс не ждём: xclip и wl-copy форкаются и дальше сами держат содержимое,
-    /// а короткая проверка ловит мгновенные падения (нет дисплея и т.п.).
+    /// System clipboard: wl-copy (Wayland), xclip (X11), pbcopy (macOS), clip.exe (WSL).
+    /// The process is not awaited: xclip and wl-copy fork and keep the content themselves,
+    /// while a short check catches immediate failures (no display and so on).
     fn clipboard_tool(s: &str) -> Option<&'static str> {
         use std::io::Write;
         let mut cands: Vec<(&'static str, &'static [&'static str])> = vec![];
@@ -627,7 +627,7 @@ impl App {
         None
     }
 
-    /// Системный буфер, иначе OSC 52 в терминал.
+    /// System clipboard, OSC 52 to the terminal otherwise.
     fn copy(&mut self, s: &str) {
         if let Some(bin) = Self::clipboard_tool(s) {
             self.msg = format!("copied via {bin}");

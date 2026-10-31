@@ -1,5 +1,5 @@
-//! Детерминированный рендер конфигов из состояния. Чистая функция: без времени и случайностей,
-//! ключи JSON сортированы, порядок — из BTreeMap и файлов состояния.
+//! Deterministic config rendering from the state. A pure function: no time, no randomness,
+//! JSON keys are sorted, ordering comes from BTreeMaps and state files.
 pub mod singbox;
 pub mod subs;
 pub mod xray;
@@ -11,7 +11,7 @@ use sha2::Digest;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// путь на хосте → содержимое
+/// path on the host -> contents
 pub type HostFiles = BTreeMap<String, String>;
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -50,11 +50,11 @@ pub const TEMPLATES: &[(&str, &str)] = &[
 ];
 
 pub const TPROXY_PORT: u16 = 7893;
-/// Caddy слушает здесь на 127.0.0.1: сайт-прикрытие, ws, подписки; Reality падает сюда.
+/// Caddy listens here on 127.0.0.1: cover site, ws, subscriptions; Reality falls back to it.
 pub const CADDY_PORT: u16 = 8443;
 
-/// SNI Reality и куда уходит не-Reality рукопожатие: свой сайт за Caddy (вход с доменом)
-/// или внешний сайт из `sni` inbound'а.
+/// Reality SNI and where a non-Reality handshake goes: our own site behind Caddy (entry with a domain)
+/// or an external site from the inbound `sni`.
 pub fn reality_target(st: &State, host: &str, i: &Inbound) -> (String, String, u16) {
     match (&i.sni, st.hosts.get(host).and_then(|h| h.domain.clone())) {
         (Some(s), _) => match i
@@ -74,7 +74,7 @@ pub const PROBE_PORT: u16 = 1080;
 pub const STATS_API: &str = "127.0.0.1:9090";
 pub const PROBE_URL: &str = "https://www.gstatic.com/generate_204";
 
-/// Шаблоны: из `templates/` каталога состояния, если лежат там, иначе встроенные.
+/// Templates: from the state's `templates/` when present, built-in otherwise.
 pub fn env(st: &State) -> Result<Environment<'static>> {
     let mut env = Environment::new();
     for (name, body) in TEMPLATES {
@@ -89,7 +89,7 @@ pub fn env(st: &State) -> Result<Environment<'static>> {
     Ok(env)
 }
 
-/// Копирует встроенные шаблоны в `templates/` (для `init`); существующие не трогает.
+/// Copies built-in templates into `templates/` (for `init`); existing files are left alone.
 pub fn install_templates(dir: &Path) -> Result<()> {
     let d = dir.join("templates");
     std::fs::create_dir_all(&d)?;
@@ -120,7 +120,7 @@ pub fn engine_config_path(e: Engine) -> String {
     format!("/etc/{}/config.json", engine_bin(e))
 }
 
-/// Исходящие линки хоста с номером интерфейса awg (awg0 — клиенты и входящие линки).
+/// Outgoing links of the host with the awg interface number (awg0 is clients and incoming links).
 pub fn out_links<'a>(st: &'a State, host: &str) -> Vec<(usize, &'a Link)> {
     st.links
         .iter()
@@ -155,7 +155,7 @@ pub fn cert_paths(st: &State, host: &str) -> (String, String) {
     }
 }
 
-/// Адрес шлюза в подсети клиентов (первый адрес).
+/// Gateway address inside the client subnet (the first address).
 pub fn gateway(net: ipnet::Ipv4Net) -> std::net::Ipv4Addr {
     net.hosts().next().unwrap_or(net.network())
 }
@@ -180,7 +180,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         Ok(s)
     };
 
-    // движок
+    // engine
     match host.engine {
         Engine::SingBox => {
             f.insert(
@@ -196,7 +196,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         }
     }
     let bin = engine_bin(host.engine);
-    // sing-box понимает -D (каталог ресурсов), xray — нет: ему нужен только -c
+    // sing-box understands -D (resource dir), xray does not: it only needs -c
     let exec = match host.engine {
         Engine::SingBox => {
             format!("/usr/local/bin/{bin} run -D /etc/{bin} -c /etc/{bin}/config.json")
@@ -211,9 +211,9 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         )?,
     );
 
-    // веб-сервер и подписки
+    // web server and subscriptions
     if host.role == Role::Entry {
-        let domain = host.domain.clone().context("у входа нет домена")?;
+        let domain = host.domain.clone().context("the entry has no domain")?;
         if let Some(ws) = inb.get(&Proto::Ws) {
             f.insert(
                 "/etc/caddy/Caddyfile".into(),
@@ -225,7 +225,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
                 .secrets
                 .users
                 .get(&uname)
-                .with_context(|| format!("нет секретов пользователя {uname}"))?;
+                .with_context(|| format!("no secrets for user {uname}"))?;
             for m in &u.modes {
                 let links = subs::links(st, name, &uname, &u, *m)?;
                 let base = format!("/var/www/sub/{}/{}", us.sub_id, m.name());
@@ -245,7 +245,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
                 let net = awg
                     .subnets
                     .as_ref()
-                    .context("awg без подсетей")?
+                    .context("awg without subnets")?
                     .for_mode(peer.mode);
                 f.insert(
                     format!("/etc/vpnctl/profiles/{uname}/awg.conf"),
@@ -262,7 +262,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         }
     }
 
-    // AWG: awg0 — клиенты (вход) и входящие линки; awgN — исходящие линки
+    // AWG: awg0 is clients (entry) and incoming links; awgN are outgoing links
     let mut awg_ifaces = vec![];
     let mut masquerade = vec![];
     let incoming: Vec<&Link> = in_links(st, name)
@@ -275,14 +275,16 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         None
     };
     if client_awg.is_some() || !incoming.is_empty() {
-        let awg_in = inb.get(&Proto::Awg).context("awg0 без inbound awg")?;
-        let keys = hs.awg.clone().context("нет ключей awg хоста")?;
+        let awg_in = inb
+            .get(&Proto::Awg)
+            .context("awg0 without an awg inbound")?;
+        let keys = hs.awg.clone().context("no awg keys for the host")?;
         let mut addresses = vec![];
         let mut peers = vec![];
         let mut post_up = vec![];
         let mut post_down = vec![];
         if let Some(a) = client_awg {
-            let s = a.subnets.as_ref().context("awg без подсетей")?;
+            let s = a.subnets.as_ref().context("awg without subnets")?;
             for net in [s.split, s.full] {
                 addresses.push(format!("{}/{}", gateway(net), net.prefix_len()));
             }
@@ -300,20 +302,20 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
             post_down.push("ip route del local 0.0.0.0/0 dev lo table 100".to_string());
         }
         for l in &incoming {
-            let t = l.tunnel.context("линк без tunnel")?;
+            let t = l.tunnel.context("link without a tunnel")?;
             let ls = st
                 .secrets
                 .links
                 .get(&l.key())
                 .and_then(|s| s.awg.as_ref())
-                .context("нет ключей awg линка")?;
+                .context("no awg keys for the link")?;
             addresses.push(tunnel_addr(t, 2));
             masquerade.push(t.to_string());
-            peers.push(context! { name => format!("линк из {}", l.from), public_key => ls.from.public.clone(), preshared => ls.preshared.clone(), allowed_ips => vec![tunnel_addr(t, 1).replace("/30", "/32")], endpoint => minijinja::Value::from(()) });
+            peers.push(context! { name => format!("link from {}", l.from), public_key => ls.from.public.clone(), preshared => ls.preshared.clone(), allowed_ips => vec![tunnel_addr(t, 1).replace("/30", "/32")], endpoint => minijinja::Value::from(()) });
         }
         f.insert(
             "/etc/amnezia/amneziawg/awg0.conf".into(),
-            r("awg.conf.j2", context! { host => name, iface => "awg0", purpose => "клиенты и входящие линки", addresses => addresses, private_key => keys.private, listen_port => awg_in.port, table_off => false, post_up => post_up, post_down => post_down, peers => peers })?,
+            r("awg.conf.j2", context! { host => name, iface => "awg0", purpose => "clients and incoming links", addresses => addresses, private_key => keys.private, listen_port => awg_in.port, table_off => false, post_up => post_up, post_down => post_down, peers => peers })?,
         );
         awg_ifaces.push("awg0".to_string());
     }
@@ -321,13 +323,13 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         if !l.protocols.contains(&Proto::Awg) {
             continue;
         }
-        let t = l.tunnel.context("линк без tunnel")?;
+        let t = l.tunnel.context("link without a tunnel")?;
         let ls = st
             .secrets
             .links
             .get(&l.key())
             .and_then(|s| s.awg.as_ref())
-            .context("нет ключей awg линка")?;
+            .context("no awg keys for the link")?;
         let to = st.host(&l.to)?;
         let port = st
             .inbounds
@@ -339,7 +341,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         let table = 100 + i;
         f.insert(
             format!("/etc/amnezia/amneziawg/{iface}.conf"),
-            r("awg.conf.j2", context! { host => name, iface => iface.clone(), purpose => format!("линк к {}", l.to), addresses => vec![tunnel_addr(t, 1)], private_key => ls.from.private.clone(), listen_port => minijinja::Value::from(()), table_off => true,
+            r("awg.conf.j2", context! { host => name, iface => iface.clone(), purpose => format!("link to {}", l.to), addresses => vec![tunnel_addr(t, 1)], private_key => ls.from.private.clone(), listen_port => minijinja::Value::from(()), table_off => true,
                 post_up => vec![format!("ip route add 0.0.0.0/0 dev %i table {table}"), format!("ip rule add oif %i lookup {table}")],
                 post_down => vec![format!("ip rule del oif %i lookup {table}")],
                 peers => vec![context! { name => l.to.clone(), public_key => ls.to.public.clone(), preshared => ls.preshared.clone(), allowed_ips => vec!["0.0.0.0/0".to_string()], endpoint => format!("{}:{port}", to.ip) }] })?,
@@ -347,7 +349,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         awg_ifaces.push(iface);
     }
 
-    // сеть
+    // network
     let mut tcp = vec![];
     let mut udp = vec![];
     for (p, i) in &inb {
@@ -368,7 +370,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
     udp.sort();
     udp.dedup();
     let tproxy = client_awg.map(|_| TPROXY_PORT);
-    // IPv6-форвардинг нужен только L3-клиентам (awg): с ним ядро само выключает accept_ra
+    // IPv6 forwarding is only needed for L3 clients (awg): the kernel then disables accept_ra itself
     let awg_used = !awg_ifaces.is_empty();
     f.insert("/etc/nftables.conf".into(), r("nftables.conf.j2", context! { host => name, tcp_ports => tcp, udp_ports => udp, awg_ifaces => awg_ifaces, tproxy_port => tproxy, masquerade => masquerade })?);
     f.insert(
@@ -376,7 +378,7 @@ pub fn render_host(st: &State, name: &str) -> Result<HostFiles> {
         r("sysctl.conf.j2", context! { host => name, awg => awg_used })?,
     );
 
-    // overrides/<host>/<путь>: файл берётся как есть (перенесённый с хоста дрейф)
+    // overrides/<host>/<path>: taken as is (drift adopted from the host)
     let ov = st.dir.join("overrides").join(name);
     if ov.is_dir() {
         for (rel, body) in walk(&ov)? {
@@ -410,14 +412,14 @@ pub fn render(st: &State, only: Option<&str>) -> Result<Rendered> {
         if only.is_none_or(|o| o == name) {
             r.hosts.insert(
                 name.clone(),
-                render_host(st, name).with_context(|| format!("рендер хоста {name}"))?,
+                render_host(st, name).with_context(|| format!("render host {name}"))?,
             );
         }
     }
     if let Some(o) = only
         && r.hosts.is_empty()
     {
-        bail!("хост «{o}» не описан");
+        bail!("host «{o}» is not described");
     }
     Ok(r)
 }
@@ -433,14 +435,14 @@ pub fn write(r: &Rendered, out: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Два прогона рендера должны совпасть побайтно.
+/// Two render runs must match byte for byte.
 pub fn check(st: &State) -> Result<Rendered> {
     let a = render(st, None)?;
     let b = render(st, None)?;
     for (host, fa) in &a.hosts {
         for (path, body) in fa {
             if b.hosts[host].get(path) != Some(body) {
-                bail!("рендер невоспроизводим: {host}:{path} отличается между прогонами");
+                bail!("render is not reproducible: {host}:{path} differs between runs");
             }
         }
     }

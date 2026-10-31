@@ -1,8 +1,8 @@
-//! Конфиг sing-box (схема 1.12) из состояния.
+//! sing-box config (schema 1.12) from the state.
 use super::*;
 use serde_json::{Value, json};
 
-/// Домены в синтаксисе xray → (suffix, full, keyword, regex)
+/// Domains in xray syntax -> (suffix, full, keyword, regex)
 pub fn domain_parts(domains: &[String]) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
     let (mut s, mut f, mut k, mut r) = (vec![], vec![], vec![], vec![]);
     for d in domains {
@@ -41,7 +41,7 @@ fn headless(domains: &[String], ips: &[ipnet::IpNet]) -> Value {
     Value::Object(o)
 }
 
-/// Локальные rule-set'ы для своих записей наборов: `/etc/sing-box/rules/<set>.json`.
+/// Local rule sets for our own set entries: `/etc/sing-box/rules/<set>.json`.
 pub fn rule_sets(st: &State, host: &str) -> Result<Vec<(String, String)>> {
     let mut out = vec![];
     for (name, s) in &st.sets {
@@ -71,7 +71,7 @@ fn used_sets(st: &State, host: &str) -> Vec<String> {
     v
 }
 
-/// Теги rule-set'ов для набора: свои записи + geosite + geoip.
+/// Rule set tags for a set: our entries + geosite + geoip.
 fn set_tags(st: &State, set: &str) -> Vec<String> {
     let Some(s) = st.sets.get(set) else {
         return vec![];
@@ -101,7 +101,7 @@ impl RuleSets {
     }
 }
 
-/// Условие правила → sing-box: одно условие или logical/or по видам условий.
+/// Rule condition -> sing-box: a single condition or logical/or per condition kind.
 fn condition(st: &State, m: &Match, rs: &mut RuleSets) -> Option<Value> {
     let mut parts = vec![];
     let mut tags: Vec<String> = m.sets.iter().flat_map(|s| set_tags(st, s)).collect();
@@ -156,7 +156,7 @@ fn action_of(a: &Action, exit_tag: &str) -> Value {
     }
 }
 
-/// Область видимости группы: учётки режима ИЛИ подсеть L3-пиров режима.
+/// Group scope: accounts of the mode OR the L3 peer subnet of the mode.
 fn scope(st: &State, host: &str, mode: Mode, users: &[(String, User)]) -> Option<Value> {
     let emails: Vec<String> = users
         .iter()
@@ -211,7 +211,10 @@ fn link_outbounds(st: &State, host: &str) -> Result<(Vec<Value>, String)> {
                     json!({ "type": "direct", "tag": tag, "bind_interface": format!("awg{i}") })
                 }
                 Proto::Reality => {
-                    let r = ls.reality.clone().context("нет секретов reality линка")?;
+                    let r = ls
+                        .reality
+                        .clone()
+                        .context("no reality secrets for the link")?;
                     let pk = st
                         .secrets
                         .hosts
@@ -237,7 +240,7 @@ fn link_outbounds(st: &State, host: &str) -> Result<(Vec<Value>, String)> {
             Policy::Fixed => {
                 json!({ "type": "selector", "tag": gtag, "outbounds": tags, "default": tags[0], "interrupt_exist_connections": true })
             }
-            // rr: у sing-box нет round-robin, ведём себя как auto
+            // rr: sing-box has no round-robin, behave like auto
             Policy::Auto | Policy::Rr => {
                 json!({ "type": "urltest", "tag": gtag, "outbounds": tags, "url": PROBE_URL, "interval": format!("{}s", l.urltest.interval_s), "tolerance": l.urltest.tolerance_ms })
             }
@@ -293,7 +296,7 @@ pub fn config(st: &State, host: &str) -> Result<String> {
     let incoming = in_links(st, host);
 
     if let Some(i) = inb.get(&Proto::Reality).filter(|i| i.enabled) {
-        let keys = hs.reality.clone().context("нет ключей reality")?;
+        let keys = hs.reality.clone().context("no reality keys")?;
         let mut us: Vec<Value> = user_accounts(Proto::Reality)
             .into_iter()
             .map(|(e, s)| json!({ "name": e, "uuid": s.uuid, "flow": "xtls-rprx-vision" }))
@@ -369,7 +372,7 @@ pub fn config(st: &State, host: &str) -> Result<String> {
             None => None,
             Some(m) => match scope(st, host, m, &users) {
                 Some(s) => Some(s),
-                None => continue, // в режиме никого — правила не нужны
+                None => continue, // nobody in this mode, no rules needed
             },
         };
         for r in group.iter().filter(|r| r.enabled) {
@@ -402,7 +405,7 @@ pub fn config(st: &State, host: &str) -> Result<String> {
             .map(|(s, p)| (s.to_string(), format!("/{p}")))
             .unwrap_or((server.to_string(), "/dns-query".into()));
         let mut remote = json!({ "type": proto, "tag": "dns-remote", "server": server });
-        // «direct» без настроек — пустой outbound: sing-box 1.12 отвергает detour на него
+        // An unconfigured "direct" is an empty outbound: sing-box 1.12 rejects a detour to it
         if exit_tag != "direct" {
             remote["detour"] = json!(exit_tag);
         }
@@ -419,8 +422,8 @@ pub fn config(st: &State, host: &str) -> Result<String> {
         }
         json!({ "servers": servers, "rules": drules, "final": "dns-remote", "strategy": "prefer_ipv4" })
     } else {
-        // Выходу не нужен публичный резолвер: у хостера UDP/53 наружу часто закрыт, а REALITY-серверу
-        // обязательно резолвить свой handshake-домен. Системный резолвер работает через DHCP-настройки.
+        // An exit does not need a public resolver: UDP/53 is often blocked by the provider, while REALITY
+        // must resolve its handshake domain. The system resolver works via DHCP settings.
         json!({ "servers": [{ "type": "local", "tag": "dns-direct-1" }], "final": "dns-direct-1" })
     };
 
@@ -430,7 +433,7 @@ pub fn config(st: &State, host: &str) -> Result<String> {
         "inbounds": inbounds,
         "outbounds": outbounds,
         "route": { "rules": rules, "rule_set": rs.0.values().collect::<Vec<_>>(), "final": "direct", "auto_detect_interface": true },
-        // v2ray_api нет в официальной сборке sing-box; clash_api — есть
+        // the official sing-box build has no v2ray_api; clash_api is available
         "experimental": { "clash_api": { "external_controller": STATS_API } }
     });
     Ok(serde_json::to_string_pretty(&cfg)? + "\n")

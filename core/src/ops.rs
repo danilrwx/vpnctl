@@ -1,5 +1,5 @@
-//! Операции над состоянием. Каждая мутирует `State` и возвращает сообщение коммита;
-//! запись, валидацию и коммит делает вызывающий (`main`).
+//! State operations. Each one mutates `State` and returns a commit message;
+//! writing, validation and committing are the caller's job (`main`).
 use crate::secrets;
 use crate::state::*;
 use anyhow::{Context, Result, bail};
@@ -11,10 +11,10 @@ use std::path::Path;
 pub const SOPS_RULES: &str =
     "creation_rules:\n  - path_regex: secrets\\.sops\\.yaml$\n    age: {age}\n";
 
-/// Пустое состояние + git-репозиторий. С `age` — `.sops.yaml`, иначе секреты открытым текстом.
+/// Empty state. With `age` a `.sops.yaml` is written, otherwise secrets stay plaintext.
 pub fn init(dir: &Path, age: Option<&str>) -> Result<String> {
     if dir.join("hosts.yaml").exists() {
-        bail!("{} уже содержит состояние", dir.display());
+        bail!("{} already contains a state", dir.display());
     }
     crate::render::install_templates(dir)?;
     if let Some(a) = age {
@@ -57,8 +57,8 @@ pub fn init(dir: &Path, age: Option<&str>) -> Result<String> {
     }
     st.save()?;
     std::fs::write(dir.join(".gitignore"), "/out\n/metrics.sqlite\n")?;
-    // git — забота вызывающего: ядро не запускает внешних процессов
-    Ok("init: пустое состояние vpnctl".to_string())
+    // git is the caller's job: the core never spawns processes
+    Ok("init: empty vpnctl state".to_string())
 }
 
 fn parse_ip(ssh: &str) -> Option<IpAddr> {
@@ -77,11 +77,11 @@ pub fn host_add(
     awg: bool,
 ) -> Result<String> {
     if st.hosts.contains_key(name) {
-        bail!("хост «{name}» уже есть");
+        bail!("host «{name}» already exists");
     }
     let ip = ip
         .or_else(|| parse_ip(ssh))
-        .context("не удалось понять IP из --ssh, укажите --ip")?;
+        .context("cannot infer the IP from --ssh, pass --ip")?;
     st.hosts.insert(
         name.into(),
         Host {
@@ -102,7 +102,7 @@ pub fn host_add(
         awg: awg.then(secrets::awg),
         mtg_secret: None,
     };
-    // вход: Reality прикрывается своим сайтом за Caddy (sni = домен); выход: внешним сайтом
+    // entry: reality is covered by our own site behind Caddy (sni = domain); exit: by an external site
     let sni = (role == Role::Exit || domain.is_none()).then(|| "www.microsoft.com".to_string());
     inb.insert(
         Proto::Reality,
@@ -188,7 +188,7 @@ pub fn host_add(
                     ..Default::default()
                 },
                 Action::Simple(Simple::Direct),
-                "российские сервисы напрямую",
+                "local services direct",
             ));
         }
         split.push(rule(
@@ -197,12 +197,12 @@ pub fn host_add(
                 ..Default::default()
             },
             Action::Simple(Simple::Direct),
-            "российские адреса напрямую",
+            "local addresses direct",
         ));
         split.push(rule(
             Match::default(),
             link_auto(),
-            "всё остальное через выход",
+            "everything else via the exit",
         ));
         let mut all = vec![rule(
             Match {
@@ -210,7 +210,7 @@ pub fn host_add(
                 ..Default::default()
             },
             link_auto(),
-            "проба цепочки и upstream mtg",
+            "chain probe and mtg upstream",
         )];
         if st.sets.contains_key("ads") {
             all.push(rule(
@@ -219,7 +219,7 @@ pub fn host_add(
                     ..Default::default()
                 },
                 Action::Simple(Simple::Block),
-                "реклама",
+                "ads",
             ));
         }
         st.routing.insert(
@@ -229,7 +229,11 @@ pub fn host_add(
                 groups: Groups {
                     all,
                     split,
-                    full: vec![rule(Match::default(), link_auto(), "всё через выход")],
+                    full: vec![rule(
+                        Match::default(),
+                        link_auto(),
+                        "everything via the exit",
+                    )],
                 },
                 dns: Dns::default(),
             },
@@ -241,18 +245,14 @@ pub fn host_add(
     st.secrets.hosts.insert(name.into(), hs);
     Ok(format!(
         "hosts: + {name} ({})",
-        if role == Role::Entry {
-            "вход"
-        } else {
-            "выход"
-        }
+        if role == Role::Entry { "entry" } else { "exit" }
     ))
 }
 
 pub fn host_rm(st: &mut State, name: &str) -> Result<String> {
     st.hosts
         .remove(name)
-        .with_context(|| format!("хост «{name}» не описан"))?;
+        .with_context(|| format!("host «{name}» is not described"))?;
     st.inbounds.remove(name);
     st.routing.remove(name);
     st.secrets.hosts.remove(name);
@@ -284,7 +284,7 @@ fn free_peer_ip(st: &State, net: Ipv4Net) -> Result<Ipv4Addr> {
     net.hosts()
         .skip(1)
         .find(|ip| !used.contains(ip))
-        .with_context(|| format!("в подсети {net} не осталось адресов"))
+        .with_context(|| format!("no addresses left in subnet {net}"))
 }
 
 #[derive(Default, Clone)]
@@ -312,7 +312,7 @@ pub fn user_add(
     entry: Option<String>,
 ) -> Result<String> {
     if st.users.contains_key(name) {
-        bail!("пользователь «{name}» уже есть");
+        bail!("user «{name}» already exists");
     }
     let mut u = User {
         modes,
@@ -326,7 +326,7 @@ pub fn user_add(
     };
     let entry = st
         .entry_of(&u)
-        .context("не указан вход (--entry), а входов не ровно один")?;
+        .context("entry (--entry) is not set and there is not exactly one entry")?;
     let mut us = UserSecrets {
         uuid: secrets::uuid(),
         hy2_password: secrets::password(),
@@ -340,7 +340,7 @@ pub fn user_add(
             .get(&entry)
             .and_then(|i| i.get(&Proto::Awg))
             .and_then(|i| i.subnets.as_ref())
-            .with_context(|| format!("на входе «{entry}» нет awg с подсетями"))?
+            .with_context(|| format!("entry «{entry}» has no awg with subnets"))?
             .for_mode(mode);
         u.awg = Some(AwgPeer {
             mode,
@@ -362,30 +362,30 @@ pub fn user_edit(st: &mut State, name: &str, p: UserPatch) -> Result<String> {
     let u = st
         .users
         .get_mut(name)
-        .with_context(|| format!("пользователь «{name}» не описан"))?;
+        .with_context(|| format!("user «{name}» is not described"))?;
     let mut what = vec![];
     if let Some(m) = p.modes {
         u.modes = m;
-        what.push("режимы");
+        what.push("modes");
     }
     if let Some(pr) = p.protocols {
         u.protocols = pr;
-        what.push("протоколы");
+        what.push("protocols");
     }
     if let Some(e) = p.expires {
         u.expires = e;
-        what.push("срок");
+        what.push("expiry");
     }
     if let Some(n) = p.note {
         u.note = Some(n);
-        what.push("заметка");
+        what.push("note");
     }
     if let Some(t) = p.tg {
         u.tg = t;
         what.push("tg");
     }
     if what.is_empty() {
-        bail!("нечего менять");
+        bail!("nothing to change");
     }
     Ok(format!("users: {name}: {}", what.join(", ")))
 }
@@ -394,22 +394,18 @@ pub fn user_enable(st: &mut State, name: &str, on: bool) -> Result<String> {
     let u = st
         .users
         .get_mut(name)
-        .with_context(|| format!("пользователь «{name}» не описан"))?;
+        .with_context(|| format!("user «{name}» is not described"))?;
     u.enabled = on;
     Ok(format!(
         "users: {name} {}",
-        if on {
-            "включён"
-        } else {
-            "отключён"
-        }
+        if on { "enabled" } else { "disabled" }
     ))
 }
 
 pub fn user_rm(st: &mut State, name: &str) -> Result<String> {
     st.users
         .remove(name)
-        .with_context(|| format!("пользователь «{name}» не описан"))?;
+        .with_context(|| format!("user «{name}» is not described"))?;
     st.secrets.users.remove(name);
     Ok(format!("users: - {name}"))
 }
@@ -418,7 +414,7 @@ fn free_tunnel(st: &State) -> Result<Ipv4Net> {
     (1..=250u8)
         .map(|n| Ipv4Net::new(Ipv4Addr::new(10, 9, n, 0), 30).unwrap())
         .find(|c| !st.links.iter().any(|l| l.tunnel == Some(*c)))
-        .context("кончились подсети туннелей 10.9.0.0/16")
+        .context("ran out of tunnel subnets in 10.9.0.0/16")
 }
 
 fn ensure_link_inbound(st: &mut State, host: &str, p: Proto) {
@@ -471,22 +467,18 @@ fn link_secret_for(ls: &mut LinkSecrets, p: Proto) {
     }
 }
 
-/// Включить/выключить inbound хоста.
+/// Enable or disable a host inbound.
 pub fn inbound_toggle(st: &mut State, host: &str, p: Proto) -> Result<String> {
     let i = st
         .inbounds
         .get_mut(host)
         .and_then(|m| m.get_mut(&p))
-        .with_context(|| format!("на хосте «{host}» нет inbound {}", p.name()))?;
+        .with_context(|| format!("host «{host}» has no inbound {}", p.name()))?;
     i.enabled = !i.enabled;
     Ok(format!(
         "protocols({host}): {} {}",
         p.name(),
-        if i.enabled {
-            "включён"
-        } else {
-            "выключен"
-        }
+        if i.enabled { "enabled" } else { "disabled" }
     ))
 }
 
@@ -499,7 +491,7 @@ pub fn link_add(
     active: Option<Proto>,
 ) -> Result<String> {
     if st.link(from, to).is_some() {
-        bail!("линк {from}->{to} уже есть");
+        bail!("link {from}->{to} already exists");
     }
     st.host(from)?;
     st.host(to)?;
@@ -557,7 +549,7 @@ pub fn link_set(
         .links
         .iter()
         .position(|l| l.from == from && l.to == to)
-        .with_context(|| format!("линка {from}->{to} нет"))?;
+        .with_context(|| format!("there is no link {from}->{to}"))?;
     let key = st.links[idx].key();
     let mut what = vec![];
     for p in &add {
@@ -585,7 +577,7 @@ pub fn link_set(
         what.push(format!("policy {}", serde_yaml::to_string(&p)?.trim()));
     }
     if what.is_empty() {
-        bail!("нечего менять");
+        bail!("nothing to change");
     }
     Ok(format!("links: {from}->{to}: {}", what.join(", ")))
 }
@@ -599,7 +591,7 @@ fn free_tunnel_from(links: &[Link], skip: usize) -> Result<Ipv4Net> {
                 .enumerate()
                 .any(|(i, l)| i != skip && l.tunnel == Some(*c))
         })
-        .context("кончились подсети туннелей")
+        .context("ran out of tunnel subnets")
 }
 
 pub fn exit_set(
@@ -620,9 +612,9 @@ pub fn exit_set(
         what.push(format!("policy {}", serde_yaml::to_string(&p)?.trim()));
     }
     if what.is_empty() {
-        bail!("нечего менять");
+        bail!("nothing to change");
     }
-    Ok(format!("routing({host}): выход: {}", what.join(", ")))
+    Ok(format!("routing({host}): exit: {}", what.join(", ")))
 }
 
 fn add_rm(v: &mut Vec<String>, add: &[String], rm: &[String]) {
@@ -649,7 +641,7 @@ pub fn set_edit(
     let n = domains.0.len() + geosite.0.len() + geoip.0.len();
     let m = domains.1.len() + geosite.1.len() + geoip.1.len();
     if n + m == 0 {
-        bail!("нечего менять");
+        bail!("nothing to change");
     }
     Ok(format!("sets: {name} +{n} -{m}"))
 }
@@ -657,7 +649,7 @@ pub fn set_edit(
 pub fn set_rm(st: &mut State, name: &str) -> Result<String> {
     st.sets
         .remove(name)
-        .with_context(|| format!("набора «{name}» нет"))?;
+        .with_context(|| format!("set «{name}» does not exist"))?;
     let _ = std::fs::remove_file(st.dir.join("sets").join(format!("{name}.yaml")));
     Ok(format!("sets: - {name}"))
 }
@@ -675,7 +667,7 @@ fn gname(g: Group) -> &'static str {
     }
 }
 
-/// `pos` — позиция 1..=n+1, по умолчанию перед последним правилом-«всё остальное», иначе в конец.
+/// `pos` is 1..=n+1; by default before the last catch-all rule, otherwise at the end.
 pub fn rule_add(
     st: &mut State,
     host: &str,
@@ -688,7 +680,7 @@ pub fn rule_add(
     let rs = rules(st, host, g)?;
     let pos = match pos {
         Some(p) if p >= 1 && p <= rs.len() + 1 => p - 1,
-        Some(p) => bail!("позиция {p} вне 1..={}", rs.len() + 1),
+        Some(p) => bail!("position {p} is outside 1..={}", rs.len() + 1),
         None if rs.last().is_some_and(|r| r.match_.is_empty()) => rs.len() - 1,
         None => rs.len(),
     };
@@ -705,7 +697,7 @@ pub fn rule_add(
         "routing({host}): {} #{}: {} → {}",
         gname(g),
         pos + 1,
-        note.unwrap_or_else(|| "правило".into()),
+        note.unwrap_or_else(|| "rule".into()),
         action
     ))
 }
@@ -713,7 +705,7 @@ pub fn rule_add(
 fn rule_at(rs: &mut [Rule], idx: usize) -> Result<&mut Rule> {
     let n = rs.len();
     rs.get_mut(idx.wrapping_sub(1))
-        .with_context(|| format!("правила #{idx} нет, всего {n}"))
+        .with_context(|| format!("there is no rule #{idx}, total {n}"))
 }
 
 pub fn rule_edit(
@@ -735,14 +727,14 @@ pub fn rule_edit(
     if let Some(n) = note {
         r.note = Some(n);
     }
-    Ok(format!("routing({host}): {} #{idx} изменено", gname(g)))
+    Ok(format!("routing({host}): {} #{idx} updated", gname(g)))
 }
 
 pub fn rule_rm(st: &mut State, host: &str, g: Group, idx: usize) -> Result<String> {
     let rs = rules(st, host, g)?;
     rule_at(rs, idx)?;
     rs.remove(idx - 1);
-    Ok(format!("routing({host}): {} #{idx} удалено", gname(g)))
+    Ok(format!("routing({host}): {} #{idx} removed", gname(g)))
 }
 
 pub fn rule_move(st: &mut State, host: &str, g: Group, idx: usize, to: usize) -> Result<String> {
@@ -760,10 +752,6 @@ pub fn rule_toggle(st: &mut State, host: &str, g: Group, idx: usize) -> Result<S
     Ok(format!(
         "routing({host}): {} #{idx} {}",
         gname(g),
-        if r.enabled {
-            "включено"
-        } else {
-            "выключено"
-        }
+        if r.enabled { "enabled" } else { "disabled" }
     ))
 }

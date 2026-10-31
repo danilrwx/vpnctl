@@ -1,4 +1,4 @@
-//! Генерация секретов. Вызывается один раз при создании сущности; рендер только читает.
+//! Secret generation. Called once when an entity is created; rendering only reads.
 use crate::state::{KeyPair, RealityKeys};
 use base64::Engine as _;
 use rand::RngCore;
@@ -19,7 +19,7 @@ fn x25519() -> ([u8; 32], [u8; 32]) {
     (s.to_bytes(), p.to_bytes())
 }
 
-/// Ключи Reality: base64url без паддинга, как у xray/sing-box.
+/// Reality keys: base64url without padding, as in xray/sing-box.
 pub fn reality() -> RealityKeys {
     let (s, p) = x25519();
     let e = base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -34,7 +34,7 @@ pub fn short_id() -> String {
     hex(&random(8))
 }
 
-/// Ключи WireGuard/AWG: обычный base64.
+/// WireGuard/AWG keys: plain base64.
 pub fn awg() -> KeyPair {
     let (s, p) = x25519();
     let e = base64::engine::general_purpose::STANDARD;
@@ -60,7 +60,7 @@ pub fn sub_id() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random(12))
 }
 
-/// Секрет mtg в режиме fake-TLS: `ee` + 16 байт + hex домена-прикрытия.
+/// mtg secret in fake-TLS mode: `ee` + 16 bytes + hex of the cover domain.
 pub fn mtg(domain: &str) -> String {
     format!("ee{}{}", hex(&random(16)), hex(domain.as_bytes()))
 }

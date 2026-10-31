@@ -1,12 +1,12 @@
 # vpnctl
 
-**Your own VPN infrastructure as state in git.** An entry node in Russia with smart routing, exit nodes abroad, users and subscriptions — all in YAML files, applied over SSH, with no web panel and no agents on hosts.
+**Your own VPN infrastructure as state in git.** An entry node with smart routing, exit nodes abroad, users and subscriptions — all in YAML files, applied over SSH, with no web panel and no agents on hosts.
 
 ![Rust 2024](https://img.shields.io/badge/Rust-2024-orange) ![TUI ratatui](https://img.shields.io/badge/TUI-ratatui-blue) ![Stages 1–6 done](https://img.shields.io/badge/stages-1–6%20done-brightgreen)
 
 ![Overview screen](docs/img/tui-1-overview.png)
 
-<sup>The Overview screen on a two-container Docker lab. The interface is in Russian.</sup>
+<sup>The Overview screen on a two-container Docker lab.</sup>
 
 ## Contents
 
@@ -161,7 +161,7 @@ Screen mockups live in [`screens/`](screens/): `npm i playwright && npx playwrig
 └── metrics.sqlite      metrics (gitignored, 60-day retention)
 ```
 
-User modes: **split** — Russian traffic direct, everything else via the exit; **full** — everything via the exit. For engine accounts the mode is a suffix in the email `<name>-<mode>-<protocol>`; for awg peers it is the subnet. Links always use the entry's domain, never its IP, so moving a node is invisible to users.
+User modes: **split** — local traffic direct, everything else via the exit; **full** — everything via the exit. For engine accounts the mode is a suffix in the email `<name>-<mode>-<protocol>`; for awg peers it is the subnet. Links always use the entry's domain, never its IP, so moving a node is invisible to users.
 
 ## Hosts: bootstrap and templates
 

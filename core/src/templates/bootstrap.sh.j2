@@ -1,24 +1,24 @@
 #!/bin/sh
-# vpnctl · bootstrap {{ host }} ({{ role }}) · идемпотентно: каждый шаг проверяет «уже сделано»
+# vpnctl · bootstrap {{ host }} ({{ role }}) · idempotent: every step checks for "already done"
 set -eu
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C
 ok()   { printf '  ✓ %s\n' "$1"; }
-skip() { printf '  = %s · уже сделано\n' "$1"; }
+skip() { printf '  = %s · already done\n' "$1"; }
 warn() { printf '  ! %s\n' "$1"; }
 die()  { printf '  ✗ %s\n' "$1"; exit 1; }
 mkdir -p /etc/vpnctl /var/lib/vpnctl/dl
 
-# --- пакеты и security-репозитории
+# --- packages and security repositories
 if ! grep -rqs 'security.debian.org' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
   . /etc/os-release
   echo "deb http://security.debian.org/debian-security ${VERSION_CODENAME}-security main" > /etc/apt/sources.list.d/security.list
-  ok "security-репозиторий добавлен"
+  ok "security repository added"
 fi
 apt-get update -qq
 apt-get install -y -qq curl ca-certificates unzip tar nftables unattended-upgrades openssl{% if awg %} dkms build-essential "linux-headers-$(uname -r)" git{% endif %} >/dev/null
-ok "пакеты: curl nftables unattended-upgrades{% if awg %} dkms linux-headers git{% endif %}"
+ok "packages: curl nftables unattended-upgrades{% if awg %} dkms linux-headers git{% endif %}"
 
-# --- автообновления и окно перезагрузки
+# --- unattended upgrades and reboot window
 cat > /etc/apt/apt.conf.d/51vpnctl <<'CONF'
 Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "04:30";
@@ -33,15 +33,15 @@ RandomizedDelaySec=15m
 CONF
 systemctl daemon-reload
 systemctl enable -q --now unattended-upgrades apt-daily-upgrade.timer
-ok "unattended-upgrades · перезагрузка 04:30 по дням {{ reboot_days }}"
+ok "unattended-upgrades · reboot at 04:30 on days {{ reboot_days }}"
 
-# --- загрузки по versions.yaml с проверкой sha256
-fetch() { # имя url sha файл
+# --- downloads pinned in versions.yaml with sha256 checks
+fetch() { # name url sha file
   if [ -n "$3" ]; then
     curl -fsSL --retry 3 -o "$4" "$2"
-    echo "$3  $4" | sha256sum -c --quiet || die "$1: sha256 не совпал с versions.yaml"
+    echo "$3  $4" | sha256sum -c --quiet || die "$1: sha256 does not match versions.yaml"
   else
-    warn "$1: sha256 не закреплён в versions.yaml, ставим без проверки"
+    warn "$1: sha256 is not pinned in versions.yaml, installing without a check"
     curl -fsSL --retry 3 -o "$4" "$2"
   fi
 }
@@ -53,12 +53,12 @@ if {{ d.check }}; then skip "{{ d.name }} {{ d.version }}"; else
 fi
 {% endfor %}
 {% if rule_sets %}
-# --- rule-set'ы движка · релиз {{ geodata }}
+# --- engine rule sets · release {{ geodata }}
 mkdir -p /etc/sing-box/rules
 {% for r in rule_sets %}if [ -s /etc/sing-box/rules/{{ r.tag }}.srs ]; then :; else curl -fsSL --retry 3 -o /etc/sing-box/rules/{{ r.tag }}.srs "{{ r.url }}"; fi
-{% endfor %}ok "rule-set'ы: {{ rule_sets | length }} файлов"
+{% endfor %}ok "rule sets: {{ rule_sets | length }} files"
 {% endif %}
-{% if awg %}# --- AmneziaWG через DKMS · v{{ awg_version }}
+{% if awg %}# --- AmneziaWG via DKMS · v{{ awg_version }}
 if awg --version 2>/dev/null | grep -q '{{ awg_version }}' && modinfo amneziawg >/dev/null 2>&1; then skip "amneziawg {{ awg_version }}"; else
   rm -rf /usr/src/amneziawg-src && git clone -q --depth 1 --branch "v{{ awg_version }}" https://github.com/amnezia-vpn/amneziawg-linux-kernel-module /usr/src/amneziawg-src
   if [ -f /usr/src/amneziawg-src/src/dkms.conf ]; then
@@ -70,11 +70,11 @@ if awg --version 2>/dev/null | grep -q '{{ awg_version }}' && modinfo amneziawg 
   fi
   rm -rf /usr/src/amneziawg-tools && git clone -q --depth 1 --branch "v{{ awg_version }}" https://github.com/amnezia-vpn/amneziawg-tools /usr/src/amneziawg-tools
   make -s -C /usr/src/amneziawg-tools/src && make -s -C /usr/src/amneziawg-tools/src install
-  ok "amneziawg {{ awg_version }} · модуль собран под $(uname -r)"
+  ok "amneziawg {{ awg_version }} · module built for $(uname -r)"
 fi
 mkdir -p /etc/amnezia/amneziawg && chmod 700 /etc/amnezia/amneziawg
 {% endif %}{% if role == "entry" %}
-# --- веб-сервер: пользователь, сайт-прикрытие, юнит
+# --- web server: user, cover site, unit
 id caddy >/dev/null 2>&1 || useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy
 mkdir -p /var/lib/caddy /var/www/site /var/www/sub /etc/caddy && chown -R caddy:caddy /var/lib/caddy /var/www
 [ -s /var/www/site/index.html ] || printf '<!doctype html><title>{{ domain }}</title><h1>{{ domain }}</h1>\n' > /var/www/site/index.html
@@ -96,37 +96,37 @@ Restart=on-failure
 WantedBy=multi-user.target
 UNIT
 mkdir -p /etc/mtg /var/www/sub
-ok "caddy: пользователь, /var/www/site, юнит"
+ok "caddy: user, /var/www/site, unit"
 {% else %}
-# --- самоподписанный сертификат для Hysteria2 на выходе
-if [ -s /etc/vpnctl/self.crt ]; then skip "самоподписанный сертификат"; else
+# --- self-signed certificate for Hysteria2 on the exit
+if [ -s /etc/vpnctl/self.crt ]; then skip "self-signed certificate"; else
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 -subj "/CN={{ host }}" -keyout /etc/vpnctl/self.key -out /etc/vpnctl/self.crt >/dev/null 2>&1
   chmod 600 /etc/vpnctl/self.key
-  ok "самоподписанный сертификат /etc/vpnctl/self.crt"
+  ok "self-signed certificate /etc/vpnctl/self.crt"
 fi
 {% endif %}
-# --- сеть и ядро: конфиги из рендера, если их ещё нет (apply перезапишет)
+# --- network and kernel: rendered configs if missing (apply overwrites them)
 mkdir -p /etc/sysctl.d /etc/systemd/system
 [ -s /etc/nftables.conf ] && grep -q vpnctl /etc/nftables.conf || cat > /etc/nftables.conf <<'NFT'
 {{ nftables }}NFT
 [ -s /etc/sysctl.d/90-vpnctl.conf ] || cat > /etc/sysctl.d/90-vpnctl.conf <<'SYS'
 {{ sysctl }}SYS
 sysctl --system >/dev/null
-# IPv6: при включённом forwarding ядро само выключает accept_ra и перестаёт продлевать адрес от провайдера
+# IPv6: with forwarding enabled the kernel disables accept_ra and stops renewing the provider address
 for f in /proc/sys/net/ipv6/conf/*/accept_ra; do
   if [ -w "$f" ]; then echo 2 > "$f" 2>/dev/null || true; fi
 done
 systemctl enable -q --now nftables
 nft -f /etc/nftables.conf
-ok "nftables и sysctl"
+ok "nftables and sysctl"
 
-# --- юниты: включены, не запущены до apply
+# --- units: enabled but not started until apply
 {% for u in units %}cat > /etc/systemd/system/{{ u.name }} <<'UNIT'
 {{ u.body }}UNIT
 {% endfor %}systemctl daemon-reload
 systemctl enable -q {{ enable | join(" ") }}
-ok "юниты включены, не запущены: {{ enable | join(" ") }}"
+ok "units enabled, not started: {{ enable | join(" ") }}"
 
 echo "{{ commit }}" > /etc/vpnctl/bootstrap
-ok "маркер /etc/vpnctl/bootstrap = {{ commit }}"
-echo "→ apply {{ host }}: конфиги, запуск служб, проба"
+ok "marker /etc/vpnctl/bootstrap = {{ commit }}"
+echo "→ apply {{ host }}: configs, service start, probe"

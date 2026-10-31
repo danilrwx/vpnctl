@@ -1,4 +1,4 @@
-//! Системный `ssh`: `-J` по графу `via`, ControlMaster, host key из состояния.
+//! System `ssh`: `-J` along the `via` graph, ControlMaster, host keys from the state.
 use crate::state::State;
 use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
@@ -12,13 +12,13 @@ pub struct Ssh {
 }
 
 impl Ssh {
-    /// Цепочка джампов: via хоста, via его джампа и т.д., ближний к нам первый.
+    /// Jump chain: the host's via, its via and so on, nearest first.
     pub fn jump_chain(st: &State, host: &str) -> Result<Vec<String>> {
         let mut chain = vec![];
         let mut cur = st.host(host)?.via.clone();
         while let Some(v) = cur {
             if chain.contains(&v) || v == host {
-                bail!("цикл в графе via у хоста {host}");
+                bail!("cycle in the via graph at host {host}");
             }
             cur = st.host(&v)?.via.clone();
             chain.push(v);
@@ -33,7 +33,7 @@ impl Ssh {
             .iter()
             .map(|j| st.hosts[j].ssh.clone())
             .collect();
-        // known_hosts из состояния: все хосты с записанным ключом
+        // known_hosts from the state: every host with a recorded key
         let dir = std::env::temp_dir().join(format!("vpnctl-{}", std::process::id()));
         std::fs::create_dir_all(&dir)?;
         let known: String = st
@@ -88,20 +88,20 @@ impl Ssh {
         c
     }
 
-    /// Готовая команда `ssh … <cmd>` для запуска снаружи (TUI: журнал, обновление ОС).
+    /// Ready `ssh ... <cmd>` command for outside callers (TUI: journal, OS update).
     pub fn command(&self, cmd: &str) -> Command {
         let mut c = self.cmd();
         c.arg(cmd);
         c
     }
 
-    /// Одна строка для удалённого шелла: ssh склеивает аргументы пробелами, поэтому скрипт
-    /// надо завернуть в одинарные кавычки самим.
+    /// One line for the remote shell: ssh joins arguments with spaces, so the script
+    /// has to be wrapped in single quotes by the caller.
     pub fn quote(script: &str) -> String {
         format!("sh -c '{}'", script.replace('\'', "'\\''"))
     }
 
-    /// Выполняет скрипт через `sh -c` на хосте, stdin — данные для скрипта (или пусто).
+    /// Runs the script via `sh -c` on the host, stdin carries the script input (or nothing).
     pub fn run(&self, script: &str, stdin: &[u8]) -> Result<Output> {
         use std::io::Write;
         let mut child = self
@@ -111,12 +111,12 @@ impl Ssh {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("запуск ssh")?;
+            .context("run ssh")?;
         child.stdin.take().unwrap().write_all(stdin).ok();
         Ok(child.wait_with_output()?)
     }
 
-    /// Выполняет команду, stdout/stderr идут оператору как есть; stdin — данные.
+    /// Runs the command with stdout/stderr passed through; stdin carries the data.
     pub fn stream(&self, cmd: &str, stdin: &[u8]) -> Result<std::process::ExitStatus> {
         use std::io::Write;
         let mut child = self
@@ -126,12 +126,12 @@ impl Ssh {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .spawn()
-            .context("запуск ssh")?;
+            .context("run ssh")?;
         child.stdin.take().unwrap().write_all(stdin).ok();
         Ok(child.wait()?)
     }
 
-    /// Как `run`, но ошибка при ненулевом статусе.
+    /// Like `run`, but a non-zero status is an error.
     pub fn sh(&self, script: &str) -> Result<String> {
         let out = self.run(script, &[])?;
         if !out.status.success() {
@@ -150,13 +150,13 @@ impl Ssh {
             Ok(o) => Err(String::from_utf8_lossy(&o.stderr)
                 .lines()
                 .last()
-                .unwrap_or("нет ответа")
+                .unwrap_or("no answer")
                 .to_string()),
             Err(e) => Err(e.to_string()),
         }
     }
 
-    /// Публичный ключ хоста как в known_hosts (без имени хоста).
+    /// Host public key as stored in known_hosts (without the host name).
     pub fn scan_key(ip: &str) -> Result<String> {
         let out = Command::new("ssh-keyscan")
             .args(["-t", "ed25519", "-T", "5", ip])
@@ -166,11 +166,11 @@ impl Ssh {
             .lines()
             .find(|l| !l.starts_with('#'))
             .and_then(|l| l.split_once(' ').map(|(_, k)| k.to_string()))
-            .context("ssh-keyscan ничего не вернул")
+            .context("ssh-keyscan returned nothing")
     }
 
-    /// Публичный ключ хоста, снятый через его джамп: хост может быть виден только оттуда
-    /// (типичный случай — нода, доступная лишь по IPv6 из сети джампа).
+    /// Host public key taken through its jump host: the host may be reachable only from there
+    /// (the usual case is a node reachable only over IPv6 from the jump network).
     pub fn scan_key_in_state(st: &State, host: &str) -> Result<String> {
         let h = st.host(host)?;
         let ip = h.ip.to_string();
@@ -186,6 +186,6 @@ impl Ssh {
             .lines()
             .find(|l| !l.starts_with('#') && !l.trim().is_empty())
             .and_then(|l| l.split_once(' ').map(|(_, k)| k.to_string()))
-            .with_context(|| format!("ssh-keyscan {ip} через джамп {jump_name} ничего не вернул"))
+            .with_context(|| format!("ssh-keyscan {ip} via jump {jump_name} returned nothing"))
     }
 }

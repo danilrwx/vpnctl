@@ -1,4 +1,4 @@
-//! Модель состояния: YAML-файлы каталога состояния + расшифрованные секреты.
+//! State model: YAML files in the state directory plus decrypted secrets.
 use anyhow::{Context, Result, bail};
 use ipnet::Ipv4Net;
 use serde::{Deserialize, Serialize};
@@ -61,11 +61,11 @@ impl Proto {
             Proto::Mtg => "mtg",
         }
     }
-    /// Протокол — учётка в движке (есть email), а не L3-пир и не отдельная служба.
+    /// Protocol that maps to an engine account (has an email), not an L3 peer or a separate service.
     pub fn is_engine_user(self) -> bool {
         matches!(self, Proto::Reality | Proto::Ws | Proto::Hy2)
     }
-    /// Протокол годится как транспорт линка между нодами.
+    /// Protocol that can carry a link between nodes.
     pub fn is_link(self) -> bool {
         matches!(self, Proto::Reality | Proto::Hy2 | Proto::Awg)
     }
@@ -77,7 +77,7 @@ impl std::str::FromStr for Proto {
         Proto::ALL
             .into_iter()
             .find(|p| p.name() == s)
-            .with_context(|| format!("неизвестный протокол «{s}»"))
+            .with_context(|| format!("unknown protocol «{s}»"))
     }
 }
 
@@ -104,7 +104,7 @@ impl std::str::FromStr for Mode {
         match s {
             "split" => Ok(Mode::Split),
             "full" => Ok(Mode::Full),
-            _ => bail!("неизвестный режим «{s}», ожидается split или full"),
+            _ => bail!("unknown mode «{s}», expected split or full"),
         }
     }
 }
@@ -119,7 +119,7 @@ pub struct Host {
     pub domain: Option<String>,
     #[serde(default)]
     pub os: String,
-    /// `user@host` для ssh; обычно root@ip.
+    /// `user@host` for ssh; usually root@ip.
     pub ssh: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub via: Option<String>,
@@ -175,10 +175,10 @@ pub struct Link {
     pub protocols: Vec<Proto>,
     #[serde(default)]
     pub policy: Policy,
-    /// Для fixed — рабочий протокол, для auto — предпочтительный.
+    /// Working protocol for fixed, preferred one for auto.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active: Option<Proto>,
-    /// Подсеть туннеля AWG между нодами (/30: .1 — from, .2 — to).
+    /// AWG tunnel subnet between nodes (/30: .1 is from, .2 is to).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tunnel: Option<Ipv4Net>,
     #[serde(default)]
@@ -211,15 +211,15 @@ pub struct Inbound {
     pub port: u16,
     #[serde(default = "t", skip_serializing_if = "is_true")]
     pub enabled: bool,
-    /// Reality: SNI сайта-прикрытия; ws: путь.
+    /// Reality: cover site SNI; ws: path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sni: Option<String>,
-    /// Reality: куда идёт рукопожатие, `host:port`; по умолчанию `sni:443` (или Caddy на входе).
+    /// Reality: where the handshake goes, `host:port`; defaults to `sni:443` (or Caddy on the entry).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handshake: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
-    /// AWG на входе: подсети клиентов по режимам.
+    /// AWG on the entry: client subnets per mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subnets: Option<AwgSubnets>,
 }
@@ -236,10 +236,10 @@ pub struct User {
     pub protocols: Vec<Proto>,
     #[serde(default = "t", skip_serializing_if = "is_true")]
     pub enabled: bool,
-    /// Дата YYYY-MM-DD; нет — без срока.
+    /// Date YYYY-MM-DD; absent means no expiry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires: Option<String>,
-    /// Вход пользователя; при одном входе можно не указывать.
+    /// User entry; may be omitted when there is only one entry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -281,7 +281,7 @@ pub enum Simple {
     Block,
 }
 
-/// `direct` | `block` | `{link: <имя>|auto}`
+/// `direct` | `block` | `{link: <name>|auto}`
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum Action {
@@ -301,7 +301,7 @@ impl std::str::FromStr for Action {
             "link" => Action::Link {
                 link: "auto".into(),
             },
-            _ => bail!("действие «{s}»: ожидается direct, block, link:auto или link:<хост>"),
+            _ => bail!("action «{s}»: expected direct, block, link:auto or link:<host>"),
         })
     }
 }
@@ -342,7 +342,7 @@ impl std::str::FromStr for Group {
             "all" => Ok(Group::All),
             "split" => Ok(Group::Split),
             "full" => Ok(Group::Full),
-            _ => bail!("группа «{s}»: ожидается all, split или full"),
+            _ => bail!("group «{s}»: expected all, split or full"),
         }
     }
 }
@@ -379,7 +379,7 @@ pub enum ExitPolicy {
 pub struct Exit {
     #[serde(default)]
     pub policy: ExitPolicy,
-    /// Предпочтительный (auto) или единственный (fixed) хост-выход.
+    /// Preferred (auto) or the only (fixed) exit host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prefer: Option<String>,
     #[serde(default)]
@@ -388,9 +388,9 @@ pub struct Exit {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Dns {
-    /// Резолверы для доменов из наборов direct-правил.
+    /// Resolvers for domains from the direct rule sets.
     pub direct: Vec<IpAddr>,
-    /// DoH для всего остального, через линк.
+    /// DoH for everything else, via the link.
     pub remote: String,
 }
 
@@ -419,7 +419,7 @@ pub struct Set {
     pub geosite: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub geoip: Vec<String>,
-    /// Как в xray: `example.ru` (суффикс), `full:`, `keyword:`, `regexp:`.
+    /// As in xray: `example.ru` (suffix), `full:`, `keyword:`, `regexp:`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub domains: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -433,7 +433,7 @@ pub struct Pin {
     pub sha256: Option<String>,
 }
 
-// ---------- секреты ----------
+// ---------- secrets ----------
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct KeyPair {
@@ -502,7 +502,7 @@ pub struct Secrets {
     pub links: Map<LinkSecrets>,
 }
 
-// ---------- файлы ----------
+// ---------- files ----------
 
 #[derive(Serialize, Deserialize, Default)]
 struct HostsFile {
@@ -536,7 +536,7 @@ pub struct State {
     pub sets: Map<Set>,
     pub versions: Map<Pin>,
     pub secrets: Secrets,
-    /// Секреты расшифрованы sops (а не прочитаны открытым текстом).
+    /// Secrets were decrypted by sops, not read as plaintext.
     pub secrets_encrypted: bool,
 }
 
@@ -544,21 +544,21 @@ fn read_yaml<T: serde::de::DeserializeOwned + Default>(p: &Path) -> Result<T> {
     if !p.exists() {
         return Ok(T::default());
     }
-    let s = std::fs::read_to_string(p).with_context(|| format!("чтение {}", p.display()))?;
-    serde_yaml::from_str(&s).with_context(|| format!("разбор {}", p.display()))
+    let s = std::fs::read_to_string(p).with_context(|| format!("read {}", p.display()))?;
+    serde_yaml::from_str(&s).with_context(|| format!("parse {}", p.display()))
 }
 
 fn write_yaml<T: Serialize>(p: &Path, v: &T) -> Result<()> {
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d)?;
     }
-    std::fs::write(p, serde_yaml::to_string(v)?).with_context(|| format!("запись {}", p.display()))
+    std::fs::write(p, serde_yaml::to_string(v)?).with_context(|| format!("write {}", p.display()))
 }
 
 impl State {
     pub const SECRETS: &'static str = "secrets.sops.yaml";
 
-    /// Загрузка без секретов: вместо них детерминированные заглушки (CI, `render --check`).
+    /// Load without secrets: deterministic stubs instead (CI, `render --check`).
     pub fn load_stub(dir: impl AsRef<Path>) -> Result<State> {
         let mut st = Self::load_inner(dir, false)?;
         st.fill_stub_secrets();
@@ -627,7 +627,7 @@ impl State {
         let dir = dir.as_ref().to_path_buf();
         if !dir.join("hosts.yaml").exists() && !dir.join("users.yaml").exists() {
             bail!(
-                "{} не похож на каталог состояния vpnctl (нет hosts.yaml); запустите `vpnctl init`",
+                "{} does not look like a vpnctl state directory (no hosts.yaml); run `vpnctl init`",
                 dir.display()
             );
         }
@@ -657,30 +657,30 @@ impl State {
         if with_secrets && sp.exists() {
             let raw = std::fs::read_to_string(&sp)?;
             let plain: serde_yaml::Value =
-                serde_yaml::from_str(&raw).context("разбор secrets.sops.yaml")?;
+                serde_yaml::from_str(&raw).context("parse secrets.sops.yaml")?;
             if plain.get("sops").is_some() {
                 let out = Command::new("sops")
                     .arg("-d")
                     .arg(&sp)
                     .stderr(Stdio::inherit())
                     .output()
-                    .context("запуск sops")?;
+                    .context("run sops")?;
                 if !out.status.success() {
-                    bail!("sops -d завершился с ошибкой");
+                    bail!("sops -d failed");
                 }
-                st.secrets = serde_yaml::from_slice(&out.stdout)
-                    .context("разбор расшифрованных секретов")?;
+                st.secrets =
+                    serde_yaml::from_slice(&out.stdout).context("parse decrypted secrets")?;
                 st.secrets_encrypted = true;
             } else {
-                st.secrets = serde_yaml::from_value(plain)
-                    .context("разбор secrets.sops.yaml (открытым текстом)")?;
+                st.secrets =
+                    serde_yaml::from_value(plain).context("parse secrets.sops.yaml (plaintext)")?;
             }
         }
         Ok(st)
     }
 
-    /// Пишет все файлы состояния. Секреты: через `sops -e`, если в каталоге есть `.sops.yaml`,
-    /// иначе открытым текстом (для тестов и CI с заглушками).
+    /// Writes all state files. Secrets go through `sops -e` when `.sops.yaml` is present,
+    /// otherwise as plaintext (for tests and CI with stubs).
     pub fn save(&self) -> Result<()> {
         let d = &self.dir;
         write_yaml(
@@ -722,7 +722,7 @@ impl State {
         let plain = serde_yaml::to_string(&self.secrets)?;
         let sp = self.dir.join(Self::SECRETS);
         if !self.dir.join(".sops.yaml").exists() {
-            return std::fs::write(&sp, plain).context("запись секретов");
+            return std::fs::write(&sp, plain).context("write secrets");
         }
         use std::io::Write;
         let mut child = Command::new("sops")
@@ -741,26 +741,26 @@ impl State {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .context("запуск sops -e")?;
+            .context("run sops -e")?;
         child.stdin.take().unwrap().write_all(plain.as_bytes())?;
         let out = child.wait_with_output()?;
         if !out.status.success() {
-            bail!("sops -e завершился с ошибкой");
+            bail!("sops -e failed");
         }
-        std::fs::write(&sp, out.stdout).context("запись секретов")
+        std::fs::write(&sp, out.stdout).context("write secrets")
     }
 
     pub fn host(&self, name: &str) -> Result<&Host> {
         self.hosts
             .get(name)
-            .with_context(|| format!("хост «{name}» не описан"))
+            .with_context(|| format!("host «{name}» is not described"))
     }
 
     pub fn entries(&self) -> impl Iterator<Item = (&String, &Host)> {
         self.hosts.iter().filter(|(_, h)| h.role == Role::Entry)
     }
 
-    /// Вход пользователя: явный или единственный.
+    /// User entry: explicit or the only one.
     pub fn entry_of(&self, user: &User) -> Option<String> {
         user.entry.clone().or_else(|| {
             let mut it = self.entries();
@@ -779,7 +779,7 @@ impl State {
         self.links.iter().filter(move |l| l.from == from)
     }
 
-    /// email учётки в движке.
+    /// Engine account email.
     pub fn email(user: &str, mode: Mode, proto: Proto) -> String {
         format!("{user}-{}-{}", mode.name(), proto.name())
     }

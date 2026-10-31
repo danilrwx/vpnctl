@@ -2,7 +2,7 @@
 source: tests/render.rs
 expression: body
 ---
-# vpnctl · ru-msk-1 · интерфейс awg1 · линк к fi-hel-1
+# vpnctl · ru-msk-1 · interface awg1 · link to fi-hel-1
 [Interface]
 Address = 10.9.1.1/30
 PrivateKey = IUa2Kg8VkUkLCKV+2KpVsvUSWfXnttTmowaTCuAbe1s=

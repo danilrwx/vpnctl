@@ -2,7 +2,7 @@
 source: tests/render.rs
 expression: body
 ---
-# vpnctl · ru-msk-1 · интерфейс awg0 · клиенты и входящие линки
+# vpnctl · ru-msk-1 · interface awg0 · clients and incoming links
 [Interface]
 Address = 10.8.1.1/24, 10.8.2.1/24
 PrivateKey = cU4uhvz965piDQx5vuOflOLjiOpow+NBAKrD5qVbVJk=

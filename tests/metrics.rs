@@ -251,10 +251,10 @@ fn edges_script_parse_table() {
     let e = parse_edges("ru-msk-1", &out, now);
     assert_eq!(e.len(), 5);
     assert!(e[0].ok && e[0].ms == Some(201) && e[0].proto == "reality");
-    assert!(!e[1].ok && e[1].note.as_deref() == Some("таймаут"));
+    assert!(!e[1].ok && e[1].note.as_deref() == Some("timeout"));
     assert!(e[2].ok && e[2].ms == Some(12));
-    assert!(!e[3].ok && e[3].note.as_deref() == Some("рукопожатие 10 мин"));
-    assert!(!e[4].ok && e[4].note.as_deref() == Some("нет рукопожатия"));
+    assert!(!e[3].ok && e[3].note.as_deref() == Some("handshake 10 min ago"));
+    assert!(!e[4].ok && e[4].note.as_deref() == Some("no handshake"));
 
     let t = laptop_targets(&st, "ru-msk-1");
     assert!(t.contains(&(Proto::Reality, Some("5.6.7.8:443".into()))));
@@ -277,13 +277,13 @@ fn edges_script_parse_table() {
     all.extend(e);
     let tbl = table(&all);
     let lines: Vec<&str> = tbl.lines().collect();
-    assert_eq!(lines.len(), 5, "заголовок + 4 ребра: {tbl}");
-    assert!(lines[0].starts_with("ребро") && lines[0].contains("ssh"));
-    assert!(lines[1].starts_with("ноутбук → ru-msk-1") && lines[1].contains("— udp"));
+    assert_eq!(lines.len(), 5, "header + 4 edges: {tbl}");
+    assert!(lines[0].starts_with("edge") && lines[0].contains("ssh"));
+    assert!(lines[1].starts_with("laptop → ru-msk-1") && lines[1].contains("— udp"));
     assert!(
-        lines[2].contains("● 201 мс")
-            && lines[2].contains("✗ таймаут")
-            && lines[2].contains("— не описан")
+        lines[2].contains("● 201 ms")
+            && lines[2].contains("✗ timeout")
+            && lines[2].contains("— not described")
     );
 }
 
@@ -381,7 +381,7 @@ fn status_json() {
     assert_eq!(v["outbounds"]["ru-msk-1"]["fi-hel-1-awg"]["down"], 0);
     assert_eq!(v["matrix_ts"], now);
     assert_eq!(v["matrix"][0]["proto"], "ssh");
-    assert!(summary("ru-msk-1", &s.hosts["ru-msk-1"].last.clone().unwrap()).contains("дрейф"));
+    assert!(summary("ru-msk-1", &s.hosts["ru-msk-1"].last.clone().unwrap()).contains("drift"));
 }
 
 #[test]

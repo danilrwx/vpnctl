@@ -1,4 +1,4 @@
-//! plan: сверка рендера с хостами — что изменится, дрейф, недостижимость.
+//! plan: compare the render with the hosts — pending changes, drift, reachability.
 use crate::render::{self, HostFiles, Rendered};
 use crate::ssh::Ssh;
 use crate::state::State;
@@ -13,7 +13,7 @@ pub enum Status {
     Unchanged,
     Changed,
     New,
-    /// На хосте не то, что было применено, и не то, что будет
+    /// The host has neither the applied nor the upcoming content
     Drift,
     Removed,
 }
@@ -49,20 +49,20 @@ impl HostPlan {
     }
 }
 
-/// Статус файла по трём хэшам: применённый ранее, будущий, на хосте.
+/// File status from three hashes: previously applied, upcoming, on the host.
 pub fn classify(old: Option<&str>, new: Option<&str>, host: Option<&str>) -> Status {
     match (old, new, host) {
         (_, Some(n), Some(h)) if n == h => Status::Unchanged,
         (_, None, Some(_)) => Status::Removed,
         (_, Some(_), None) => Status::New,
         (Some(o), Some(_), Some(h)) if o == h => Status::Changed,
-        (None, Some(_), Some(_)) => Status::Changed, // первое применение: историю не знаем
+        (None, Some(_), Some(_)) => Status::Changed, // first apply: no history yet
         (_, Some(_), Some(_)) => Status::Drift,
         (_, None, None) => Status::Unchanged,
     }
 }
 
-/// Скрипт: маркер, bootstrap, хэши перечисленных путей.
+/// Script: marker, bootstrap, hashes of the listed paths.
 pub fn probe_script(paths: &[String]) -> String {
     let list = paths
         .iter()
@@ -95,7 +95,7 @@ pub fn parse_probe(out: &str) -> Probe {
     }
 }
 
-/// Рендер состояния на коммите маркера (для дрейфа). Нет коммита — None.
+/// State render at the marker commit (for drift). No commit — None.
 pub fn render_at(st: &State, commit: &str, host: &str) -> Option<HostFiles> {
     let tmp = std::env::temp_dir().join(format!("vpnctl-at-{}-{commit}", std::process::id()));
     std::fs::create_dir_all(&tmp).ok()?;
@@ -130,7 +130,7 @@ fn hash_map(f: &HostFiles) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// Опрашивает хосты параллельно и строит план.
+/// Queries hosts in parallel and builds the plan.
 pub fn plan(st: &State, rendered: &Rendered) -> Result<Vec<HostPlan>> {
     let results: Vec<(String, Result<Probe, String>)> = std::thread::scope(|s| {
         let handles: Vec<_> = rendered
@@ -142,7 +142,7 @@ pub fn plan(st: &State, rendered: &Rendered) -> Result<Vec<HostPlan>> {
                     let r = (|| -> Result<Probe, String> {
                         let ssh = Ssh::for_host(st, name).map_err(|e| e.to_string())?;
                         ssh.reachable()?;
-                        // плюс старые пути, если знаем маркер: их тоже надо захэшировать
+                        // plus old paths when the marker is known: they need hashing too
                         let out = ssh.sh(&probe_script(&paths)).map_err(|e| e.to_string())?;
                         let mut p = parse_probe(&out);
                         if let Some(m) = p.marker.clone()
@@ -190,7 +190,7 @@ pub fn plan(st: &State, rendered: &Rendered) -> Result<Vec<HostPlan>> {
                     .map(|f| hash_map(&f));
                 if p.marker.is_some() && old.is_none() {
                     hp.notes.push(format!(
-                        "коммит маркера {} не найден в репозитории: дрейф не определить",
+                        "marker commit {} is not in the repository: drift cannot be determined",
                         p.marker.as_deref().unwrap()
                     ));
                 }
@@ -208,13 +208,13 @@ pub fn plan(st: &State, rendered: &Rendered) -> Result<Vec<HostPlan>> {
                 }
                 if !p.bootstrapped {
                     hp.notes
-                        .push("bootstrap не выполнен: хост будет пропущен".into());
+                        .push("bootstrap not done: the host will be skipped".into());
                 }
             }
         }
         plans.push(hp);
     }
-    // недостижимость через джамп: пересчёт, когда джамп известен позже
+    // reachability through the jump: recomputed once the jump is known
     let down: Vec<String> = plans
         .iter()
         .filter(|p| p.unreachable.is_some())
@@ -224,7 +224,7 @@ pub fn plan(st: &State, rendered: &Rendered) -> Result<Vec<HostPlan>> {
         if let (Some(_), Some(v)) = (&p.unreachable, &st.hosts[&p.name].via)
             && down.contains(v)
         {
-            p.unreachable = Some(format!("недостижим через {v}"));
+            p.unreachable = Some(format!("unreachable via {v}"));
         }
     }
     Ok(plans)
@@ -237,12 +237,12 @@ pub fn print(plans: &[HostPlan]) {
             continue;
         }
         println!(
-            "{} · {} · {} изменений",
+            "{} · {} · {} changes",
             p.name,
             p.marker
                 .as_deref()
-                .map(|m| format!("применён {m}"))
-                .unwrap_or("ещё не применялся".into()),
+                .map(|m| format!("applied {m}"))
+                .unwrap_or("not applied yet".into()),
             p.changes()
         );
         for (path, s) in &p.files {
@@ -251,7 +251,7 @@ pub fn print(plans: &[HostPlan]) {
                     "  {} {path}{}",
                     s.mark(),
                     if *s == Status::Drift {
-                        "   дрейф: правка на хосте, будет затёрта (--adopt чтобы забрать в репо)"
+                        "   drift: edited on the host, will be overwritten (--adopt to take it into the repo)"
                     } else {
                         ""
                     }
@@ -264,18 +264,18 @@ pub fn print(plans: &[HostPlan]) {
     }
 }
 
-/// Файл с хоста.
+/// File from the host.
 pub fn fetch(st: &State, host: &str, path: &str) -> Result<String> {
     Ssh::for_host(st, host)?.sh(&format!("cat '{path}'"))
 }
 
-/// Диф между рендером и файлом на хосте.
+/// Diff between the render and the file on the host.
 pub fn diff(st: &State, rendered: &Rendered, host: &str, path: &str) -> Result<String> {
     let new = rendered
         .hosts
         .get(host)
         .and_then(|f| f.get(path))
-        .with_context(|| format!("{host}: файл {path} не рендерится"))?;
+        .with_context(|| format!("{host}: file {path} is not rendered"))?;
     let cur = fetch(st, host, path)?;
     let tmp = std::env::temp_dir().join(format!("vpnctl-diff-{}", std::process::id()));
     std::fs::create_dir_all(&tmp)?;
@@ -287,7 +287,7 @@ pub fn diff(st: &State, rendered: &Rendered, host: &str, path: &str) -> Result<S
             "--label",
             &format!("{host}:{path}"),
             "--label",
-            "рендер",
+            "render",
         ])
         .arg(tmp.join("host"))
         .arg(tmp.join("repo"))
@@ -295,10 +295,10 @@ pub fn diff(st: &State, rendered: &Rendered, host: &str, path: &str) -> Result<S
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Переносит файл с хоста в `overrides/<host>/<path>` состояния: рендер будет брать его оттуда.
+/// Moves a file from the host into the state's `overrides/<host>/<path>`: the render picks it up.
 pub fn adopt(st: &State, host: &str, path: &str) -> Result<String> {
     if !path.starts_with('/') {
-        bail!("путь должен быть абсолютным");
+        bail!("the path must be absolute");
     }
     let cur = fetch(st, host, path)?;
     let dst = st
@@ -308,5 +308,5 @@ pub fn adopt(st: &State, host: &str, path: &str) -> Result<String> {
         .join(path.trim_start_matches('/'));
     std::fs::create_dir_all(dst.parent().unwrap())?;
     std::fs::write(&dst, cur)?;
-    Ok(format!("overrides({host}): {path} с хоста"))
+    Ok(format!("overrides({host}): {path} from the host"))
 }

@@ -889,8 +889,7 @@ impl App {
             .iter()
             .map(|l| {
                 let t = l.trim_start();
-                if l.starts_with('▸') || t.starts_with("план для") || t.starts_with("plan for")
-                {
+                if l.starts_with('▸') || t.starts_with("plan for") {
                     Line::from(Span::styled(l.clone(), Style::new().bold()))
                 } else if t.starts_with('✓') {
                     Line::from(Span::styled(l.clone(), Style::new().fg(Color::Green)))
@@ -923,11 +922,7 @@ impl App {
             titled("Apply · sequential, stop at the first error", lines).scroll((scroll, 0)),
             log_area,
         );
-        let done = self
-            .log
-            .iter()
-            .filter(|l| l.contains("маркер") || l.contains("marker"))
-            .count();
+        let done = self.log.iter().filter(|l| l.contains("marker")).count();
         let el = self.job_elapsed.as_secs();
         let status = Line::from(vec![
             dim("elapsed "),

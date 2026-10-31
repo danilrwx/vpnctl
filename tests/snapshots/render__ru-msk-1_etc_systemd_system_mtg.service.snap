@@ -11,7 +11,7 @@ After=network-online.target sing-box.service xray.service
 ExecStart=/usr/local/bin/mtg run /etc/mtg/config.toml
 Restart=on-failure
 RestartSec=3
-# от root (конфиг 0600), но без лишнего: только bind на порт и только чтение системы
+# runs as root (config 0600) but with no extras: port bind and read-only system access
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict

@@ -1,4 +1,4 @@
-//! Тонкая обёртка над системным git в каталоге состояния.
+//! Thin wrapper around the system git in the state directory.
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::process::Command;
@@ -9,7 +9,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String> {
         .arg(dir)
         .args(args)
         .output()
-        .context("запуск git")?;
+        .context("run git")?;
     if !out.status.success() {
         bail!(
             "git {}: {}",
@@ -58,7 +58,7 @@ pub fn head(dir: &Path) -> Result<String> {
     git(dir, &["rev-parse", "--short", "HEAD"])
 }
 
-/// Лёгкий тег: подпись и аннотация из глобального конфига не нужны и могут требовать ключ.
+/// Lightweight tag: signing and annotation from the global config are not needed and may require a key.
 pub fn tag(dir: &Path, name: &str) -> Result<()> {
     git(
         dir,
@@ -74,7 +74,7 @@ pub fn tag(dir: &Path, name: &str) -> Result<()> {
     .map(|_| ())
 }
 
-/// Последний по имени тег с префиксом (имена `applied/<дата UTC>` сортируются как даты).
+/// Last tag with the prefix by name (names `applied/<UTC date>` sort like dates).
 pub fn last_tag(dir: &Path, prefix: &str) -> Option<String> {
     git(dir, &["tag", "-l", &format!("{prefix}*")])
         .ok()?
@@ -83,14 +83,14 @@ pub fn last_tag(dir: &Path, prefix: &str) -> Option<String> {
         .map(String::from)
 }
 
-/// HEAD: (короткий sha, сообщение, epoch коммита).
+/// HEAD: (short sha, message, commit epoch).
 pub fn head_info(dir: &Path) -> Option<(String, String, i64)> {
     let out = git(dir, &["log", "-1", "--format=%h%x09%s%x09%ct"]).ok()?;
     let mut p = out.splitn(3, '\t');
     Some((p.next()?.into(), p.next()?.into(), p.next()?.parse().ok()?))
 }
 
-/// Число коммитов в диапазоне `from..to`.
+/// Number of commits in the `from..to` range.
 pub fn count(dir: &Path, from: &str, to: &str) -> Option<usize> {
     git(dir, &["rev-list", "--count", &format!("{from}..{to}")])
         .ok()?
@@ -98,7 +98,7 @@ pub fn count(dir: &Path, from: &str, to: &str) -> Option<usize> {
         .ok()
 }
 
-/// Первый коммит, добавивший строку `needle` в файл: (короткий sha, дата YYYY-MM-DD).
+/// First commit that added the line `needle` to the file: (short sha, YYYY-MM-DD date).
 pub fn added(dir: &Path, file: &str, needle: &str) -> Option<(String, String)> {
     let out = git(
         dir,

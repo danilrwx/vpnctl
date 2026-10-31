@@ -336,15 +336,15 @@ fn matrix_rows_notes_and_history() {
     let (st, mut s, _t) = empty();
     assert!(matrix_rows(&s).is_empty());
     s.matrix = vec![
-        edge("ноутбук", "ru-msk-1", "reality", true, Some(181), None),
-        edge("ноутбук", "ru-msk-1", "hy2", false, None, Some("udp")),
+        edge("laptop", "ru-msk-1", "reality", true, Some(181), None),
+        edge("laptop", "ru-msk-1", "hy2", false, None, Some("udp")),
         edge("ru-msk-1", "fi-hel-1", "awg", true, Some(184), None),
         edge("ru-msk-1", "fi-hel-1", "reality", false, None, None),
-        edge("ноутбук", "ru-spb-2", "ssh", false, None, Some("no answer")),
+        edge("laptop", "ru-spb-2", "ssh", false, None, Some("no answer")),
     ];
     let rows = matrix_rows(&s);
     assert_eq!(rows.len(), 3);
-    assert_eq!(rows[0].0, ("ноутбук".to_string(), "ru-msk-1".to_string()));
+    assert_eq!(rows[0].0, ("laptop".to_string(), "ru-msk-1".to_string()));
     assert_eq!(rows[0].1[0], ("● 181 ms".to_string(), Level::Ok));
     assert_eq!(rows[0].1[2], ("— udp".to_string(), Level::Off));
     assert_eq!(rows[0].1[1], ("— not set".to_string(), Level::Off));
@@ -353,10 +353,10 @@ fn matrix_rows_notes_and_history() {
         "active link · awg fine · backup reality down, hy2 not probed"
     );
     assert_eq!(
-        edge_note(&st, &s, "ноутбук", "ru-spb-2"),
+        edge_note(&st, &s, "laptop", "ru-spb-2"),
         "host not answering over ssh"
     );
-    assert_eq!(edge_note(&st, &s, "ноутбук", "ru-msk-1"), "");
+    assert_eq!(edge_note(&st, &s, "laptop", "ru-msk-1"), "");
 
     let hist = vec![
         (NOW - 3 * DAY + 100, true, Some(100)),
@@ -502,7 +502,7 @@ fn inbound_rows_and_cards() {
     let nodes = graph_nodes(&st, &s, None);
     assert_eq!(
         nodes.iter().map(|n| n.0.as_str()).collect::<Vec<_>>(),
-        vec!["ноутбук", "ru-msk-1", "fi-hel-1"]
+        vec!["laptop", "ru-msk-1", "fi-hel-1"]
     );
 }
 
