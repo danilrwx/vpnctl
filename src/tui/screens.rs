@@ -1342,19 +1342,48 @@ impl App {
                 .fields
                 .iter()
                 .enumerate()
-                .map(|(i, (l, v))| {
+                .map(|(i, fld)| {
                     let cur = i == form.cur;
-                    Line::from(vec![
-                        dim(format!("{l:>24}  ")),
-                        Span::styled(
-                            format!(" {v}{} ", if cur { "▏" } else { "" }),
-                            if cur {
-                                Style::new().bg(BG_CODE).fg(Color::White).bold()
-                            } else {
-                                Style::new()
-                            },
-                        ),
-                    ])
+                    let hot = if cur {
+                        Style::new().bg(BG_CODE).fg(Color::White).bold()
+                    } else {
+                        Style::new()
+                    };
+                    let mut spans = vec![dim(format!("{:>24}  ", fld.label))];
+                    match &fld.kind {
+                        FieldKind::Text => spans.push(Span::styled(
+                            format!(" {}{} ", fld.value, if cur { "▏" } else { "" }),
+                            hot,
+                        )),
+                        FieldKind::Bool => spans.push(Span::styled(
+                            format!(
+                                " {} ",
+                                if fld.value == "yes" {
+                                    "[x] yes"
+                                } else {
+                                    "[ ] no"
+                                }
+                            ),
+                            hot,
+                        )),
+                        FieldKind::Multi { options, cursor } => {
+                            for (j, o) in options.iter().enumerate() {
+                                let on = fld.marked(o);
+                                let text = format!("{} {}  ", if on { "[x]" } else { "[ ]" }, o);
+                                spans.push(Span::styled(
+                                    text,
+                                    if cur && j == *cursor {
+                                        hot
+                                    } else if on {
+                                        Style::new().fg(Color::Green)
+                                    } else {
+                                        Style::new()
+                                    },
+                                ));
+                            }
+                        }
+                    }
+                    Line::from(spans)
                 })
                 .collect();
             lines.push(Line::from(""));
@@ -1364,6 +1393,8 @@ impl App {
                     ("Enter", "save and commit"),
                     ("Esc", "cancel"),
                     ("Tab", "next field"),
+                    ("Space", "toggle"),
+                    ("←→", "pick option"),
                 ]),
             });
             lines.extend(pv);

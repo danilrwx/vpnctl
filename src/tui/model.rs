@@ -1237,20 +1237,105 @@ pub enum Kind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum FieldKind {
+    Text,
+    Bool,
+    /// Список опций с отметками; `value` — выбранные через запятую, `cursor` — подсветка.
+    Multi { options: Vec<String>, cursor: usize },
+}
+
+#[derive(Clone)]
+pub struct Field {
+    pub label: &'static str,
+    pub value: String,
+    pub kind: FieldKind,
+}
+
+impl Field {
+    fn text(label: &'static str, value: impl Into<String>) -> Field {
+        Field {
+            label,
+            value: value.into(),
+            kind: FieldKind::Text,
+        }
+    }
+
+    fn boolean(label: &'static str, on: bool) -> Field {
+        Field {
+            label,
+            value: if on { "yes" } else { "no" }.into(),
+            kind: FieldKind::Bool,
+        }
+    }
+
+    fn multi(label: &'static str, options: Vec<String>, selected: &str) -> Field {
+        let picked: Vec<String> = csv(selected)
+            .into_iter()
+            .filter(|x| options.contains(x))
+            .collect();
+        Field {
+            label,
+            value: picked.join(","),
+            kind: FieldKind::Multi { options, cursor: 0 },
+        }
+    }
+
+    pub fn is_text(&self) -> bool {
+        matches!(self.kind, FieldKind::Text)
+    }
+
+    pub fn marked(&self, opt: &str) -> bool {
+        csv(&self.value).iter().any(|x| x == opt)
+    }
+
+    /// Bool — переключить, Multi — снять/поставить отметку под курсором.
+    pub fn toggle(&mut self) {
+        match &mut self.kind {
+            FieldKind::Text => {}
+            FieldKind::Bool => {
+                self.value = if self.value == "yes" { "no" } else { "yes" }.into();
+            }
+            FieldKind::Multi { options, cursor } => {
+                let Some(opt) = options.get(*cursor).cloned() else {
+                    return;
+                };
+                let mut picked = csv(&self.value);
+                if let Some(pos) = picked.iter().position(|x| *x == opt) {
+                    picked.remove(pos);
+                } else {
+                    picked.push(opt);
+                    picked.sort_by_key(|x| options.iter().position(|o| o == x).unwrap_or(usize::MAX));
+                }
+                self.value = picked.join(",");
+            }
+        }
+    }
+
+    pub fn move_cursor(&mut self, d: i32) {
+        if let FieldKind::Multi { options, cursor } = &mut self.kind
+            && !options.is_empty()
+        {
+            let n = options.len() as i32;
+            *cursor = ((*cursor as i32 + d).rem_euclid(n)) as usize;
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Form {
     pub title: String,
     pub kind: Kind,
-    pub fields: Vec<(&'static str, String)>,
+    pub fields: Vec<Field>,
     pub cur: usize,
     pub error: Option<String>,
 }
 
 impl Form {
-    fn new(title: impl Into<String>, kind: Kind, fields: &[(&'static str, String)]) -> Form {
+    fn new(title: impl Into<String>, kind: Kind, fields: Vec<Field>) -> Form {
         Form {
             title: title.into(),
             kind,
-            fields: fields.to_vec(),
+            fields,
             cur: 0,
             error: None,
         }
@@ -1262,16 +1347,34 @@ impl Form {
         self.cur = (self.cur + self.fields.len() - 1) % self.fields.len();
     }
     pub fn input(&mut self, c: char) {
-        self.fields[self.cur].1.push(c);
+        let f = &mut self.fields[self.cur];
+        if f.is_text() {
+            f.value.push(c);
+        }
+    }
+    /// Пробел: в текстовом поле — символ, в остальных — переключение.
+    pub fn space(&mut self) {
+        let f = &mut self.fields[self.cur];
+        if f.is_text() {
+            f.value.push(' ');
+        } else {
+            f.toggle();
+        }
     }
     pub fn backspace(&mut self) {
-        self.fields[self.cur].1.pop();
+        let f = &mut self.fields[self.cur];
+        if f.is_text() {
+            f.value.pop();
+        }
+    }
+    pub fn move_cursor(&mut self, d: i32) {
+        self.fields[self.cur].move_cursor(d);
     }
     pub fn get(&self, label: &str) -> &str {
         self.fields
             .iter()
-            .find(|(l, _)| *l == label)
-            .map(|(_, v)| v.trim())
+            .find(|f| f.label == label)
+            .map(|f| f.value.trim())
             .unwrap_or("")
     }
 }
@@ -1298,31 +1401,67 @@ fn join<T: Copy>(v: &[T], f: impl Fn(T) -> &'static str) -> String {
 
 pub fn user_form(st: &State, edit: Option<&str>) -> Form {
     let u = edit.and_then(|n| st.users.get(n));
+    // в списке только то, что реально есть на входе: иначе форма предлагает выбрать несуществующий инбаунд
+    let mut protos: Vec<String> = vec![];
+    for (n, h) in &st.hosts {
+        if h.role != Role::Entry {
+            continue;
+        }
+        if let Some(m) = st.inbounds.get(n) {
+            for (p, i) in m {
+                // mtg — не пользовательский протокол: для Telegram есть отдельный переключатель
+                if i.enabled && !matches!(p, Proto::Mtg) {
+                    protos.push(p.name().to_string());
+                }
+            }
+        }
+    }
+    protos.sort();
+    protos.dedup();
+    if protos.is_empty() {
+        protos = ["reality", "ws", "hy2", "awg"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    }
     let mut f = vec![
-        ("name", edit.unwrap_or("").to_string()),
-        (
+        Field::text("name", edit.unwrap_or("")),
+        Field::multi(
             "modes",
-            u.map(|u| join(&u.modes, Mode::name))
+            ["split", "full"].iter().map(|s| s.to_string()).collect(),
+            &u.map(|u| join(&u.modes, Mode::name))
                 .unwrap_or("split".into()),
         ),
-        (
+        Field::multi(
             "protocols",
-            u.map(|u| join(&u.protocols, Proto::name))
-                .unwrap_or("reality,ws,hy2".into()),
+            protos,
+            &u.map(|u| join(&u.protocols, Proto::name))
+                .unwrap_or("reality,ws".into()),
         ),
-        (
-            "tg proxy (yes/no)",
-            if u.is_some_and(|u| u.tg) { "yes" } else { "no" }.into(),
-        ),
-        (
+        Field::boolean("tg proxy", u.is_some_and(|u| u.tg)),
+        Field::text(
             "expiry (YYYY-MM-DD)",
             u.and_then(|u| u.expires.clone()).unwrap_or_default(),
         ),
-        ("note", u.and_then(|u| u.note.clone()).unwrap_or_default()),
+        Field::text("note", u.and_then(|u| u.note.clone()).unwrap_or_default()),
     ];
     if u.is_none() {
-        f.push(("awg peer (split/full)", String::new()));
-        f.push(("entry", String::new()));
+        // пир имеет смысл только если на входе вообще есть awg-инбаунд
+        let has_awg = st.hosts.iter().any(|(n, h)| {
+            h.role == Role::Entry
+                && st.inbounds
+                    .get(n)
+                    .and_then(|m| m.get(&Proto::Awg))
+                    .is_some_and(|i| i.enabled)
+        });
+        if has_awg {
+            f.push(Field::multi(
+                "awg peer (subnet)",
+                ["split", "full"].iter().map(|s| s.to_string()).collect(),
+                "",
+            ));
+        }
+        f.push(Field::text("entry", ""));
     }
     Form::new(
         match edit {
@@ -1332,7 +1471,7 @@ pub fn user_form(st: &State, edit: Option<&str>) -> Form {
         Kind::User {
             edit: edit.map(String::from),
         },
-        &f,
+        f,
     )
 }
 
@@ -1345,22 +1484,22 @@ pub fn rule_form(st: &State, host: &str, g: Group, idx: Option<usize>) -> Form {
     let m = r.map(|r| r.match_.clone()).unwrap_or_default();
     let mut f = vec![];
     if idx.is_none() {
-        f.push(("position", String::new()));
+        f.push(Field::text("position", ""));
     }
     f.extend([
-        ("sets", m.sets.join(",")),
-        ("geosite", m.geosite.join(",")),
-        ("geoip", m.geoip.join(",")),
-        ("domains", m.domains.join(",")),
-        (
+        Field::text("sets", m.sets.join(",")),
+        Field::text("geosite", m.geosite.join(",")),
+        Field::text("geoip", m.geoip.join(",")),
+        Field::text("domains", m.domains.join(",")),
+        Field::text(
             "ip",
             m.ip.iter()
                 .map(|i| i.to_string())
                 .collect::<Vec<_>>()
                 .join(","),
         ),
-        ("inbound", m.inbound.join(",")),
-        (
+        Field::text("inbound", m.inbound.join(",")),
+        Field::text(
             "port",
             m.port
                 .iter()
@@ -1368,11 +1507,11 @@ pub fn rule_form(st: &State, host: &str, g: Group, idx: Option<usize>) -> Form {
                 .collect::<Vec<_>>()
                 .join(","),
         ),
-        (
+        Field::text(
             "action",
             r.map(|r| r.action.to_string()).unwrap_or("direct".into()),
         ),
-        ("note", r.and_then(|r| r.note.clone()).unwrap_or_default()),
+        Field::text("note", r.and_then(|r| r.note.clone()).unwrap_or_default()),
     ]);
     Form::new(
         format!(
@@ -1387,7 +1526,7 @@ pub fn rule_form(st: &State, host: &str, g: Group, idx: Option<usize>) -> Form {
             group: g,
             idx,
         },
-        &f,
+        f,
     )
 }
 
@@ -1400,28 +1539,32 @@ pub fn link_form(st: &State, from: &str, to: &str) -> Form {
             "New link".into()
         },
         Kind::Link,
-        &[
-            ("from", from.into()),
-            ("to", to.into()),
-            (
+        vec![
+            Field::text("from", from),
+            Field::text("to", to),
+            Field::multi(
                 "protocols",
-                l.map(|l| join(&l.protocols, Proto::name))
+                ["awg", "reality", "hy2"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                &l.map(|l| join(&l.protocols, Proto::name))
                     .unwrap_or("awg,reality".into()),
             ),
-            (
+            Field::text(
                 "policy (auto/fixed/rr)",
                 l.map(|l| {
                     serde_yaml::to_string(&l.policy)
                         .unwrap_or_default()
                         .trim()
-                        .into()
+                        .to_string()
                 })
                 .unwrap_or("auto".into()),
             ),
-            (
+            Field::text(
                 "active",
                 l.and_then(|l| l.active)
-                    .map(|p| p.name().into())
+                    .map(|p| p.name())
                     .unwrap_or_default(),
             ),
         ],
@@ -1433,15 +1576,15 @@ pub fn exit_form(st: &State, host: &str) -> Form {
     Form::new(
         format!("Exit of {host}"),
         Kind::Exit { host: host.into() },
-        &[
-            (
+        vec![
+            Field::text(
                 "policy (auto/fixed)",
                 serde_yaml::to_string(&r.exit.policy)
                     .unwrap_or_default()
                     .trim()
-                    .into(),
+                    .to_string(),
             ),
-            ("prefer", r.exit.prefer.unwrap_or_default()),
+            Field::text("prefer", r.exit.prefer.unwrap_or_default()),
         ],
     )
 }
@@ -1476,10 +1619,10 @@ pub fn submit(f: &Form, st: &mut State) -> Result<String> {
                 name,
                 list(f.get("modes"))?,
                 list(f.get("protocols"))?,
-                opt(f.get("awg peer (split/full)"))
+                opt(f.get("awg peer (subnet)"))
                     .map(|m| m.parse())
                     .transpose()?,
-                yes(f.get("tg proxy (yes/no)"))?,
+                yes(f.get("tg proxy"))?,
                 opt(f.get("expiry (YYYY-MM-DD)")),
                 opt(f.get("note")),
                 opt(f.get("entry")),
@@ -1493,7 +1636,7 @@ pub fn submit(f: &Form, st: &mut State) -> Result<String> {
                 protocols: Some(list(f.get("protocols"))?),
                 expires: Some(opt(f.get("expiry (YYYY-MM-DD)"))),
                 note: opt(f.get("note")),
-                tg: Some(yes(f.get("tg proxy (yes/no)"))?),
+                tg: Some(yes(f.get("tg proxy"))?),
             },
         ),
         Kind::Rule { host, group, idx } => {

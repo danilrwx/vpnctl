@@ -659,8 +659,8 @@ fn form_navigation_and_input() {
 }
 
 fn set(f: &mut Form, label: &str, v: &str) {
-    let i = f.fields.iter().position(|(l, _)| *l == label).unwrap();
-    f.fields[i].1 = v.into();
+    let i = f.fields.iter().position(|fld| fld.label == label).unwrap();
+    f.fields[i].value = v.into();
 }
 
 #[test]
@@ -670,7 +670,7 @@ fn submit_user_add_and_edit() {
     set(&mut f, "name", "sergey");
     set(&mut f, "modes", "split, full");
     set(&mut f, "protocols", "reality,ws");
-    set(&mut f, "tg proxy (yes/no)", "yes");
+    set(&mut f, "tg proxy", "yes");
     assert_eq!(
         submit(&f, &mut st).unwrap(),
         "users: + sergey (split, full)"
@@ -691,7 +691,7 @@ fn submit_user_add_and_edit() {
 
     let mut e = user_form(&st, Some("olga"));
     set(&mut e, "expiry (YYYY-MM-DD)", "2027-01-01");
-    set(&mut e, "tg proxy (yes/no)", "no");
+    set(&mut e, "tg proxy", "no");
     assert!(submit(&e, &mut st).unwrap().starts_with("users: olga:"));
     assert_eq!(st.users["olga"].expires.as_deref(), Some("2027-01-01"));
 }
@@ -700,7 +700,7 @@ fn submit_user_add_and_edit() {
 fn submit_rule_add_edit_and_errors() {
     let mut st = fixture();
     let mut f = rule_form(&st, "ru-msk-1", Group::Split, None);
-    assert_eq!(f.fields[0].0, "position");
+    assert_eq!(f.fields[0].label, "position");
     set(&mut f, "sets", "ru-direct");
     set(&mut f, "port", "443, 8443");
     set(&mut f, "action", "link:fi-hel-1");

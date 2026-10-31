@@ -620,6 +620,12 @@ impl App {
                 KeyCode::Esc => self.form = None,
                 KeyCode::Tab | KeyCode::Down => f.next(),
                 KeyCode::BackTab | KeyCode::Up => f.prev(),
+                KeyCode::Left => f.move_cursor(-1),
+                KeyCode::Right => f.move_cursor(1),
+                KeyCode::Char(' ') => {
+                    f.space();
+                    self.refresh_preview();
+                }
                 KeyCode::Backspace => {
                     f.backspace();
                     self.refresh_preview();
