@@ -2,18 +2,13 @@
 
 **Your own VPN infrastructure as state in git.** An entry node with smart routing, exit nodes abroad, users and subscriptions — all in YAML files, applied over SSH, with no web panel and no agents on hosts.
 
-![Rust 2024](https://img.shields.io/badge/Rust-2024-orange) ![TUI ratatui](https://img.shields.io/badge/TUI-ratatui-blue) ![Stages 1–6 done](https://img.shields.io/badge/stages-1–6%20done-brightgreen)
-
-![Overview screen](docs/img/tui-1-overview.png)
-
-<sup>The Overview screen on a two-container Docker lab.</sup>
+![Rust 2024](https://img.shields.io/badge/Rust-2024-orange) ![Stages 1–6 done](https://img.shields.io/badge/stages-1–6%20done-brightgreen)
 
 ## Contents
 
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
 - [Commands](#commands)
-- [TUI](#tui)
 - [State layout](#state-layout)
 - [Hosts: bootstrap and templates](#hosts-bootstrap-and-templates)
 - [Metrics and probes](#metrics-and-probes)
@@ -30,7 +25,7 @@
 
 ![One apply](docs/img/apply-flow.svg)
 - **Metrics are pulled over SSH** into a local SQLite: traffic per account and per outbound, machine state, certificates, chain probe, an "edge × protocol" matrix.
-- **TUI and CLI are thin fronts** over one library crate; the logic lives in pure functions with tests.
+- **The CLI is a thin front** over one library crate; the logic lives in pure functions with tests.
 
 Details are in [`docs/design.md`](docs/design.md) (Russian); specifications in [`openspec/specs/`](openspec/specs/).
 
@@ -84,7 +79,6 @@ Without `--age` secrets are stored in plain text. `--stub-secrets` lets CI run `
 
 | Command | What it does |
 |---|---|
-| `vpnctl` / `vpnctl tui` | Interactive interface (default) |
 | `init [--age <recipient>]` | Empty state and git repository |
 | `validate` | Static check of the state |
 | `render [--host] [--out] [--check]` | Configs into a directory; `--check` renders twice and compares bytes |
@@ -101,48 +95,6 @@ Without `--age` secrets are stored in plain text. `--stub-secrets` lets CI run `
 | `rule add/edit/rm/move/toggle` | Routing rules in groups `all` / `split` / `full` |
 
 Global flags: `-C <state dir>`, `--no-commit` for batch edits, `--stub-secrets`.
-
-## TUI
-
-`vpnctl -C ~/vpn-state` with no subcommand opens the interface. Six screens:
-
-| Key | Screen | Shows |
-|---|---|---|
-| `1` | Overview | repo, HEAD, last `applied/*` tag; host table (role, domain, ssh, commit vs HEAD, services, chain probe, cert, pending updates); links with per-protocol latency and exit policy; summary: users, traffic direct / via exit, chain probes today, what needs attention |
-| `2` | Users | table (modes, status, expiry, traffic per day/week/total) and the card: entry, protocols, subscription links, QR, Telegram proxy, when the user was added |
-| `3` | Host | State (commit, drift, pinned versions), Machine, Domain and certificate (A record check, SSH key); inbounds with user counts and exits with traffic; chain probe sparkline over 24 h; `journalctl` tail over ssh |
-| `4` | Plan/Apply | what will change per host and file (diff, drift → adopt), checks before apply, apply output streamed line by line |
-| `5` | Topology | graph of nodes, static check, "edge × protocol" matrix with notes, 14-day history of the selected edge |
-| `6` | Routing | rule groups of the entry with set contents, engine default, DNS, sets, "where does it go?" trace by the rules |
-
-One key layout everywhere:
-
-| Everywhere | On an object | Operations |
-|---|---|---|
-| `j`/`k` rows · `Enter` open · `Esc` back | `n` new · `e` edit · `x` toggle · `D` delete | `p` plan · `a` apply (with confirmation) · `B` bootstrap |
-| `/` filter · `?` help · `q` quit | `J`/`K` move a rule · `o` exit / link dialog · `h` another host or entry | `r` collect metrics · `t` matrix · `V` validate · `U` update OS · `R` reboot · `l` journal |
-
-Colours: **green** — fine, **yellow** — needs attention (drift, behind HEAD, certificate < 14 days, pending updates, user expiring in < 7 days, probe slower than 0.7 s), **red** — broken, **grey** — inactive or no data yet.
-
-| Users with the subscription card and QR | Routing groups, DNS, sets and the trace |
-|---|---|
-| ![Users](docs/img/tui-2-users.png) | ![Routing](docs/img/tui-6-routing.png) |
-
-| Topology: graph, matrix, edge history | New user form with live validation |
-|---|---|
-| ![Topology](docs/img/tui-5-topology.png) | ![New user](docs/img/tui-dialog-user.png) |
-
-| Host card with the probe sparkline and journal | Plan: what will change, checks, apply stream |
-|---|---|
-| ![Host](docs/img/tui-3-host.png) | ![Plan](docs/img/tui-4-plan.png) |
-
-Screenshots are from the two-container lab (two hosts, one user), captured by `scripts/shots/capture.sh <state dir>`: it drives the TUI in tmux, turns `capture-pane` output into HTML (box-drawing characters become CSS cells so frames join cleanly) and renders PNGs with headless Chromium. Values that are not collected yet show as `—` or `no data yet`. Key help (`?`):
-
-![Help](docs/img/tui-help.png)
-
-The user, rule and link dialogs are forms with the same values as the CLI. On every field change the operation and validation run on a copy of the state: the bottom of the form shows the upcoming commit message or the error, and for a rule the group as it will look. `Enter` performs the operation, validation, write and commit. Long operations run as a child `vpnctl`; their output streams onto screen 4 and the summary is reloaded when they finish.
-
-Screen mockups live in [`screens/`](screens/): `npm i playwright && npx playwright install chromium`, then `node screens/check.js` renders them and catches overflows.
 
 ## State layout
 
@@ -177,7 +129,7 @@ User traffic destinations and access logs are never collected.
 
 ## Verified on a lab
 
-Two privileged Debian 13 containers with systemd and sshd, entry and exit through a jump host: `host bootstrap` → `plan` → `apply` → probe through the reality link → drift, `--diff`, `--adopt`; TUI — all screens, edits with commits, forms with live validation, `p` and `r` streaming. Without AWG (the kernel module cannot be built in a container), without ws/hy2 and certificates.
+Two privileged Debian 13 containers with systemd and sshd, entry and exit through a jump host: `host bootstrap` → `plan` → `apply` → probe through the reality link → drift, `--diff`, `--adopt`. Without AWG (the kernel module cannot be built in a container), without ws/hy2 and certificates.
 
 Known caveats: the official sing-box build lacks `v2ray_api`, so per-user statistics need a build with that tag (the config uses `clash_api`); a reality exit without a domain is covered by `sni` + `handshake: host:port` in `protocols.yaml`, and if the cover site is unreachable directly the server answers "processed invalid connection".
 
@@ -187,7 +139,7 @@ Known caveats: the official sing-box build lacks `v2ray_api`, so per-user statis
 cargo test && cargo clippy --all-targets -- -D warnings && cargo fmt --check
 ```
 
-- [`src/`](src/) — the library crate: `state`, `validate`, `render/`, `plan`, `apply`, `bootstrap`, `metrics`, `ops`, `tui/`; `main.rs` is the clap front.
+- [`src/`](src/) — the library crate: `state`, `validate`, `render/`, `plan`, `apply`, `bootstrap`, `metrics`, `ops`; `main.rs` is the clap front.
 - [`tests/`](tests/) — tests on pure functions and render snapshots (`insta`) on the `basic` fixture.
-- [`openspec/`](openspec/) — specifications and archived changes for stages 1–6 (`add-state-model`, `add-render`, `add-apply`, `add-bootstrap`, `add-collect`, `add-tui`, `polish-tui`).
-- [`docs/design.md`](docs/design.md) — the design: topology, state model, applying, screens and key layout (Russian).
+- [`openspec/`](openspec/) — specifications and archived changes for stages 1–6 (`add-state-model`, `add-render`, `add-apply`, `add-bootstrap`, `add-collect`, plus `add-tui` and `polish-tui` for the TUI that has since been removed).
+- [`docs/design.md`](docs/design.md) — the design: topology, state model, applying, devices and keys (Russian).

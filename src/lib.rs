@@ -5,7 +5,6 @@ pub mod git;
 pub mod metrics;
 pub mod plan;
 pub mod ssh;
-pub mod tui;
 
 // The pure core lives in its own crate and is re-exported under the old paths,
 // so existing code keeps working without a mass path rewrite.

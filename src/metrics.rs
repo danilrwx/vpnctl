@@ -839,7 +839,7 @@ pub fn cell(e: Option<&Edge>) -> String {
     }
 }
 
-/// "edge x protocol" table as in `screens/05-topology.html`.
+/// "edge x protocol" table.
 pub fn table(edges: &[Edge]) -> String {
     let cols: Vec<&str> = Proto::ALL.iter().map(|p| p.name()).chain(["ssh"]).collect();
     let mut rows: Vec<(&str, &str)> = vec![];

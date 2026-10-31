@@ -16,15 +16,12 @@ struct Cli {
     /// Do not read secrets, use stubs instead (CI without an age key; validate/render only)
     #[arg(long, global = true)]
     stub_secrets: bool,
-    /// Without a subcommand the TUI starts
     #[command(subcommand)]
-    cmd: Option<Cmd>,
+    cmd: Cmd,
 }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Interactive interface (default)
-    Tui,
     /// Create an empty state and a git repository
     Init {
         /// age recipient for sops; without it secrets are written as plaintext
@@ -356,7 +353,7 @@ fn report(errors: &[String]) -> Result<()> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let cmd = cli.cmd.unwrap_or(Cmd::Tui);
+    let cmd = cli.cmd;
     if let Cmd::Init { age } = &cmd {
         let msg = ops::init(&cli.dir, age.as_deref())?;
         vpnctl::git::init(&cli.dir)?;
@@ -381,12 +378,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
     match &cmd {
-        Cmd::Tui => {
-            if cli.stub_secrets {
-                bail!("--stub-secrets is only valid for validate and render");
-            }
-            return vpnctl::tui::run(st);
-        }
         Cmd::Render { host, out, check } => {
             report(&vpnctl::validate::validate(&st))?;
             let r = if *check {
@@ -529,8 +520,7 @@ fn main() -> Result<()> {
         bail!("--stub-secrets is only valid for validate and render");
     }
     let msg = match cmd {
-        Cmd::Tui
-        | Cmd::Init { .. }
+        Cmd::Init { .. }
         | Cmd::Validate
         | Cmd::Render { .. }
         | Cmd::Plan { .. }

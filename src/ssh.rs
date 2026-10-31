@@ -88,7 +88,7 @@ impl Ssh {
         c
     }
 
-    /// Ready `ssh ... <cmd>` command for outside callers (TUI: journal, OS update).
+    /// Ready `ssh ... <cmd>` command for outside callers.
     pub fn command(&self, cmd: &str) -> Command {
         let mut c = self.cmd();
         c.arg(cmd);
