@@ -666,6 +666,14 @@ impl State {
                     serde_yaml::from_value(plain).context("parse secrets.sops.yaml (plaintext)")?;
             }
         }
+        // A migrated state has no secrets.sops.yaml: loading it here would silently leave the
+        // secrets empty, and the next save would write them back without every existing key.
+        if with_secrets && !sp.exists() && dir.join("secrets.age.yaml").exists() {
+            bail!(
+                "{} holds secrets.age.yaml: the state migrated to the age file, this core cannot read it. Use the Go tool, or restore secrets.sops.yaml from git history to work here",
+                dir.display()
+            );
+        }
         Ok(st)
     }
 
