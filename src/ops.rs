@@ -74,6 +74,7 @@ pub fn host_add(
     domain: Option<String>,
     via: Option<String>,
     engine: Engine,
+    awg: bool,
 ) -> Result<String> {
     if st.hosts.contains_key(name) {
         bail!("хост «{name}» уже есть");
@@ -98,7 +99,7 @@ pub fn host_add(
     let mut inb = BTreeMap::new();
     let mut hs = HostSecrets {
         reality: Some(secrets::reality()),
-        awg: Some(secrets::awg()),
+        awg: awg.then(secrets::awg),
         mtg_secret: None,
     };
     // вход: Reality прикрывается своим сайтом за Caddy (sni = домен); выход: внешним сайтом
@@ -114,17 +115,19 @@ pub fn host_add(
             subnets: None,
         },
     );
-    inb.insert(
-        Proto::Awg,
-        Inbound {
-            port: 51820,
-            enabled: true,
-            sni: None,
-            handshake: None,
-            path: None,
-            subnets: None,
-        },
-    );
+    if awg {
+        inb.insert(
+            Proto::Awg,
+            Inbound {
+                port: 51820,
+                enabled: true,
+                sni: None,
+                handshake: None,
+                path: None,
+                subnets: None,
+            },
+        );
+    }
     if role == Role::Entry {
         inb.insert(
             Proto::Ws,
@@ -159,10 +162,12 @@ pub fn host_add(
                 subnets: None,
             },
         );
-        inb.get_mut(&Proto::Awg).unwrap().subnets = Some(AwgSubnets {
-            split: "10.8.1.0/24".parse()?,
-            full: "10.8.2.0/24".parse()?,
-        });
+        if let Some(a) = inb.get_mut(&Proto::Awg) {
+            a.subnets = Some(AwgSubnets {
+                split: "10.8.1.0/24".parse()?,
+                full: "10.8.2.0/24".parse()?,
+            });
+        }
         hs.mtg_secret = Some(secrets::mtg(
             domain.as_deref().unwrap_or("www.microsoft.com"),
         ));

@@ -112,6 +112,9 @@ enum HostCmd {
         via: Option<String>,
         #[arg(long, default_value = "sing-box")]
         engine: String,
+        /// Добавить инбаунд AmneziaWG (по умолчанию не добавляется)
+        #[arg(long)]
+        awg: bool,
     },
     Rm {
         name: String,
@@ -549,6 +552,7 @@ fn main() -> Result<()> {
             domain,
             via,
             engine,
+            awg,
         }) => {
             let role = match role.as_str() {
                 "entry" => Role::Entry,
@@ -560,7 +564,7 @@ fn main() -> Result<()> {
                 "xray" => Engine::Xray,
                 _ => bail!("engine: sing-box или xray"),
             };
-            ops::host_add(&mut st, &name, role, &ssh, ip, domain, via, engine)?
+            ops::host_add(&mut st, &name, role, &ssh, ip, domain, via, engine, awg)?
         }
         Cmd::Host(HostCmd::Rm { name }) => ops::host_rm(&mut st, &name)?,
         Cmd::User(UserCmd::Add {

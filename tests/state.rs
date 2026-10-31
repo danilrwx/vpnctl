@@ -56,6 +56,7 @@ fn init_and_ops_commit() {
         Some("gw.test".into()),
         None,
         Engine::SingBox,
+        true,
     )
     .unwrap();
     assert_eq!(msg, "hosts: + ru (вход)");
@@ -68,6 +69,7 @@ fn init_and_ops_commit() {
         None,
         Some("ru".into()),
         Engine::SingBox,
+        true,
     )
     .unwrap();
     ops::link_add(&mut st, "ru", "fi", vec![], Policy::Auto, None).unwrap();
