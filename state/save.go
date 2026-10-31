@@ -26,3 +26,12 @@ func SaveSecrets(dir string, sec Secrets) error {
 	}
 	return ageio.Write(filepath.Join(dir, "secrets.age.yaml"), KeyPath(), b)
 }
+
+// SaveLinks writes links.yaml.
+func SaveLinks(dir string, links []Link) error {
+	b, err := yaml.Marshal(map[string]any{"links": links})
+	if err != nil {
+		return fmt.Errorf("marshal links: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "links.yaml"), b, 0o644)
+}
