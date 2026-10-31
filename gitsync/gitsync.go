@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -101,4 +102,56 @@ func (r *Repo) Pull() error {
 		return fmt.Errorf("pull: %w", err)
 	}
 	return nil
+}
+
+// Branch is the current branch name.
+func (r *Repo) Branch() (string, error) {
+	h, err := r.r.Head()
+	if err != nil {
+		return "", fmt.Errorf("head: %w", err)
+	}
+	return h.Name().Short(), nil
+}
+
+// Tag marks HEAD: applied/<timestamp> records what the hosts run.
+func (r *Repo) Tag(name string) error {
+	h, err := r.r.Head()
+	if err != nil {
+		return fmt.Errorf("head: %w", err)
+	}
+	if _, err := r.r.CreateTag(name, h.Hash(), nil); err != nil {
+		return fmt.Errorf("tag %s: %w", name, err)
+	}
+	return nil
+}
+
+// FilesAt is the file tree of a commit: the state as it was, for drift detection.
+func (r *Repo) FilesAt(rev string) (map[string][]byte, error) {
+	hash, err := r.r.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", rev, err)
+	}
+	commit, err := r.r.CommitObject(*hash)
+	if err != nil {
+		return nil, fmt.Errorf("commit %s: %w", rev, err)
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("tree %s: %w", rev, err)
+	}
+	files := map[string][]byte{}
+	it := tree.Files()
+	defer it.Close()
+	err = it.ForEach(func(f *object.File) error {
+		body, err := f.Contents()
+		if err != nil {
+			return err
+		}
+		files[f.Name] = []byte(body)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk %s: %w", rev, err)
+	}
+	return files, nil
 }
