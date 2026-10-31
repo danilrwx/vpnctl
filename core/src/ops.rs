@@ -12,7 +12,7 @@ pub const SOPS_RULES: &str =
     "creation_rules:\n  - path_regex: secrets\\.sops\\.yaml$\n    age: {age}\n";
 
 /// Пустое состояние + git-репозиторий. С `age` — `.sops.yaml`, иначе секреты открытым текстом.
-pub fn init(dir: &Path, age: Option<&str>) -> Result<()> {
+pub fn init(dir: &Path, age: Option<&str>) -> Result<String> {
     if dir.join("hosts.yaml").exists() {
         bail!("{} уже содержит состояние", dir.display());
     }
@@ -57,8 +57,8 @@ pub fn init(dir: &Path, age: Option<&str>) -> Result<()> {
     }
     st.save()?;
     std::fs::write(dir.join(".gitignore"), "/out\n/metrics.sqlite\n")?;
-    crate::git::init(dir)?;
-    crate::git::commit(dir, "init: пустое состояние vpnctl")
+    // git — забота вызывающего: ядро не запускает внешних процессов
+    Ok("init: пустое состояние vpnctl".to_string())
 }
 
 fn parse_ip(ssh: &str) -> Option<IpAddr> {

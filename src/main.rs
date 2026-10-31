@@ -362,7 +362,9 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let cmd = cli.cmd.unwrap_or(Cmd::Tui);
     if let Cmd::Init { age } = &cmd {
-        ops::init(&cli.dir, age.as_deref())?;
+        let msg = ops::init(&cli.dir, age.as_deref())?;
+        vpnctl::git::init(&cli.dir)?;
+        vpnctl::git::commit(&cli.dir, &msg)?;
         println!("состояние создано в {}", cli.dir.display());
         return Ok(());
     }

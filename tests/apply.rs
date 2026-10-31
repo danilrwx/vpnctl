@@ -96,7 +96,9 @@ fn install_and_rollback_scripts() {
 #[test]
 fn guards_need_clean_main() {
     let tmp = tempfile::tempdir().unwrap();
-    vpnctl::ops::init(tmp.path(), None).unwrap();
+    let msg = vpnctl::ops::init(tmp.path(), None).unwrap();
+    vpnctl::git::init(tmp.path()).unwrap();
+    vpnctl::git::commit(tmp.path(), &msg).unwrap();
     let st = State::load(tmp.path()).unwrap();
     assert!(apply::guards(&st, &apply::Opts::default()).is_ok());
     std::fs::write(tmp.path().join("users.yaml"), "users: {}\n# правка\n").unwrap();

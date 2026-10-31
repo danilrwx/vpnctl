@@ -3,11 +3,10 @@ pub mod apply;
 pub mod bootstrap;
 pub mod git;
 pub mod metrics;
-pub mod ops;
 pub mod plan;
-pub mod render;
-pub mod secrets;
 pub mod ssh;
-pub mod state;
 pub mod tui;
-pub mod validate;
+
+// Чистое ядро вынесено в отдельный крейт и реэкспортируется под прежними путями,
+// чтобы существующий код продолжал работать без массовой правки путей.
+pub use vpnctl_core::{ops, render, secrets, state, validate};

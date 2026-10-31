@@ -45,7 +45,9 @@ fn save_load_round_trip() {
 #[test]
 fn init_and_ops_commit() {
     let tmp = tempfile::tempdir().unwrap();
-    ops::init(tmp.path(), None).unwrap();
+    let init_msg = ops::init(tmp.path(), None).unwrap();
+    vpnctl::git::init(tmp.path()).unwrap();
+    vpnctl::git::commit(tmp.path(), &init_msg).unwrap();
     let mut st = State::load(tmp.path()).unwrap();
     let msg = ops::host_add(
         &mut st,
