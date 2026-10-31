@@ -1775,24 +1775,46 @@ pub fn share_message(st: &State, name: &str) -> Result<String> {
             "2) Добавь подписку (одна ссылка, по ней подтянутся профили):\n   {url}\n\n   Во всех клиентах это «+» → «Импорт из буфера обмена».\n   Karing: плюс на главном экране → «Импорт».\n\n"
         ));
     }
+    // прямые ссылки: нужны Podkop, роутерам и клиентам без поддержки подписок,
+    // а также когда домен у оператора резолвится в заглушку — адрес сервера здесь IP
     if let Ok(links) = subs::links(st, &entry, name, u, mode)
-        && let Some(direct) = links.iter().find(|l| l.contains("security=reality"))
+        && !links.is_empty()
     {
-        let direct = direct.replace(&format!("@{domain}:"), &format!("@{ip}:"));
-        out.push_str("Если подписка не загружается (у части операторов домен блокируется),\nдобавь профиль вручную — вставь эту ссылку в клиент как есть:\n\n");
-        out.push_str(&direct);
-        out.push_str("\n\n");
+        out.push_str("3) Ссылки без подписки — для Podkop, роутеров и клиентов без подписок.\n   Вставляются как есть:\n\n");
+        for link in links {
+            let mut d = link.replace(&format!("@{domain}:"), &format!("@{ip}:"));
+            let label = if d.contains("security=reality") {
+                "vpn-reality"
+            } else if d.contains("type=ws") {
+                "vpn-ws"
+            } else {
+                "vpn"
+            };
+            if let Some(pos) = d.find('#') {
+                d.truncate(pos);
+            }
+            d.push_str(&format!("#{label}"));
+            out.push_str(&d);
+            out.push_str("\n\n");
+        }
     }
+    // адрес выхода — только если он IPv4: клиент через туннель увидит именно IPv4,
+    // а у выхода в state может стоять IPv6 (он нужен для доступа по SSH)
     let exit_ip = st
         .links
         .iter()
         .find(|l| l.from == entry)
         .and_then(|l| st.hosts.get(&l.to))
-        .map(|x| x.ip.to_string())
-        .unwrap_or_else(|| ip.clone());
-    out.push_str(&format!(
-        "Проверка: после включения открой https://ifconfig.me — должен показать\n{exit_ip} (Нидерланды).\n"
-    ));
+        .map(|x| x.ip)
+        .filter(|i| i.is_ipv4());
+    match exit_ip {
+        Some(i) => out.push_str(&format!(
+            "Проверка: после включения открой https://ifconfig.me — должен показать\n{i}.\n"
+        )),
+        None => out.push_str(
+            "Проверка: после включения открой https://ifconfig.me — IP должен отличаться\nот твоего обычного.\n",
+        ),
+    }
     if u.tg
         && let Some(t) = subs::tg_link(st, &entry)
     {

@@ -581,8 +581,51 @@ impl App {
         });
     }
 
-    /// OSC 52: put text into the terminal clipboard.
+    /// Системный буфер: wl-copy (Wayland), xclip (X11), pbcopy (macOS), clip.exe (WSL).
+    /// Процесс не ждём: xclip и wl-copy форкаются и дальше сами держат содержимое,
+    /// а короткая проверка ловит мгновенные падения (нет дисплея и т.п.).
+    fn clipboard_tool(s: &str) -> Option<&'static str> {
+        use std::io::Write;
+        let mut cands: Vec<(&'static str, &'static [&'static str])> = vec![];
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            cands.push(("wl-copy", &[]));
+        }
+        if std::env::var_os("DISPLAY").is_some() {
+            cands.push(("xclip", &["-selection", "clipboard"]));
+        }
+        cands.push(("pbcopy", &[]));
+        cands.push(("clip.exe", &[]));
+        for (bin, args) in cands {
+            let mut child = match std::process::Command::new(bin)
+                .args(args)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            if let Some(mut si) = child.stdin.take() {
+                si.write_all(s.as_bytes()).ok();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            if let Ok(Some(st)) = child.try_wait()
+                && !st.success()
+            {
+                continue;
+            }
+            return Some(bin);
+        }
+        None
+    }
+
+    /// Системный буфер, иначе OSC 52 в терминал.
     fn copy(&mut self, s: &str) {
+        if let Some(bin) = Self::clipboard_tool(s) {
+            self.msg = format!("copied via {bin}");
+            return;
+        }
         use base64::Engine as _;
         use std::io::Write;
         let b = base64::engine::general_purpose::STANDARD.encode(s);

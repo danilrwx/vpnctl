@@ -824,6 +824,15 @@ fn share_message_has_subscription_and_fallbacks() {
         "резервная ссылка идёт на IP, а не на домен: {m}"
     );
     assert!(m.contains("sni=gw.example.ru"), "SNI остаётся доменом: {m}");
+    assert_eq!(
+        m.matches("vless://").count(),
+        2,
+        "обе прямые ссылки (reality и ws) для Podkop: {m}"
+    );
+    assert!(
+        m.contains("#vpn-reality") && m.contains("#vpn-ws"),
+        "метки профилей: {m}"
+    );
     assert!(m.contains("ifconfig.me"), "проверка: {m}");
     assert!(
         m.contains("tg://proxy?server=5.6.7.8"),
