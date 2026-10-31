@@ -112,32 +112,59 @@ func UserLink(dir, name string) error {
 	return nil
 }
 
+// MessageOpts is what the message command asks for.
+type MessageOpts struct {
+	Dir     string
+	Name    string
+	Format  string
+	Mode    string
+	Lang    string
+	IP      bool
+	NoLinks bool
+	NoTG    bool
+}
+
 // UserMessage prints the ready-to-forward message of a user.
-func UserMessage(dir, name, format, mode string, ip, noLinks, noTG bool) error {
-	st, err := state.Load(dir)
+func UserMessage(o MessageOpts) error {
+	st, err := state.Load(o.Dir)
 	if err != nil {
 		return err
 	}
 	markdown := false
-	switch format {
+	switch o.Format {
 	case "", "text":
 	case "markdown", "md":
 		markdown = true
 	default:
-		return fmt.Errorf("unknown format %q: expected text or markdown", format)
+		return fmt.Errorf("unknown format %q: expected text or markdown", o.Format)
 	}
-	msg, err := render.Message(st, name, render.MessageOptions{
+	lang := o.Lang
+	if lang == "" {
+		lang = SystemLang()
+	}
+	msg, err := render.Message(st, o.Name, render.MessageOptions{
+		Lang:     lang,
 		Markdown: markdown,
-		IP:       ip,
-		NoLinks:  noLinks,
-		NoTG:     noTG,
-		Mode:     mode,
+		IP:       o.IP,
+		NoLinks:  o.NoLinks,
+		NoTG:     o.NoTG,
+		Mode:     o.Mode,
 	})
 	if err != nil {
 		return err
 	}
 	fmt.Print(msg)
 	return nil
+}
+
+// SystemLang is the language of the environment: ru_RU.UTF-8 gives ru.
+func SystemLang() string {
+	for _, k := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			return render.NormalizeLang(v)
+		}
+	}
+	return "en"
 }
 
 // UserConfig writes or prints the client profile of a user: the same bytes the

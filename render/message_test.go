@@ -37,7 +37,7 @@ func messageState() *state.State {
 }
 
 func TestMessageUsesDomain(t *testing.T) {
-	msg, err := Message(messageState(), "olga", MessageOptions{})
+	msg, err := Message(messageState(), "olga", MessageOptions{Lang: "ru"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestMessageUsesDomain(t *testing.T) {
 }
 
 func TestMessageIPModeKeepsNames(t *testing.T) {
-	msg, err := Message(messageState(), "olga", MessageOptions{IP: true, Mode: "split"})
+	msg, err := Message(messageState(), "olga", MessageOptions{Lang: "ru", IP: true, Mode: "split"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestMessageIPModeKeepsNames(t *testing.T) {
 }
 
 func TestMessageMarkdown(t *testing.T) {
-	msg, err := Message(messageState(), "olga", MessageOptions{Markdown: true, NoLinks: true, NoTG: true})
+	msg, err := Message(messageState(), "olga", MessageOptions{Lang: "ru", Markdown: true, NoLinks: true, NoTG: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,13 +94,45 @@ func TestMessageMarkdown(t *testing.T) {
 }
 
 func TestMessageUnknownMode(t *testing.T) {
-	if _, err := Message(messageState(), "olga", MessageOptions{Mode: "full-only"}); err == nil {
+	if _, err := Message(messageState(), "olga", MessageOptions{Lang: "ru", Mode: "full-only"}); err == nil {
 		t.Fatal("an unknown mode was accepted")
 	}
 }
 
 func TestMessageUnknownUser(t *testing.T) {
-	if _, err := Message(messageState(), "ghost", MessageOptions{}); err == nil {
+	if _, err := Message(messageState(), "ghost", MessageOptions{Lang: "ru"}); err == nil {
 		t.Fatal("an unknown user was accepted")
+	}
+}
+
+func TestMessageLanguage(t *testing.T) {
+	msg, err := Message(messageState(), "olga", MessageOptions{Lang: "en", NoLinks: true, NoTG: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"1) Client", "2) Subscription", "Check: after enabling"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("missing %q in:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "Приложение") {
+		t.Errorf("russian text leaked into the english message:\n%s", msg)
+	}
+}
+
+func TestNormalizeLang(t *testing.T) {
+	cases := map[string]string{
+		"ru_RU.UTF-8": "ru",
+		"ru-RU":       "ru",
+		"en_US.UTF-8": "en",
+		"EN":          "en",
+		"de_DE.UTF-8": "en",
+		"":            "en",
+		"  ru  ":      "ru",
+	}
+	for in, want := range cases {
+		if got := NormalizeLang(in); got != want {
+			t.Errorf("%q: got %q, want %q", in, got, want)
+		}
 	}
 }

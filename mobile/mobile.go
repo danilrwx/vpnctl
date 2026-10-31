@@ -110,8 +110,13 @@ func (a *App) Links(user string) ([]Link, error) {
 	return out, nil
 }
 
-// Share returns the ready-to-forward message of a user.
+// Share returns the ready-to-forward message of a user, in the system language.
 func (a *App) Share(user string) (string, error) { return render.Share(a.st, user) }
+
+// Message returns the message for a user in lang (ru or en): text or markdown.
+func (a *App) Message(user, lang string, markdown bool) (string, error) {
+	return render.Message(a.st, user, render.MessageOptions{Lang: lang, Markdown: markdown})
+}
 
 // AddUser creates a user, writes the state and commits it.
 func (a *App) AddUser(name string, modes, protocols []string, tg bool) (string, error) {
