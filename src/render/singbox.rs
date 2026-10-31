@@ -419,7 +419,9 @@ pub fn config(st: &State, host: &str) -> Result<String> {
         }
         json!({ "servers": servers, "rules": drules, "final": "dns-remote", "strategy": "prefer_ipv4" })
     } else {
-        json!({ "servers": [{ "type": "udp", "tag": "dns-direct-1", "server": "1.1.1.1" }], "final": "dns-direct-1" })
+        // Выходу не нужен публичный резолвер: у хостера UDP/53 наружу часто закрыт, а REALITY-серверу
+        // обязательно резолвить свой handshake-домен. Системный резолвер работает через DHCP-настройки.
+        json!({ "servers": [{ "type": "local", "tag": "dns-direct-1" }], "final": "dns-direct-1" })
     };
 
     let cfg = json!({

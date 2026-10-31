@@ -7,9 +7,8 @@ expression: body
     "final": "dns-direct-1",
     "servers": [
       {
-        "server": "1.1.1.1",
         "tag": "dns-direct-1",
-        "type": "udp"
+        "type": "local"
       }
     ]
   },

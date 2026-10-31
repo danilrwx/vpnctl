@@ -262,6 +262,9 @@ fn preflight(
             Proto::Awg => format!(
                 "ip link show awg{i} >/dev/null 2>&1 || exit 0; h=$(awg show awg{i} latest-handshakes 2>/dev/null | awk '{{print $2}}' | head -1); [ -n \"$h\" ] && [ $(( $(date +%s) - h )) -lt 180 ]"
             ),
+            // hysteria2 — UDP: TCP-коннект к его порту не пройдёт никогда. Живость линка
+            // проверит проба цепочки после подмены конфигов.
+            Proto::Hy2 => "true".into(),
             _ => format!(
                 "timeout 5 bash -c 'exec 3<>/dev/tcp/{}/{port}' 2>/dev/null",
                 to.ip
