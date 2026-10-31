@@ -5,6 +5,7 @@ package ops
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/danilrwx/vpnctl-go/secrets"
 	"github.com/danilrwx/vpnctl-go/state"
@@ -51,4 +52,53 @@ func SortedUsers(st *state.State) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// UserPatch describes what to change in UserEdit; nil fields stay as they are.
+type UserPatch struct {
+	Modes     []string
+	Protocols []string
+	TG        *bool
+	Expires   *string
+	Note      *string
+}
+
+// UserEdit applies the patch and returns the commit message.
+func UserEdit(st *state.State, name string, p UserPatch) (string, error) {
+	u, ok := st.Users[name]
+	if !ok {
+		return "", fmt.Errorf("user %q is not described", name)
+	}
+	var what []string
+	if p.Modes != nil {
+		if len(p.Modes) == 0 {
+			return "", fmt.Errorf("user %q: no modes", name)
+		}
+		u.Modes = p.Modes
+		what = append(what, "modes")
+	}
+	if p.Protocols != nil {
+		if len(p.Protocols) == 0 {
+			return "", fmt.Errorf("user %q: no protocols", name)
+		}
+		u.Protocols = p.Protocols
+		what = append(what, "protocols")
+	}
+	if p.TG != nil {
+		u.TG = *p.TG
+		what = append(what, "tg")
+	}
+	if p.Expires != nil {
+		u.Expires = *p.Expires
+		what = append(what, "expiry")
+	}
+	if p.Note != nil {
+		u.Note = *p.Note
+		what = append(what, "note")
+	}
+	if len(what) == 0 {
+		return "", fmt.Errorf("nothing to change")
+	}
+	st.Users[name] = u
+	return fmt.Sprintf("users: %s: %s", name, strings.Join(what, ", ")), nil
 }
