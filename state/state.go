@@ -3,7 +3,9 @@
 package state
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -340,7 +342,7 @@ func Load(dir string) (*State, error) {
 	for _, name := range sortedKeys(st.Hosts) {
 		var r Routing
 		err := read(dir, filepath.Join("routing", name+".yaml"), &r)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
 		st.Routing[name] = r
@@ -450,6 +452,27 @@ func (s *State) EntryOf(u User) (string, bool) {
 		return only, true
 	}
 	return "", false
+}
+
+// Link returns the link from one host to another.
+func (s *State) Link(from, to string) (*Link, bool) {
+	for i := range s.Links {
+		if s.Links[i].From == from && s.Links[i].To == to {
+			return &s.Links[i], true
+		}
+	}
+	return nil, false
+}
+
+// LinksFrom counts the links leaving the host.
+func (s *State) LinksFrom(from string) int {
+	n := 0
+	for _, l := range s.Links {
+		if l.From == from {
+			n++
+		}
+	}
+	return n
 }
 
 // Key is the secrets key of a link.
