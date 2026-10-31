@@ -93,6 +93,7 @@ func UserLink(dir, name string) error {
 	if len(u.Modes) > 0 {
 		mode = u.Modes[0]
 	}
+	fmt.Printf("domain: %s\n", st.Hosts[entry].Domain)
 	sub, err := render.SubURL(st, entry, name, mode)
 	if err != nil {
 		return err
@@ -111,13 +112,27 @@ func UserLink(dir, name string) error {
 	return nil
 }
 
-// UserShare prints the ready-to-forward message of a user.
-func UserShare(dir, name string) error {
+// UserMessage prints the ready-to-forward message of a user.
+func UserMessage(dir, name, format, mode string, ip, noLinks, noTG bool) error {
 	st, err := state.Load(dir)
 	if err != nil {
 		return err
 	}
-	msg, err := render.Share(st, name)
+	markdown := false
+	switch format {
+	case "", "text":
+	case "markdown", "md":
+		markdown = true
+	default:
+		return fmt.Errorf("unknown format %q: expected text or markdown", format)
+	}
+	msg, err := render.Message(st, name, render.MessageOptions{
+		Markdown: markdown,
+		IP:       ip,
+		NoLinks:  noLinks,
+		NoTG:     noTG,
+		Mode:     mode,
+	})
 	if err != nil {
 		return err
 	}
