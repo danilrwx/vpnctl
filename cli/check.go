@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
@@ -10,22 +9,15 @@ import (
 )
 
 // Check validates the state statically.
-func Check(args []string) error {
-	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	dir := fs.String("dir", ".", "state directory")
-	stub := fs.Bool("stub", false, "deterministic secret stubs instead of the age key")
-	warn := fs.Bool("warnings", false, "print warnings too")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	st, err := state.Load(*dir)
+func Check(dir string, stub, warnings bool) error {
+	st, err := state.Load(dir)
 	if err != nil {
 		return err
 	}
-	if *stub {
+	if stub {
 		st.FillStubSecrets()
 	}
-	if *warn {
+	if warnings {
 		for _, w := range validate.Warnings(st) {
 			fmt.Println("  !", w)
 		}
