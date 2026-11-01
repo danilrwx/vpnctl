@@ -23,6 +23,24 @@ object Core {
         }
     }
 
+    /**
+     * ageKeyFile unwraps the identity into a file the Go side can read. It has
+     * to exist as a file: age takes a path, not bytes, and the app keeps it
+     * owner-only. It is written on every launch and lives as long as the process.
+     */
+    fun ageKeyFile(ctx: Context): String? {
+        val secret = Vault(ctx.filesDir).get("age.key") ?: return null
+
+        val file = File(ctx.filesDir, "age.key.txt")
+        file.writeText("# vpnctl device identity\n$secret\n")
+        file.setReadable(false, false)
+        file.setReadable(true, true)
+        file.setWritable(false, false)
+        file.setWritable(true, true)
+
+        return file.absolutePath
+    }
+
     /** openBundled copies the fixture out of assets and opens it. */
     fun openBundled(ctx: Context): App? {
         val dir = File(ctx.filesDir, "state")
@@ -30,7 +48,7 @@ object Core {
             copyAssets(ctx, "state", dir)
         }
 
-        return open(dir.absolutePath, "")
+        return open(dir.absolutePath, ageKeyFile(ctx) ?: "")
     }
 
     private fun copyAssets(ctx: Context, from: String, to: File) {

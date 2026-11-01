@@ -6,6 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"strings"
+
+	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 )
 
 // Signer is what the device provides and Go cannot: the private key lives in the
@@ -15,6 +18,9 @@ import (
 type Signer interface {
 	// PublicKeyPEM is PKIX PEM, the same shape /etc/vpnctl/agents/<name>.pub has.
 	PublicKeyPEM() (string, error)
+	// PublicKeyDER is the same key without the PEM envelope, which is what the
+	// SSH adapter wants.
+	PublicKeyDER() ([]byte, error)
 	// Sign returns ASN.1 DER over the SHA-256 of message, the way ECDSA signs.
 	Sign(message []byte) ([]byte, error)
 }
@@ -83,3 +89,46 @@ func verifyWith(signature, message []byte) error {
 
 	return nil
 }
+
+// SyncState clones the state repository with the device's own key: git talks
+// SSH, the signature comes from the Keystore, and no key file is ever written.
+// The public key must already be a deploy key on the repository.
+func SyncState(url, dir string) (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("no signer: the device cannot authenticate to git")
+	}
+
+	sshSigner, err := gitsync.SSHSigner(vpnctlSigner{signer})
+	if err != nil {
+		return "", err
+	}
+
+	repo, err := gitsync.Clone(url, dir, gitsync.GitAuth(gitUser(url), sshSigner))
+	if err != nil {
+		return "", err
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+
+	return head, nil
+}
+
+// gitUser is the account part of git@host:path, "git" for GitHub and GitLab.
+func gitUser(url string) string {
+	if at := strings.IndexByte(url, '@'); at > 0 {
+		return url[:at]
+	}
+
+	return "git"
+}
+
+// vpnctlSigner adapts the gomobile Signer to what gitsync expects: the same two
+// calls, PKIX DER out.
+type vpnctlSigner struct{ s Signer }
+
+func (v vpnctlSigner) Public() ([]byte, error) { return v.s.PublicKeyDER() }
+
+func (v vpnctlSigner) Sign(digest []byte) ([]byte, error) { return v.s.Sign(digest) }

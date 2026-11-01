@@ -115,3 +115,55 @@ func TestPushFetchAncestry(t *testing.T) {
 		t.Fatalf("a committed worktree must be clean: %v %v", clean, err)
 	}
 }
+
+// TestCloneWithAuth: a phone has no key file, so the clone takes an auth method
+// from the Keystore signer. The shape is the same as `git clone` on a laptop.
+func TestCloneWithAuth(t *testing.T) {
+	root := t.TempDir()
+	bare := filepath.Join(root, "origin.git")
+
+	if _, err := git.PlainInitWithOptions(bare, &git.PlainInitOptions{
+		Bare:        true,
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	src := filepath.Join(root, "src")
+
+	r, err := Init(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.AddRemote(bare); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(src, "hosts.yaml"), []byte("hosts: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Commit("state: a host"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Push(); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(root, "dst")
+
+	cloned, err := Clone(bare, dst, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "hosts.yaml")); err != nil {
+		t.Fatalf("the clone is empty: %v", err)
+	}
+
+	if _, err := cloned.Head(); err != nil {
+		t.Fatalf("head: %v", err)
+	}
+}

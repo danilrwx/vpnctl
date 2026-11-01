@@ -27,6 +27,10 @@ func (k *keystoreLike) PublicKeyPEM() (string, error) {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})), nil
 }
 
+func (k *keystoreLike) PublicKeyDER() ([]byte, error) {
+	return x509.MarshalPKIXPublicKey(&k.key.PublicKey)
+}
+
 func (k *keystoreLike) Sign(digest []byte) ([]byte, error) {
 	return ecdsa.SignASN1(rand.Reader, k.key, digest)
 }

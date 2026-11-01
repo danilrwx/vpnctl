@@ -320,3 +320,20 @@ func (r *Repo) PushRefs(auth transport.AuthMethod, force bool, refs ...config.Re
 
 	return nil
 }
+
+// Clone brings the state down to a device that has nothing yet. auth may be nil
+// for a local or already-trusted remote; a phone passes the Keystore signer's
+// method, so no key file ever exists on disk.
+func Clone(url, dir string, auth transport.AuthMethod) (*Repo, error) {
+	opts := &git.CloneOptions{URL: url}
+	if auth != nil {
+		opts.Auth = auth
+	}
+
+	r, err := git.PlainClone(dir, false, opts)
+	if err != nil {
+		return nil, fmt.Errorf("clone %s: %w", url, err)
+	}
+
+	return &Repo{r: r, dir: dir}, nil
+}

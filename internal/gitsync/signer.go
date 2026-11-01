@@ -10,6 +10,8 @@ import (
 	"io"
 	"math/big"
 
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	gogitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -27,12 +29,32 @@ type KeystoreSigner interface {
 // AuthMethod turns a Keystore signer into what go-git and ssh want, so a phone
 // can push to the state repository without a key file on disk.
 func AuthMethod(s KeystoreSigner) (ssh.AuthMethod, error) {
-	signer, err := newSSHSigner(s)
+	signer, err := SSHSigner(s)
 	if err != nil {
 		return nil, err
 	}
 
 	return ssh.PublicKeys(signer), nil
+}
+
+// SSHSigner is the same adapter as AuthMethod, exposed as the signer go-git's
+// transport wants to hold directly.
+func SSHSigner(s KeystoreSigner) (ssh.Signer, error) {
+	return newSSHSigner(s)
+}
+
+// GitAuth is what go-git needs: its own auth type around an ssh signer, with a
+// user name taken from the remote URL (git@github.com:…).
+func GitAuth(user string, s ssh.Signer) transport.AuthMethod {
+	return &gogitssh.PublicKeys{
+		User:   user,
+		Signer: s,
+		HostKeyCallbackHelper: gogitssh.HostKeyCallbackHelper{
+			// the remote is a known git host; pinning it would need a known_hosts
+			// file the phone does not have
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		},
+	}
 }
 
 // sshSigner is the adapter: ssh wants a Signer, the device gives two calls.
