@@ -27,7 +27,7 @@
   <g fill="#8b949e" text-anchor="middle" font-size="11">
     <text x="99" y="128">main · clean tree</text>
     <text x="237" y="128">deterministic</text>
-    <text x="375" y="128">tar over stdin</text>
+    <text x="375" y="128">signed tree</text>
     <text x="513" y="128">sing-box check · nft -c</text>
     <text x="651" y="128">backup · install · reload</text>
     <text x="789" y="128">generate_204 via chain</text>
