@@ -1,6 +1,7 @@
 package dev.vpnctl.app
 
 import androidx.compose.runtime.remember
+import mobile.App
 import mobile.Mobile
 
 /**
@@ -9,9 +10,9 @@ import mobile.Mobile
  * given at build time and says so when there is none.
  */
 object Core {
-    private var app: Mobile.App? = null
+    private var app: App? = null
 
-    fun open(dir: String, ageKeyPath: String): Mobile.App? {
+    fun open(dir: String, ageKeyPath: String): App? {
         app?.let { return it }
         return try {
             Mobile.open(dir, ageKeyPath).also { app = it }
@@ -20,8 +21,8 @@ object Core {
         }
     }
 
-    fun current(): Mobile.App? = app
+    fun current(): App? = app
 }
 
 @androidx.compose.runtime.Composable
-fun rememberApp(): Mobile.App? = remember { Core.current() }
+fun rememberApp(): App? = remember { Core.current() }

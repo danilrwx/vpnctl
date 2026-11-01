@@ -7,3 +7,4 @@ app/app/libs/*-sources.jar
 app/.gradle/
 app/build/
 app/app/build/
+app/local.properties

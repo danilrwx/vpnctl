@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -42,9 +43,11 @@ fun parseUsers(json: String): List<UserRow> = try {
     val arr = JSONArray(json)
     (0 until arr.length()).map { i ->
         val o = arr.getJSONObject(i)
+        val modes = o.getJSONArray("modes")
         UserRow(
             name = o.getString("name"),
-            modes = o.getJSONArray("modes").joinToString("/"),
+            // JSONArray is not an Iterable: the list is built by index
+            modes = (0 until modes.length()).joinToString("/") { modes.getString(it) },
             enabled = o.getBoolean("enabled"),
         )
     }

@@ -35,8 +35,10 @@ android {
 }
 
 dependencies {
-    // the Go core, built by scripts/build-aar.sh: gomobile bind -target=android
-    implementation(files("libs/vpnctl.aar"))
+    // the Go core, built by scripts/build-aar.sh: gomobile bind -target=android.
+    // A flatDir dependency, not files(): a local .aar added as files() does not
+    // put its classes on the compile classpath.
+    implementation(mapOf("name" to "vpnctl", "ext" to "aar"))
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.material3:material3")
