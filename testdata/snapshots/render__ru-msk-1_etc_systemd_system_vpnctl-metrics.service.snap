@@ -1,0 +1,12 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1
+[Unit]
+Description=vpnctl host metrics (ru-msk-1)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /etc/vpnctl/metrics.sh
+Nice=10

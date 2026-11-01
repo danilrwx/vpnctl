@@ -242,6 +242,23 @@ func main() {
 				},
 			},
 			{
+				Name:      "metrics",
+				Usage:     "host metrics collected by the timer on the entry",
+				ArgsUsage: "<host>",
+				Flags: []ucli.Flag{
+					dirFlag(), jsonFlag(),
+					&ucli.IntFlag{Name: "last", Value: 24, Usage: "how many samples to show"},
+				},
+				Action: func(_ context.Context, c *ucli.Command) error {
+					cli.SetJSON(c.Bool("json"))
+					name := c.Args().First()
+					if name == "" {
+						return errors.New("the host name is required")
+					}
+					return cli.Metrics(c.String("dir"), name, c.Int("last"))
+				},
+			},
+			{
 				Name:  "user",
 				Usage: "create, remove, list and hand out users",
 				Commands: []*ucli.Command{

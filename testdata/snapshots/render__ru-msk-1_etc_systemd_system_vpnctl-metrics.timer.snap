@@ -1,0 +1,16 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1
+[Unit]
+Description=vpnctl host metrics timer (ru-msk-1)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=vpnctl-metrics.service
+
+[Install]
+WantedBy=timers.target

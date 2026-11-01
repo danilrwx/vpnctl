@@ -173,6 +173,10 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 		f["/etc/systemd/system/vpnctl-probe.service"] = probeUnit(name)
 		f["/etc/systemd/system/vpnctl-probe.timer"] = probeTimer(name)
 		f["/etc/vpnctl/alerts.env"] = alertsEnv(st)
+		// history lives on the entry: the device reads it from there
+		f["/etc/vpnctl/metrics.sh"] = metricsScript(name)
+		f["/etc/systemd/system/vpnctl-metrics.service"] = metricsUnit(name)
+		f["/etc/systemd/system/vpnctl-metrics.timer"] = metricsTimer(name)
 		if mtg, ok := inb["mtg"]; ok {
 			if err := emit("/etc/mtg/config.toml", "mtg.toml.j2", map[string]any{
 				"host": name, "secret": hs.MTG, "port": mtg.Port, "socks_port": ProbePort,

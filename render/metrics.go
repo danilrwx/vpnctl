@@ -1,0 +1,55 @@
+package render
+
+import "fmt"
+
+// metricsScript appends one sample to /var/lib/vpnctl/metrics/<month>.jsonl.
+// Everything is read from /proc: no packages, no agents, no network.
+func metricsScript(host string) string {
+	return fmt.Sprintf(`#!/bin/sh
+# vpnctl · host metrics on %s · every 5 minutes by vpnctl-metrics.timer
+set -u
+dir=/var/lib/vpnctl/metrics
+mkdir -p "$dir"
+file="$dir/$(date -u +%%Y-%%m).jsonl"
+load=$(cut -d' ' -f1 /proc/loadavg)
+mem_total=$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo)
+mem_avail=$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo)
+disk=$(df -P / | awk 'NR==2{gsub("%%","",$5); print $5}')
+uptime=$(cut -d. -f1 /proc/uptime)
+conns=$(ss -H state established 2>/dev/null | wc -l)
+reboot=0
+[ -e /run/reboot-required ] && reboot=1
+printf '{"ts":%%s,"load1":%%s,"mem_used_mb":%%s,"mem_total_mb":%%s,"disk_pct":%%s,"uptime_s":%%s,"conns":%%s,"reboot":%%s}\n' \
+  "$(date +%%s)" "$load" "$((mem_total - mem_avail))" "$mem_total" "$disk" "$uptime" "$conns" "$reboot" >> "$file"
+# retention: two months
+ls -1 "$dir"/*.jsonl 2>/dev/null | sort | head -n -2 | xargs -r rm -f
+`, host)
+}
+
+func metricsUnit(host string) string {
+	return fmt.Sprintf(`# vpnctl · %s
+[Unit]
+Description=vpnctl host metrics (%s)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /etc/vpnctl/metrics.sh
+Nice=10
+`, host, host)
+}
+
+func metricsTimer(host string) string {
+	return fmt.Sprintf(`# vpnctl · %s
+[Unit]
+Description=vpnctl host metrics timer (%s)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=vpnctl-metrics.service
+
+[Install]
+WantedBy=timers.target
+`, host, host)
+}
