@@ -138,3 +138,52 @@ func TestUserRenewRejects(t *testing.T) {
 		})
 	}
 }
+
+// TestUserAddAndRm: a new account gets fresh secrets, a duplicate is refused,
+// and removing it takes the secrets with it.
+func TestUserAddAndRm(t *testing.T) {
+	st := fixture(t)
+	msg, err := UserAdd(st, "newbie", []string{"split"}, []string{"reality"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(msg, "newbie") {
+		t.Errorf("message %q", msg)
+	}
+	sec := st.Secrets.Users["newbie"]
+	if len(sec.UUID) != 36 || sec.SubID == "" || sec.Hy2Pass == "" {
+		t.Fatalf("secrets %+v", sec)
+	}
+	if _, err := UserAdd(st, "newbie", []string{"split"}, []string{"reality"}, false); err == nil {
+		t.Fatal("a duplicate user was accepted")
+	}
+	if got := SortedUsers(st); len(got) != 2 || got[0] != "newbie" || got[1] != "u" {
+		t.Fatalf("%v", got)
+	}
+	if _, err := UserRm(st, "newbie"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Users["newbie"]; ok {
+		t.Fatal("the user survived removal")
+	}
+	if _, ok := st.Secrets.Users["newbie"]; ok {
+		t.Fatal("the secrets survived removal")
+	}
+	if _, err := UserRm(st, "ghost"); err == nil {
+		t.Fatal("removing an unknown user was accepted")
+	}
+}
+
+// TestReleaseURL: every component bootstrap installs has a release, and one it
+// cannot download says so instead of producing a broken URL.
+func TestReleaseURL(t *testing.T) {
+	for _, name := range []string{"sing-box", "xray", "caddy", "mtg", "ntfy"} {
+		u, ok := releaseURL(name, "1.2.3")
+		if !ok || !strings.Contains(u, "1.2.3") || !strings.HasPrefix(u, "https://github.com/") {
+			t.Errorf("%s: %q %v", name, u, ok)
+		}
+	}
+	if _, ok := releaseURL("geodata", "latest"); ok {
+		t.Error("a moving latest was given a pinned URL")
+	}
+}
