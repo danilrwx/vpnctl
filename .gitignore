@@ -8,3 +8,6 @@ app/.gradle/
 app/build/
 app/app/build/
 app/local.properties
+
+# the Kotlin compiler drops error logs here
+app/.kotlin/
