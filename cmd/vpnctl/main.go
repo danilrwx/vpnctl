@@ -10,9 +10,16 @@ import (
 	ucli "github.com/urfave/cli/v3"
 
 	"github.com/danilrwx/vpnctl-go/internal/cli"
+	"github.com/danilrwx/vpnctl-go/internal/version"
 )
 
 func main() {
+	// --version answers before the command tree: a wrapper script asks this,
+	// and the answer must not depend on a valid state directory
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println("vpnctl", version.String())
+		return
+	}
 	app := cli.App()
 	// urfave exits 3 for an unknown command, which is our guard code: a typo
 	// must not look like "pull the repository"

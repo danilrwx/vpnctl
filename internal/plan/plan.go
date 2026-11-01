@@ -16,6 +16,7 @@ import (
 	"github.com/danilrwx/vpnctl-go/internal/remote"
 	"github.com/danilrwx/vpnctl-go/internal/render"
 	"github.com/danilrwx/vpnctl-go/internal/state"
+	"github.com/danilrwx/vpnctl-go/internal/version"
 )
 
 const (
@@ -235,6 +236,7 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 
 	type answer struct {
 		probe Probe
+		agent string
 		err   error
 	}
 	answers := make(map[string]answer, len(names))
@@ -315,6 +317,13 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 				}
 			}
 			a.probe = p
+			// what the host actually runs: the agent writes this at install time.
+			// A stale agent silently lacks whatever we added since it was copied.
+			if out, err := c.SH("cat /etc/vpnctl/agent.version 2>/dev/null || echo -"); err == nil {
+				if v := strings.TrimSpace(out); v != "" && v != "-" {
+					a.agent = v
+				}
+			}
 		}(name)
 	}
 	wg.Wait()
@@ -324,6 +333,10 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 		hp := HostPlan{Name: name}
 		a := answers[name]
 		next := hashMap(rendered[name])
+		if a.agent != "" && !version.Same(a.agent, version.String()) {
+			hp.Notes = append(hp.Notes, fmt.Sprintf(
+				"agent %s on the host, %s here: run vpnctl host agent-install %s", a.agent, version.String(), name))
+		}
 		if a.err != nil {
 			hp.Unreachable = a.err.Error()
 			paths := make([]string, 0, len(next))

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
+	"github.com/danilrwx/vpnctl-go/internal/version"
 )
 
 const (
@@ -27,6 +28,10 @@ const (
 )
 
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println("vpnctl-agent", version.String())
+		return
+	}
 	// a timer runs `vpnctl-agent tick`: disable the accounts whose day has come
 	if len(os.Args) > 1 && os.Args[1] == "tick" {
 		fs := flag.NewFlagSet("tick", flag.ContinueOnError)
