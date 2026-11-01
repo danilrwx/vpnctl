@@ -184,7 +184,7 @@ func CheckCmd(engine, path string) (string, bool) {
 // ModeFor is the file mode on the host: secrets are 0600.
 func ModeFor(path string) int64 {
 	if strings.HasPrefix(path, "/etc/amnezia/") ||
-		strings.HasPrefix(path, "/etc/vpnctl/profiles/") ||
+		strings.HasPrefix(path, "/etc/vpnctl/") ||
 		strings.HasPrefix(path, "/etc/sing-box/") ||
 		strings.HasPrefix(path, "/etc/xray/") ||
 		strings.HasPrefix(path, "/etc/mtg/") {
@@ -279,9 +279,12 @@ func InstallScript(hp plan.HostPlan, backup string) string {
 		if svc, ok := ServiceFor(path); ok {
 			add(svc)
 		}
-		// a changed unit restarts its service, not just daemon-reload
+		// a changed unit restarts its service, not just daemon-reload; a timer
+		// is enabled and restarted by its own name
 		if u, ok := strings.CutPrefix(path, "/etc/systemd/system/"); ok {
-			if u, ok := strings.CutSuffix(u, ".service"); ok {
+			if name, ok := strings.CutSuffix(u, ".service"); ok {
+				add(name)
+			} else if strings.HasSuffix(u, ".timer") {
 				add(u)
 			}
 		}

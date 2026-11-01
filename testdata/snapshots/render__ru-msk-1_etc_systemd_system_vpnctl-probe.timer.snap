@@ -1,0 +1,16 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1
+[Unit]
+Description=vpnctl chain probe timer (ru-msk-1)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=vpnctl-probe.service
+
+[Install]
+WantedBy=timers.target

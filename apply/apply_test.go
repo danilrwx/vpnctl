@@ -161,3 +161,18 @@ func TestCheckCmd(t *testing.T) {
 		t.Fatal("no check for subscriptions")
 	}
 }
+
+func TestInstallScriptEnablesTheProbeTimer(t *testing.T) {
+	hp := plan.HostPlan{Files: []plan.FileStatus{
+		{Path: "/etc/systemd/system/vpnctl-probe.service", Status: plan.New},
+		{Path: "/etc/systemd/system/vpnctl-probe.timer", Status: plan.New},
+		{Path: "/etc/vpnctl/probe.sh", Status: plan.New},
+	}}
+	s := InstallScript(hp, "/var/lib/vpnctl/backup/abc")
+	if !strings.Contains(s, "systemctl enable -q vpnctl-probe.timer") {
+		t.Errorf("the timer is not enabled:\n%s", s)
+	}
+	if !strings.Contains(s, "install -D -m 0600 '/tmp/.vpnctl/etc/vpnctl/probe.sh' '/etc/vpnctl/probe.sh'") {
+		t.Errorf("the probe script must be 0600:\n%s", s)
+	}
+}

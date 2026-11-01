@@ -1,0 +1,19 @@
+---
+source: tests/render.rs
+expression: body
+---
+#!/bin/sh
+# vpnctl · chain probe on ru-msk-1 · every minute by vpnctl-probe.timer
+set -u
+PROBE_URL="https://www.gstatic.com/generate_204"
+code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --socks5-hostname 127.0.0.1:1080 "$PROBE_URL" 2>/dev/null || true)
+if [ "$code" = "204" ]; then
+  printf 'ok 204\n'
+  exit 0
+fi
+printf 'chain probe: %s instead of 204\n' "${code:-no answer}"
+engine=sing-box
+[ -x /usr/local/bin/xray ] && engine=xray
+systemctl is-active --quiet "$engine" || printf 'engine %s is not running\n' "$engine"
+
+exit 1

@@ -1,0 +1,14 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1
+[Unit]
+Description=vpnctl chain probe (ru-msk-1)
+After=network-online.target sing-box.service xray.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /etc/vpnctl/probe.sh
+# the probe must not fight an apply for the chain
+Nice=10
