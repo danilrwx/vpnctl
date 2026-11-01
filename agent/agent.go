@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -184,11 +185,15 @@ type Error struct {
 func (e *Error) Error() string { return e.Err.Error() }
 func (e *Error) Unwrap() error { return e.Err }
 
-// ParsePublicKey reads a PEM ECDSA P-256 public key.
-func ParsePublicKey(pem []byte) (*ecdsa.PublicKey, error) {
-	key, err := x509.ParsePKIXPublicKey(pem)
+// ParsePublicKey reads an ECDSA P-256 public key, PEM-wrapped or raw DER.
+func ParsePublicKey(data []byte) (*ecdsa.PublicKey, error) {
+	der := data
+	if block, _ := pem.Decode(data); block != nil {
+		der = block.Bytes
+	}
+	key, err := x509.ParsePKIXPublicKey(der)
 	if err != nil {
-		if cert, cerr := x509.ParseCertificate(pem); cerr == nil {
+		if cert, cerr := x509.ParseCertificate(der); cerr == nil {
 			key = cert.PublicKey
 		} else {
 			return nil, err

@@ -153,10 +153,11 @@ func main() {
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
 					&ucli.StringFlag{Name: "diff", Usage: "show a file diff: host:/path"},
 					&ucli.StringFlag{Name: "adopt", Usage: "take a file from a host into overrides/: host:/path"},
+					&ucli.BoolFlag{Name: "agent", Usage: "ask the host agent instead of running a probe script"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					cli.SetJSON(c.Bool("json"))
-					return cli.Plan(c.String("dir"), c.String("host"), c.String("diff"), c.String("adopt"))
+					return cli.Plan(c.String("dir"), c.String("host"), c.String("diff"), c.String("adopt"), c.Bool("agent"))
 				},
 			},
 			{
@@ -208,6 +209,20 @@ func main() {
 								Engine: c.String("engine"),
 								AWG:    c.Bool("awg"),
 							}, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:      "agent-install",
+						Usage:     "put the agent on a host and restrict the key to it",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "binary", Usage: "path to vpnctl-agent, default: next to this binary"},
+							&ucli.StringFlag{Name: "operator", Usage: "name of the key in authorized_keys and /etc/vpnctl/agents"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
+							return cli.HostAgentInstall(c.String("dir"), c.Args().First(), c.String("binary"), c.String("operator"))
 						},
 					},
 					{
