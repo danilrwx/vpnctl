@@ -446,7 +446,18 @@ func user(h state.Host) string {
 	return userHint
 }
 
+// deviceAuth is what a phone supplies: a signer backed by the Android Keystore.
+// It is checked first, because such a device has neither a key file nor an agent.
+var deviceAuth ssh.AuthMethod
+
+// SetDeviceAuth installs a signer for this process. A laptop never calls it.
+func SetDeviceAuth(m ssh.AuthMethod) { deviceAuth = m }
+
 func authMethods() ([]ssh.AuthMethod, error) {
+	if deviceAuth != nil {
+		return []ssh.AuthMethod{deviceAuth}, nil
+	}
+
 	var m []ssh.AuthMethod
 
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {

@@ -90,9 +90,12 @@ object Core {
      * depends on it: agent requests and git alike, so it happens once at startup
      * and not on the first screen that happens to need it.
      */
-    fun installSigner() {
+    fun installSigner(ctx: Context) {
         try {
             Mobile.setSigner(KeystoreSigner().ensure())
+            // the public half is written every start: a reinstall changes the
+            // key, and a stale file here is a key the host does not know
+            File(ctx.filesDir, "identity.pub").writeText(Mobile.signedBy())
         } catch (e: Exception) {
             // a device without a Keystore key can still read the state; it just
             // cannot sign, and the screens that need a signature say so

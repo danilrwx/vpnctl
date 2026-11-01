@@ -55,7 +55,7 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 		operator, _ = os.Hostname()
 	}
 
-	line := fmt.Sprintf(`restrict,no-pty,command="/usr/local/bin/vpnctl-agent" %s vpnctl-agent:%s`,
+	line := fmt.Sprintf(`no-pty,command="/usr/local/bin/vpnctl-agent" %s vpnctl-agent:%s`,
 		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))), operator)
 
 	c, err := remote.Dial(st, host)
@@ -168,7 +168,7 @@ func HostAgentAuthorize(dir, host, operator, keyFile string) error {
 		return err
 	}
 
-	line := fmt.Sprintf(`restrict,no-pty,command="/usr/local/bin/vpnctl-agent" %s vpnctl-agent:%s`,
+	line := fmt.Sprintf(`no-pty,command="/usr/local/bin/vpnctl-agent" %s vpnctl-agent:%s`,
 		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))), operator)
 
 	c, err := remote.Dial(st, host)

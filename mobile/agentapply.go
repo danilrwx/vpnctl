@@ -6,13 +6,16 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
 	"github.com/danilrwx/vpnctl-go/internal/apply"
 	"github.com/danilrwx/vpnctl-go/internal/hostscript"
+	"github.com/danilrwx/vpnctl-go/internal/plan"
 	"github.com/danilrwx/vpnctl-go/internal/remote"
 	"github.com/danilrwx/vpnctl-go/internal/render"
+	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
 // agentApply signs the tree with the Keystore key and hands it to the agent as
@@ -60,4 +63,53 @@ func nonce() string {
 	}
 
 	return hex.EncodeToString(b)
+}
+
+// agentProbe asks the agent for the marker and the hashes in one signed request.
+// A phone has no shell on the hosts, so this is the only way it can plan.
+func agentProbe(st *state.State, host string, paths []string) (plan.Probe, error) {
+	if signer == nil {
+		return plan.Probe{}, fmt.Errorf("no signer: the device cannot ask the agent")
+	}
+
+	c, err := remote.Dial(st, host)
+	if err != nil {
+		return plan.Probe{}, err
+	}
+
+	defer func() { _ = c.Close() }()
+
+	req := &agent.Request{V: agent.Version, Op: "plan", Host: host, Paths: paths, TS: time.Now().Unix(), Nonce: nonce()}
+	req.TreeHash = agent.TreeHash(nil)
+
+	sig, err := SignMessage([]byte(agent.Message(req)))
+	if err != nil {
+		return plan.Probe{}, err
+	}
+
+	req.Sig = base64.StdEncoding.EncodeToString(sig)
+
+	resp, err := agent.Call(c, req)
+	if err != nil {
+		return plan.Probe{}, err
+	}
+
+	p := plan.Probe{Hashes: resp.Hashes, Missing: map[string]bool{}, Bootstrapped: resp.Bootstrapped}
+
+	if resp.Marker != "" && resp.Marker != "-" {
+		fields := strings.Fields(resp.Marker)
+		p.Marker, p.HasMarker = fields[0], true
+
+		if len(fields) > 1 && fields[1] == "unpushed" {
+			p.Unpushed = true
+		}
+	}
+
+	for path, sum := range resp.Hashes {
+		if sum == "" {
+			p.Missing[path] = true
+		}
+	}
+
+	return p, nil
 }

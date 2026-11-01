@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
+	"github.com/danilrwx/vpnctl-go/internal/remote"
+	"golang.org/x/crypto/ssh"
 )
 
 // Signer is what the device provides and Go cannot: the private key lives in the
@@ -29,8 +31,20 @@ type Signer interface {
 // but cannot push or apply: both need a signature the host can verify.
 var signer Signer
 
-// SetSigner wires the device's Keystore-backed key.
-func SetSigner(s Signer) { signer = s }
+// SetSigner wires the device's Keystore-backed key. The same key is what the
+// SSH client uses: a phone has no key file and no agent.
+func SetSigner(s Signer) {
+	signer = s
+
+	if s == nil {
+		remote.SetDeviceAuth(nil)
+		return
+	}
+
+	if sshSigner, err := gitsync.SSHSigner(vpnctlSigner{s}); err == nil {
+		remote.SetDeviceAuth(ssh.PublicKeys(sshSigner))
+	}
+}
 
 // SignedBy is the key an agent request would be signed with, in the PEM form the
 // host keeps in /etc/vpnctl/agents/<name>.pub. An empty answer means no signer.

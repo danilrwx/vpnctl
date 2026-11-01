@@ -305,7 +305,15 @@ func (a *App) Plan(host string) (string, error) {
 		}
 	}
 
-	plans, err := plan.Plan(a.st, one, time.Now().UTC())
+	var prober plan.Prober
+	if signer != nil {
+		// the phone's key is restricted to the agent, so the shell probe cannot work
+		prober = func(host string, paths []string) (plan.Probe, error) {
+			return agentProbe(a.st, host, paths)
+		}
+	}
+
+	plans, err := plan.PlanWith(a.st, one, time.Now().UTC(), prober)
 	if err != nil {
 		return "", err
 	}

@@ -83,7 +83,7 @@ fun parseLinks(json: String): List<UserLink> = try {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Core.installSigner()
+        Core.installSigner(applicationContext)
         setContent {
             MaterialTheme {
                 Scaffold { padding ->
@@ -224,11 +224,14 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
         Text("план", style = MaterialTheme.typography.headlineSmall)
         Button(onClick = onBack) { Text("назад") }
         Text(status, style = MaterialTheme.typography.bodySmall)
+        Text(Core.signSelfTest(), style = MaterialTheme.typography.bodySmall)
 
         LazyColumn {
             items(hosts) { h ->
-                val note = if (h.unreachable.isNotEmpty()) " недоступен" else ""
-                Text("${h.name}: ${h.changes} изменений$note", modifier = Modifier.padding(vertical = 4.dp))
+                Text("${h.name}: ${h.changes} изменений", modifier = Modifier.padding(vertical = 4.dp))
+                if (h.unreachable.isNotEmpty()) {
+                    Text(h.unreachable, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
