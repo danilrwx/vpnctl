@@ -53,4 +53,7 @@ app.addUser(name, modes, protocols, tg)     // writes the state and commits
 app.sync()                                  // git push
 ```
 
-No SSH and no apply on the phone: those stay on the laptop.
+The phone is the main device: it applies too, over native SSH through the
+host agent (`docs/design.md` in vpnctl, sections 5 and 13). The API above covers
+users only; plan, apply, devices and hosts join it from the same `ops` package
+as the CLI, so the app and the CLI stay at parity.
