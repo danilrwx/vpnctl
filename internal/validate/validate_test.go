@@ -129,6 +129,13 @@ func TestCases(t *testing.T) {
 			want: "an awg peer is described but the awg protocol is not set",
 		},
 		{
+			name: "a topic that is not https",
+			mutate: func(st *state.State) {
+				st.Alerts.Ntfy = "http://ntfy.sh/vpn"
+			},
+			want: "must be https",
+		},
+		{
 			name: "a mode nobody renders",
 			mutate: func(st *state.State) {
 				u := st.Users["olga"]

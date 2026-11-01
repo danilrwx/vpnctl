@@ -11,7 +11,7 @@ import (
 // TestCommandTree pins the surface: a command that disappears by accident
 // breaks scripts and agents, so the list is explicit.
 func TestCommandTree(t *testing.T) {
-	want := []string{"apply", "check", "host", "init", "key", "metrics", "plan", "render", "user", "versions"}
+	want := []string{"alerts", "apply", "check", "host", "init", "key", "metrics", "plan", "render", "user", "versions"}
 	var got []string
 	for _, c := range App().Commands {
 		if c.Name == "help" || c.Name == "completion" {

@@ -316,6 +316,59 @@ func App() *ucli.Command {
 				},
 			},
 			{
+				Name:  "alerts",
+				Usage: "where the entry sends notifications when the chain breaks",
+				Commands: []*ucli.Command{
+					{
+						Name:  "set",
+						Usage: "point the probe at an ntfy topic",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "ntfy", Usage: "https://ntfy.sh/vpnctl-xxxx"},
+							&ucli.StringFlag{Name: "token-file", Usage: "file with the bearer token; a public topic needs none"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							if c.String("ntfy") == "" {
+								return errors.New("--ntfy is required, e.g. --ntfy https://ntfy.sh/vpnctl-xxxx")
+							}
+							return AlertsSet(c.String("dir"), c.String("ntfy"), c.String("token-file"), c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:  "off",
+						Usage: "clear the topic and the token",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return AlertsOff(c.String("dir"), c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:  "show",
+						Usage: "print the topic, whether a token is set and which hosts alert",
+						Flags: []ucli.Flag{dirFlag(), jsonFlag()},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return AlertsShow(c.String("dir"))
+						},
+					},
+					{
+						Name:  "test",
+						Usage: "send one message now and print the answer",
+						Flags: []ucli.Flag{dirFlag(), jsonFlag()},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return AlertsTest(c.String("dir"))
+						},
+					},
+				},
+			},
+			{
 				Name:  "versions",
 				Usage: "pinned component versions",
 				Commands: []*ucli.Command{

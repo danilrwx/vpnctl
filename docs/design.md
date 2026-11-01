@@ -149,6 +149,8 @@ vpnctl user disable|enable <name>             # выключить и включ
 vpnctl user rotate <name>                     # новые uuid, subId, пароли и пир
 vpnctl key backup --out <file>                # зашифрованная резервная идентичность
 vpnctl key restore <file>
+vpnctl alerts set --ntfy <url> [--token-file <f>]   # куда шлёт проба входа
+vpnctl alerts show|off|test
 vpnctl user link <name>                       # ссылки и подписки
 vpnctl user message <name> [--format text|markdown] [--mode] [--lang ru|en] [--ip] [--no-links] [--no-tg]
 vpnctl user config <name> [--mode] [--format links|sub|singbox|clash] [--out <path>]
@@ -364,7 +366,8 @@ API для приложения — `mobile.App` через `gomobile bind`. С�
 
 Решение: **systemd**, вариант А. Агент остаётся «только по запросу», периодическая работа живёт в юнитах.
 
-- Проба цепочки — `vpnctl-probe.timer`, раз в минуту, на входе: 204 через socks движка; иначе одно оповещение в ntfy. Скрипт `/etc/vpnctl/probe.sh`, топик и токен — `/etc/vpnctl/alerts.env` (0600), в скрипт не попадают.
+- Проба цепочки — `vpnctl-probe.timer`, раз в минуту, на входе: 204 через socks движка; иначе одно оповещение в ntfy. Скрипт `/etc/vpnctl/probe.sh`, топик и токен — `/etc/vpnctl/alerts.env` (0600), в скрипт не попадают. Сообщений ровно три вида: поломка (переход ok→fail), напоминание раз в 30 минут, пока цепочка лежит, и восстановление. Состояние пробы — `/var/lib/vpnctl/probe.state`, по нему скрипт отличает переход от повтора; без него каждый падающий запуск слал бы сообщение, 1440 в сутки.
+- Топик задаётся командой `vpnctl alerts set --ntfy https://ntfy.sh/vpnctl-xxxx` и попадает в `alerts.yaml`; токен читается из `--token-file`, трубы или скрытого приглашения и уходит только в секреты. `alerts test` отправляет одно сообщение сейчас, `alerts show` печатает топик и хосты, с которых идут оповещения, `alerts off` выключает их.
 - Метрики хоста — `vpnctl-metrics.timer`, раз в 5 минут: load, память, диск, uptime, соединения, флаг перезагрузки. Пишет JSON-строку в `/var/lib/vpnctl/metrics/<месяц>.jsonl`, хранит два месяца.
 - Оба юнита рендерятся из состояния, ставятся обычным `apply` и откатываются как любой файл. Секретов, кроме токена оповещений, на хосте не появляется.
 

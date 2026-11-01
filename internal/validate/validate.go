@@ -132,6 +132,11 @@ func State(st *state.State) []string {
 	var errs []string
 	err := func(format string, a ...any) { errs = append(errs, fmt.Sprintf(format, a...)) }
 
+	// alerts: a topic the probe cannot post to is worse than no topic at all
+	if _, e := state.CheckNtfy(st.Alerts.Ntfy); e != nil {
+		err("%v", e)
+	}
+
 	// hosts
 	domains := map[string][]string{}
 	for _, name := range sortedHosts(st) {

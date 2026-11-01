@@ -336,6 +336,9 @@ func save(st *state.State, dir, msg string, nocommit bool) error {
 	if err := state.SaveUsers(dir, st.Users); err != nil {
 		return err
 	}
+	if err := state.SaveAlerts(dir, st.Alerts); err != nil {
+		return err
+	}
 	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
 		return err
 	}
