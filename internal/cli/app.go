@@ -571,6 +571,32 @@ func App() *ucli.Command {
 						},
 					},
 					{
+						Name:          "renew",
+						Usage:         "extend a user's term, from today or from the current date",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.IntFlag{Name: "days", Usage: "days to add to the later of today and the current date"},
+							&ucli.StringFlag{Name: "until", Usage: "YYYY-MM-DD, a fixed new date"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							name := c.Args().First()
+							if name == "" {
+								return Usage(errors.New("the user name is required"))
+							}
+							if c.Int("days") == 0 && c.String("until") == "" {
+								return Usage(errors.New("either --days or --until is required"))
+							}
+							if c.Int("days") != 0 && c.String("until") != "" {
+								return Usage(errors.New("either --days or --until, not both"))
+							}
+							return UserRenew(c.String("dir"), name, c.Int("days"), c.String("until"), c.Bool("nocommit"))
+						},
+					},
+					{
 						Name:          "edit",
 						Usage:         "change modes, protocols, expiry or a note",
 						ArgsUsage:     "<name>",

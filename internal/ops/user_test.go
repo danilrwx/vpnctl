@@ -3,6 +3,7 @@ package ops
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -70,6 +71,69 @@ func TestUserEditRejects(t *testing.T) {
 			}
 			if c.user == "u" && len(st.Users["u"].Modes) == 0 {
 				t.Fatal("a rejected patch changed the state")
+			}
+		})
+	}
+}
+
+// TestUserRenew: the term extends from the later of today and the current
+// date, so renewing early never shortens an account and an expired one starts
+// again from today.
+func TestUserRenew(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name    string
+		expires string
+		days    int
+		until   string
+		want    string
+	}{
+		{"no date yet", "", 30, "", "2026-12-01"},
+		{"renewing early", "2026-12-20", 30, "", "2027-01-19"},
+		{"already expired", "2026-10-01", 30, "", "2026-12-01"},
+		{"a fixed date", "2026-10-01", 0, "2027-03-01", "2027-03-01"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := fixture(t)
+			u := st.Users["u"]
+			u.Expires = c.expires
+			st.Users["u"] = u
+			msg, err := UserRenew(st, "u", c.days, c.until, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := st.Users["u"].Expires; got != c.want {
+				t.Fatalf("expiry %s, want %s", got, c.want)
+			}
+			if !strings.Contains(msg, c.want) {
+				t.Errorf("message %q does not name the new date", msg)
+			}
+		})
+	}
+}
+
+func TestUserRenewRejects(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		user  string
+		days  int
+		until string
+		want  string
+	}{
+		{"an unknown user", "ghost", 30, "", "is not described"},
+		{"no argument at all", "u", 0, "", "required"},
+		{"both", "u", 30, "2027-01-01", "not both"},
+		{"a date in the past", "u", 0, "2026-01-01", "not after today"},
+		{"a date that is not a date", "u", 0, "soon", "not YYYY-MM-DD"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := fixture(t)
+			_, err := UserRenew(st, c.user, c.days, c.until, now)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("error %v, want %q", err, c.want)
 			}
 		})
 	}

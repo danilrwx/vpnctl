@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/ops"
@@ -113,6 +114,29 @@ func UserEdit(dir, name string, modes, protocols []string, tg *bool, expires, no
 		return err
 	}
 	fmt.Printf("✓ %s\n", msg)
+	return nil
+}
+
+// UserRenew extends a term and commits. A user the tick already dropped comes
+// back only with apply, so the answer says so.
+func UserRenew(dir, name string, days int, until string, nocommit bool) error {
+	st, err := state.Load(dir)
+	if err != nil {
+		return err
+	}
+	before := st.Users[name]
+	msg, err := ops.UserRenew(st, name, days, until, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if err := save(st, dir, msg, nocommit); err != nil {
+		return err
+	}
+	fmt.Printf("✓ %s\n", msg)
+	was := state.Expired(before.Expires, time.Now().UTC())
+	if was {
+		fmt.Println("  the term had run out: run vpnctl apply to put the account back on the host")
+	}
 	return nil
 }
 

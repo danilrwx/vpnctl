@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/secrets"
 	"github.com/danilrwx/vpnctl-go/internal/state"
@@ -125,4 +126,47 @@ func UserRotate(st *state.State, name string) (string, error) {
 		st.Secrets.Users[name] = sec
 	}
 	return fmt.Sprintf("users: %s: rotate credentials", name), nil
+}
+
+// UserRenew extends a user's term. The count starts from the later of today and
+// the current date, so renewing early never shortens anything, and an account
+// that already expired starts again from today. Renewing does not enable a user
+// somebody turned off on purpose: the date and the switch are separate.
+func UserRenew(st *state.State, name string, days int, until string, now time.Time) (string, error) {
+	u, ok := st.Users[name]
+	if !ok {
+		return "", fmt.Errorf("user %q is not described", name)
+	}
+	today := now.UTC().Truncate(24 * time.Hour)
+	base := today
+	if u.Expires != "" {
+		cur, err := time.Parse("2006-01-02", u.Expires)
+		if err != nil {
+			return "", fmt.Errorf("user %q: expiry %q is not YYYY-MM-DD", name, u.Expires)
+		}
+		if cur.After(base) {
+			base = cur
+		}
+	}
+	var next time.Time
+	switch {
+	case until != "" && days != 0:
+		return "", fmt.Errorf("either --days or --until, not both")
+	case until != "":
+		d, err := time.Parse("2006-01-02", until)
+		if err != nil {
+			return "", fmt.Errorf("--until %q is not YYYY-MM-DD", until)
+		}
+		if !d.After(today) {
+			return "", fmt.Errorf("--until %s is not after today %s", until, today.Format("2006-01-02"))
+		}
+		next = d
+	case days > 0:
+		next = base.AddDate(0, 0, days)
+	default:
+		return "", fmt.Errorf("--days or --until is required")
+	}
+	u.Expires = next.Format("2006-01-02")
+	st.Users[name] = u
+	return fmt.Sprintf("users: %s: renew to %s", name, u.Expires), nil
 }
