@@ -71,6 +71,16 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
 		fmt.Fprint(out, script)
 		return nil
 	}
+	if jsonOut {
+		// progress goes to stderr, the answer stays machine-readable
+		if err := bootstrap.Run(st, name, ssh, os.Stderr); err != nil {
+			return err
+		}
+		return emit(struct {
+			Host string `json:"host"`
+			OK   bool   `json:"ok"`
+		}{name, true}, func() {})
+	}
 	return bootstrap.Run(st, name, ssh, out)
 }
 
