@@ -329,6 +329,7 @@ func (a *App) Plan(host string) (string, error) {
 // Apply installs the state on the hosts and returns the result as JSON.
 func (a *App) Apply(host string) (string, error) {
 	opts := &apply.Opts{Host: host}
+
 	if signer != nil {
 		// the guards fetch before they touch a host, and that fetch needs the
 		// same credential the clone used
