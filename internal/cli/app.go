@@ -411,6 +411,25 @@ func App() *ucli.Command {
 				},
 			},
 			{
+				Name:  "state",
+				Usage: "keep the files of the state canonical: two spaces everywhere",
+				Commands: []*ucli.Command{
+					{
+						Name:  "fmt",
+						Usage: "rewrite every state file in its canonical form",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "check", Usage: "report instead of writing, exit 1 when something differs"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return StateFmt(c.String("dir"), c.Bool("check"), c.Bool("nocommit"))
+						},
+					},
+				},
+			},
+			{
 				Name:  "user",
 				Usage: "create, remove, list and hand out users",
 				Commands: []*ucli.Command{

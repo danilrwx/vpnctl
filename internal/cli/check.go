@@ -32,6 +32,9 @@ func Check(dir string, stub, warnings bool) error {
 		warns = validate.Warnings(st)
 	}
 	errs := validate.State(st)
+	// the formatting rule is part of the state being valid: a hand edit that
+	// keeps four spaces must fail here, not slip into history
+	errs = append(errs, stateProblems(st)...)
 	res := checkResult{OK: len(errs) == 0, Hosts: len(st.Hosts), Links: len(st.Links), Users: len(st.Users), Errors: errs, Warnings: warns}
 	if len(errs) == 0 {
 		return emit(res, func() {

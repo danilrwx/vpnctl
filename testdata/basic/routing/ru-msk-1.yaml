@@ -7,44 +7,44 @@ exit:
     failures: 2
 groups:
   all:
-  - match:
-      inbound:
-      - probe
-    action:
-      link: auto
-    note: проба цепочки и upstream mtg
-  - match:
-      sets:
-      - ads
-    action: block
-    note: реклама
+    - match:
+        inbound:
+          - probe
+      action:
+        link: auto
+      note: проба цепочки и upstream mtg
+    - match:
+        sets:
+          - ads
+      action: block
+      note: реклама
   split:
-  - match:
-      sets:
-      - ru-direct
-    action: direct
-    note: российские сервисы напрямую
-  - match:
-      geoip:
-      - ru
-      - private
-    action: direct
-    note: российские адреса напрямую
-  - match:
-      geosite:
-      - youtube
-    action:
-      link: fi-hel-1
-    note: youtube через fi
-  - action:
-      link: auto
-    note: всё остальное через выход
+    - match:
+        sets:
+          - ru-direct
+      action: direct
+      note: российские сервисы напрямую
+    - match:
+        geoip:
+          - ru
+          - private
+      action: direct
+      note: российские адреса напрямую
+    - match:
+        geosite:
+          - youtube
+      action:
+        link: fi-hel-1
+      note: youtube через fi
+    - action:
+        link: auto
+      note: всё остальное через выход
   full:
-  - action:
-      link: auto
-    note: всё через выход
+    - action:
+        link: auto
+      note: всё через выход
 dns:
   direct:
-  - 77.88.8.8
-  - 1.1.1.1
+    - 77.88.8.8
+    - 1.1.1.1
   remote: https://1.1.1.1/dns-query

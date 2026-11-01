@@ -149,25 +149,35 @@ func LoadRecipients(dir string) (*Recipients, error) {
 	return &r, nil
 }
 
-// Save writes age.yaml: sorted by name, so the file is stable in git.
-func (r *Recipients) Save(dir string) error {
+// MarshalRecipients is age.yaml as the tool writes it: two spaces, sorted by
+// name, so the file is stable in git and a hand edit shows as one rule broken.
+func MarshalRecipients(r *Recipients) ([]byte, error) {
 	if err := r.Validate(); err != nil {
-		return err
+		return nil, err
 	}
 	if len(r.Recipients) == 0 {
-		return errors.New("no recipients: refusing to write an empty age.yaml")
+		return nil, errors.New("no recipients: refusing to write an empty age.yaml")
 	}
 	sortRecipients(r.Recipients)
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
 	if err := enc.Encode(r); err != nil {
-		return fmt.Errorf("marshal %s: %w", RecipientsFile, err)
+		return nil, fmt.Errorf("marshal %s: %w", RecipientsFile, err)
 	}
 	if err := enc.Close(); err != nil {
-		return fmt.Errorf("marshal %s: %w", RecipientsFile, err)
+		return nil, fmt.Errorf("marshal %s: %w", RecipientsFile, err)
 	}
-	return os.WriteFile(filepath.Join(dir, RecipientsFile), buf.Bytes(), 0o644)
+	return buf.Bytes(), nil
+}
+
+// Save writes age.yaml.
+func (r *Recipients) Save(dir string) error {
+	b, err := MarshalRecipients(r)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, RecipientsFile), b, 0o644)
 }
 
 func sortRecipients(list []Recipient) {

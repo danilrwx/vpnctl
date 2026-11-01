@@ -1,6 +1,6 @@
 geosite:
-- category-ru
-- yandex
-- vk
+  - category-ru
+  - yandex
+  - vk
 domains:
-- gosuslugi.ru
+  - gosuslugi.ru
