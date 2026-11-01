@@ -6,6 +6,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -469,6 +470,10 @@ func State(st *state.State) []string {
 }
 
 // Warnings: the state is applicable, but something deserves attention.
+// ExpiryWarningDays is how far ahead a term is announced: two weeks is one
+// conversation with the person, not a surprise at midnight.
+const ExpiryWarningDays = 14
+
 func Warnings(st *state.State) []string {
 	var w []string
 	for _, name := range sortedHosts(st) {
@@ -482,6 +487,26 @@ func Warnings(st *state.State) []string {
 	}
 	if !st.Encrypted && len(st.Secrets.Users) > 0 {
 		w = append(w, "secrets are stored as plaintext: no .sops.yaml (init --age <recipient>)")
+	}
+	// a date nobody watches arrives as silence: say it out loud while there is
+	// still time to renew
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	for _, name := range sortedUsers(st) {
+		u := st.Users[name]
+		if u.Expires == "" {
+			continue
+		}
+		d, err := time.Parse("2006-01-02", u.Expires)
+		if err != nil {
+			continue
+		}
+		days := int(d.Sub(today).Hours() / 24)
+		switch {
+		case days < 0:
+			w = append(w, fmt.Sprintf("user «%s»: the term ran out on %s — the tick has taken the account off the host", name, u.Expires))
+		case days <= ExpiryWarningDays:
+			w = append(w, fmt.Sprintf("user «%s»: the term ends on %s, in %d days — vpnctl user renew %s --days 30", name, u.Expires, days, name))
+		}
 	}
 	return w
 }

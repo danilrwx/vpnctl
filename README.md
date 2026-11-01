@@ -58,12 +58,29 @@ vpnctl apply -dir ./state                                   # install it
 `apply` | install, leaves first, with probe and rollback |
 `host add\|bootstrap\|rm` | the node lifecycle |
 `host agent-install` | put the agent on a host, restrict the key to it |
-`user add\|rm\|rotate\|list` | accounts and credentials |
+`user add\|rm\|list` | accounts with fresh credentials |
+`user renew` | extend a term, from today or from the current date |
+`user disable\|enable\|edit` | switch an account off, change modes, protocols, expiry, note |
+`user rotate` | new uuid, passwords and peer: a leaked link stops working |
 `user link\|message\|config` | what the person actually receives |
+`user message\|config` | the text and the bytes a person receives |
 `metrics` | the host history the entry collects |
+`probe` | the topology matrix: every link and protocol, handshaken on the entry |
+`alerts set\|show\|off\|test` | where the entry reports a broken chain; `--serve` runs ntfy on the entry |
+`state status` | head, origin and the marker of every host |
+`state fmt` | two spaces everywhere, `--check` to fail instead of rewrite |
+`versions check` | newest upstream release per pin, `--breaking` to exit 1 |
+`versions auto` | pull in patch updates: pin, sha256, commit, push, `--apply` to deploy |
 `versions pin` | sha256 of every pinned release |
 
 Every command accepts `--json`; a guard refusal exits `3`, a bad flag exits `2`.
+`render`, `plan`, `apply` and `host bootstrap` take `--at YYYY-MM-DD` — the day
+expiry is measured against, today in UTC by default.
+
+The entry runs three timers from the same state: the chain probe every minute
+(one message when it breaks, a reminder every half hour, one when it comes
+back), host metrics every five minutes, and `vpnctl-agent tick` every hour, which
+takes the accounts off the engine when their date passes.
 
 ## Layout
 

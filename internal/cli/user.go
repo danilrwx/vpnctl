@@ -189,6 +189,9 @@ func UserLink(dir, name string) error {
 	if len(u.Modes) > 0 {
 		mode = u.Modes[0]
 	}
+	if state.Expired(u.Expires, time.Now().UTC()) {
+		fmt.Printf("term: %s — run out: the account is off the host, renew it and apply\n", u.Expires)
+	}
 	fmt.Printf("domain: %s\n", st.Hosts[entry].Domain)
 	sub, err := render.SubURL(st, entry, name, mode)
 	if err != nil {

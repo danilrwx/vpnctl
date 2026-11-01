@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -225,5 +226,26 @@ func TestWarnings(t *testing.T) {
 	}
 	if !strings.Contains(w, "host key is not recorded") {
 		t.Fatalf("no warning about the host key:\n%s", w)
+	}
+}
+
+// TestWarningsAboutExpiry: a date nobody watches arrives as silence, so it is
+// announced two weeks ahead and shouted once it has passed.
+func TestWarningsAboutExpiry(t *testing.T) {
+	st := loadFixture(t)
+	soon := time.Now().UTC().AddDate(0, 0, 3).Format("2006-01-02")
+	past := time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
+	u := st.Users["olga"]
+	u.Expires = soon
+	st.Users["olga"] = u
+	warns := strings.Join(Warnings(st), "\n")
+	if !strings.Contains(warns, "the term ends on "+soon) {
+		t.Errorf("no warning for a term that ends in three days:\n%s", warns)
+	}
+	u.Expires = past
+	st.Users["olga"] = u
+	warns = strings.Join(Warnings(st), "\n")
+	if !strings.Contains(warns, "the term ran out on "+past) {
+		t.Errorf("no warning for a term that ran out:\n%s", warns)
 	}
 }

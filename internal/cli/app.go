@@ -457,6 +457,19 @@ func App() *ucli.Command {
 				Usage: "keep the files of the state canonical: two spaces everywhere",
 				Commands: []*ucli.Command{
 					{
+						Name:  "status",
+						Usage: "head, origin and the marker of every host",
+						Flags: []ucli.Flag{dirFlag(), jsonFlag(), atFlag()},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							at, err := dayArg(c)
+							if err != nil {
+								return err
+							}
+							return StateStatus(c.String("dir"), at)
+						},
+					},
+					{
 						Name:  "fmt",
 						Usage: "rewrite every state file in its canonical form",
 						Flags: []ucli.Flag{

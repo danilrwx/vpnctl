@@ -130,7 +130,7 @@ func AlertsTest(dir string) error {
 		Status int    `json:"status"`
 	}
 	r := row{Ntfy: st.Alerts.Ntfy}
-	status, err := postAlert(st.Alerts.Ntfy, st.Secrets.Alerts.Token, "vpnctl test: the topic works", "default")
+	status, err := postAlertTo(st.Alerts.Ntfy, alertTitle(st), st.Secrets.Alerts.Token, "vpnctl test: the topic works", "default")
 	if err != nil {
 		return err
 	}
@@ -148,13 +148,29 @@ func AlertsTest(dir string) error {
 	})
 }
 
-// postAlert sends one notification and returns the HTTP status.
+// alertTitle is the title the entry's probe uses, so a test message lands in the
+// same conversation on the phone instead of making a second one.
+func alertTitle(st *state.State) string {
+	for name := range st.Hosts {
+		if st.Hosts[name].Role == state.Entry {
+			return "vpnctl " + name
+		}
+	}
+	return "vpnctl"
+}
+
+// postAlert sends one notification from the probe's point of view.
 func postAlert(topic, token, text, priority string) (int, error) {
+	return postAlertTo(topic, "vpnctl", token, text, priority)
+}
+
+// postAlertTo sends one notification with a chosen title.
+func postAlertTo(topic, title, token, text, priority string) (int, error) {
 	req, err := http.NewRequest(http.MethodPost, topic, strings.NewReader(text))
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Title", "vpnctl")
+	req.Header.Set("Title", title)
 	req.Header.Set("Priority", priority)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
