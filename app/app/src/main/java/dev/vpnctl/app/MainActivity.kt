@@ -71,6 +71,9 @@ fun Users(modifier: Modifier = Modifier) {
         // the first proof that the Keystore key crosses into Go the way the
         // agent expects: a PKIX PEM inside the signature envelope
         Text(Core.signedBy().lineSequence().firstOrNull { it.isNotBlank() } ?: "", style = MaterialTheme.typography.bodySmall)
+        // the key is only useful if the host would accept a signature made with
+        // it: this runs the same verifier the host runs
+        Text(Core.signSelfTest(), style = MaterialTheme.typography.bodySmall)
         LazyColumn {
             items(users) { user ->
                 val state = if (user.enabled) "" else " · off"

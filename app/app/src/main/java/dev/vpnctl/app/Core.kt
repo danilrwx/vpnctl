@@ -56,5 +56,12 @@ object Core {
         "no signer: ${e.message}"
     }
 
+    /** signSelfTest signs a request with the Keystore key and verifies it. */
+    fun signSelfTest(): String = try {
+        Mobile.selfTest()
+    } catch (e: Exception) {
+        "self-test: ${e.message}"
+    }
+
     fun current(): App? = app
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"strings"
 	"testing"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
@@ -97,5 +98,26 @@ func TestNoSigner(t *testing.T) {
 
 	if _, err := SignMessage([]byte("x")); err == nil {
 		t.Fatal("an unsigned message was accepted")
+	}
+}
+
+// TestSelfTest: the check the screen runs says yes with a working key and says
+// exactly what is wrong without one.
+func TestSelfTest(t *testing.T) {
+	SetSigner(nil)
+	if got := SelfTest(); got != "no signer" {
+		t.Fatalf("%q", got)
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	SetSigner(&keystoreLike{key: key})
+	t.Cleanup(func() { SetSigner(nil) })
+
+	if got := SelfTest(); !strings.HasPrefix(got, "signed and verified:") {
+		t.Fatalf("%q", got)
 	}
 }
