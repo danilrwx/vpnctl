@@ -297,17 +297,21 @@ type Pin struct {
 }
 
 type State struct {
-	Dir       string
-	Hosts     map[string]Host
-	Links     []Link
-	Users     map[string]User
-	Inbounds  map[string]map[string]Inbound
-	Routing   map[string]Routing
-	Sets      map[string]Set
-	Versions  map[string]Pin
-	Alerts    Alerts
-	Secrets   Secrets
-	Encrypted bool
+	Dir string
+	// AcceptNewHostKey allows the first contact with a host whose key is not
+	// recorded yet. It is set by a flag, never by the file: the state records
+	// keys, it does not consent to their absence.
+	AcceptNewHostKey bool
+	Hosts            map[string]Host
+	Links            []Link
+	Users            map[string]User
+	Inbounds         map[string]map[string]Inbound
+	Routing          map[string]Routing
+	Sets             map[string]Set
+	Versions         map[string]Pin
+	Alerts           Alerts
+	Secrets          Secrets
+	Encrypted        bool
 }
 
 func read(dir, name string, v any) error {

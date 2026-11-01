@@ -5,6 +5,7 @@ package remote
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -86,7 +87,7 @@ func Dial(st *state.State, host string) (*Client, error) {
 	c.cfg = &ssh.ClientConfig{
 		User:              user(h),
 		Auth:              auth,
-		HostKeyCallback:   hostKeyCallback(h.HostKey),
+		HostKeyCallback:   hostKeyCallback(h.HostKey, st.AcceptNewHostKey),
 		HostKeyAlgorithms: hostKeyAlgorithms(h.HostKey),
 		Timeout:           timeout,
 	}
@@ -108,7 +109,7 @@ func Dial(st *state.State, host string) (*Client, error) {
 		jumpCfg := &ssh.ClientConfig{
 			User:              user(first),
 			Auth:              auth,
-			HostKeyCallback:   hostKeyCallback(first.HostKey),
+			HostKeyCallback:   hostKeyCallback(first.HostKey, st.AcceptNewHostKey),
 			HostKeyAlgorithms: hostKeyAlgorithms(first.HostKey),
 			Timeout:           timeout,
 		}
@@ -130,7 +131,7 @@ func Dial(st *state.State, host string) (*Client, error) {
 			next, err := dialThrough(conn, a, &ssh.ClientConfig{
 				User:              user(j),
 				Auth:              auth,
-				HostKeyCallback:   hostKeyCallback(j.HostKey),
+				HostKeyCallback:   hostKeyCallback(j.HostKey, st.AcceptNewHostKey),
 				HostKeyAlgorithms: hostKeyAlgorithms(j.HostKey),
 				Timeout:           timeout,
 			})
@@ -281,7 +282,7 @@ func ScanKey(st *state.State, host string) (string, error) {
 			return "", err
 		}
 		dialer, err = ssh.Dial("tcp", jumpAddr, &ssh.ClientConfig{
-			User: user(first), Auth: auth, HostKeyCallback: hostKeyCallback(first.HostKey),
+			User: user(first), Auth: auth, HostKeyCallback: hostKeyCallback(first.HostKey, st.AcceptNewHostKey),
 			HostKeyAlgorithms: hostKeyAlgorithms(first.HostKey), Timeout: timeout,
 		})
 		if err != nil {
@@ -335,10 +336,21 @@ func hostKeyAlgorithms(pinned string) []string {
 }
 
 // hostKeyCallback pins the key recorded in the state; without one the key is accepted.
-func hostKeyCallback(want string) ssh.HostKeyCallback {
+// hostKeyCallback pins the key recorded in the state. A host without a key is
+// refused unless the caller asked for a first contact: accepting silently is a
+// man in the middle with extra steps. The refusal carries the fingerprint, so a
+// human can compare it with what the provider prints and then say yes.
+func hostKeyCallback(want string, acceptNew bool) ssh.HostKeyCallback {
 	return func(hostname string, _ net.Addr, key ssh.PublicKey) error {
 		if want == "" {
-			return nil
+			if acceptNew {
+				return nil
+			}
+			sum := sha256.Sum256(key.Marshal())
+			return fmt.Errorf("no host key recorded for %s: it presented %s SHA256:%s\n"+
+				"compare it with the provider, then record it with `vpnctl host add --host-key` \n"+
+				"or accept it for this run with --accept-host-key",
+				hostname, key.Type(), base64.RawStdEncoding.EncodeToString(sum[:]))
 		}
 		got := key.Type() + " " + base64.StdEncoding.EncodeToString(key.Marshal())
 		if strings.TrimSpace(got) != strings.TrimSpace(want) {

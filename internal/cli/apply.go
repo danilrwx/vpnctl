@@ -11,13 +11,12 @@ import (
 	"github.com/danilrwx/vpnctl-go/internal/hostscript"
 	"github.com/danilrwx/vpnctl-go/internal/remote"
 	"github.com/danilrwx/vpnctl-go/internal/render"
-	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
 // Apply installs the state on the hosts. Under --json the progress goes nowhere
 // and the result is printed as JSON instead.
 func Apply(dir, host, branch string, force, unpushed, viaAgent bool, at time.Time) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import (
 // reports: the rule is two spaces everywhere, and a file that breaks it must not
 // sail through review as a formatting accident.
 func StateFmt(dir string, check, nocommit bool) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func stateProblems(st *state.State) []string {
 // origin has, and which marker every host carries. It reads the hosts, so it
 // needs the same access plan does.
 func StateStatus(dir string, at time.Time) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}

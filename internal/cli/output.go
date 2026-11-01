@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	ucli "github.com/urfave/cli/v3"
+
+	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
 // jsonOut is set by the dispatcher for every command run with --json.
@@ -29,6 +33,28 @@ func emit(v any, text func()) error {
 	}
 	fmt.Println(string(b))
 	return nil
+}
+
+// acceptNewHostKey is set by --accept-host-key: the first contact with a host
+// whose key is not in the state yet.
+var acceptNewHostKey bool
+
+// SetAcceptNewHostKey switches the first-contact policy for this run.
+func SetAcceptNewHostKey(on bool) { acceptNewHostKey = on }
+
+// loadState reads the state and applies the flags that are policy, not data.
+func loadState(dir string) (*state.State, error) {
+	st, err := state.Load(dir)
+	if err != nil {
+		return nil, err
+	}
+	st.AcceptNewHostKey = acceptNewHostKey
+	return st, nil
+}
+
+// acceptHostKeyFlag is the opt-in for the first contact with a host.
+func acceptHostKeyFlag() ucli.Flag {
+	return &ucli.BoolFlag{Name: "accept-host-key", Usage: "allow the first contact with a host whose key is not recorded yet"}
 }
 
 // Exit codes, as section 16 of the design asks: a guard refusal is not the same

@@ -31,6 +31,9 @@ type fakeHost struct {
 	mu      sync.Mutex
 	log     []string
 	tarball []byte
+	// pub is the server's host key: the state pins it, so the test also proves
+	// the pinned path works and not just the first contact.
+	pub ssh.PublicKey
 }
 
 func newFakeHost(t *testing.T, probeOut string) *fakeHost {
@@ -70,7 +73,7 @@ func newFakeHost(t *testing.T, probeOut string) *fakeHost {
 	t.Setenv("VPNCTL_SSH_KEY", keyPath)
 	t.Setenv("SSH_AUTH_SOCK", "")
 
-	h := &fakeHost{addr: ln.Addr().String(), probeOut: probeOut, probeCode: "204"}
+	h := &fakeHost{addr: ln.Addr().String(), probeOut: probeOut, probeCode: "204", pub: signer.PublicKey()}
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -153,7 +156,7 @@ func (h *fakeHost) received() []byte {
 
 // pushedState builds a state directory with one pushed commit and one host
 // pointing at the fake server.
-func itestState(t *testing.T, hostAddr string) string {
+func itestState(t *testing.T, hostAddr, hostKey string) string {
 	t.Helper()
 	root := t.TempDir()
 	bare := filepath.Join(root, "origin.git")
@@ -170,7 +173,7 @@ func itestState(t *testing.T, hostAddr string) string {
 	}
 	portNum := 0
 	_, _ = fmt.Sscanf(port, "%d", &portNum)
-	hosts := fmt.Sprintf("hosts:\n  node:\n    role: exit\n    engine: sing-box\n    ip: %s\n    ssh_port: %d\n    ssh: root@%s\n", hostIP, portNum, hostIP)
+	hosts := fmt.Sprintf("hosts:\n  node:\n    role: exit\n    engine: sing-box\n    ip: %s\n    ssh_port: %d\n    ssh: root@%s\n    host_key: %s\n", hostIP, portNum, hostIP, hostKey)
 	write(t, filepath.Join(dir, "hosts.yaml"), hosts)
 	write(t, filepath.Join(dir, "links.yaml"), "links: []\n")
 	write(t, filepath.Join(dir, "users.yaml"), "users: {}\n")
@@ -197,7 +200,7 @@ func itestState(t *testing.T, hostAddr string) string {
 // marker and the manifest, in that order.
 func TestApplyOverSSH(t *testing.T) {
 	host := newFakeHost(t, "-\nyes\n-\n")
-	dir := itestState(t, host.addr)
+	dir := itestState(t, host.addr, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(host.pub))))
 
 	st, err := state.Load(dir)
 	if err != nil {
@@ -231,7 +234,7 @@ func TestApplyOverSSH(t *testing.T) {
 func TestApplyRollsBackWhenProbeFails(t *testing.T) {
 	host := newFakeHost(t, "-\nyes\n-\n")
 	host.probeCode = "000"
-	dir := itestState(t, host.addr)
+	dir := itestState(t, host.addr, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(host.pub))))
 	st, err := state.Load(dir)
 	if err != nil {
 		t.Fatal(err)

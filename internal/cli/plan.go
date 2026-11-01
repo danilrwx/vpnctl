@@ -10,13 +10,12 @@ import (
 
 	"github.com/danilrwx/vpnctl-go/internal/plan"
 	"github.com/danilrwx/vpnctl-go/internal/render"
-	"github.com/danilrwx/vpnctl-go/internal/state"
 	"github.com/danilrwx/vpnctl-go/internal/validate"
 )
 
 // Plan reports what differs between the state and the hosts.
 func Plan(dir, host, diff, adopt string, viaAgent bool, at time.Time) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}

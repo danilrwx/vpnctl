@@ -14,7 +14,7 @@ import (
 // runs on the host, not here: the entry is the only machine on the near side of
 // those edges, and a laptop cannot even reach an exit that sits behind a jump.
 func ProbeMatrix(dir, host string, timeout time.Duration) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}

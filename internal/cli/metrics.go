@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/remote"
-	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
 // Sample is one line of /var/lib/vpnctl/metrics/<month>.jsonl.
@@ -24,7 +23,7 @@ type Sample struct {
 
 // Metrics reads the samples collected on a host, newest last.
 func Metrics(dir, host string, last int) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}

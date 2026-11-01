@@ -197,10 +197,12 @@ func App() *ucli.Command {
 					&ucli.StringFlag{Name: "diff", Usage: "show a file diff: host:/path"},
 					&ucli.StringFlag{Name: "adopt", Usage: "take a file from a host into overrides/: host:/path"},
 					&ucli.BoolFlag{Name: "agent", Usage: "ask the host agent instead of running a probe script"},
+					acceptHostKeyFlag(),
 					atFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+					SetAcceptNewHostKey(c.Bool("accept-host-key"))
 					at, err := dayArg(c)
 					if err != nil {
 						return err
@@ -219,10 +221,12 @@ func App() *ucli.Command {
 					&ucli.BoolFlag{Name: "force", Usage: "do not stop on a dead link or a missing certificate"},
 					&ucli.BoolFlag{Name: "unpushed", Usage: "apply a commit that is not on origin/main: only when the remote is unavailable"},
 					&ucli.BoolFlag{Name: "agent", Usage: "one signed request to the host agent instead of shell steps"},
+					acceptHostKeyFlag(),
 					atFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+					SetAcceptNewHostKey(c.Bool("accept-host-key"))
 					at, err := dayArg(c)
 					if err != nil {
 						return err
@@ -274,9 +278,11 @@ func App() *ucli.Command {
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "binary", Usage: "path to vpnctl-agent, default: next to this binary"},
 							&ucli.StringFlag{Name: "operator", Usage: "name of the key in authorized_keys and /etc/vpnctl/agents"},
+							acceptHostKeyFlag(),
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+							SetAcceptNewHostKey(c.Bool("accept-host-key"))
 							return HostAgentInstall(c.String("dir"), c.Args().First(), c.String("binary"), c.String("operator"))
 						},
 					},
@@ -307,10 +313,12 @@ func App() *ucli.Command {
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "ssh", Usage: "user@host to record when the state has none"},
 							&ucli.BoolFlag{Name: "print", Usage: "print the script instead of running it"},
+							acceptHostKeyFlag(),
 							atFlag(),
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+							SetAcceptNewHostKey(c.Bool("accept-host-key"))
 							at, err := dayArg(c)
 							if err != nil {
 								return err
@@ -328,9 +336,11 @@ func App() *ucli.Command {
 				Flags: []ucli.Flag{
 					dirFlag(), jsonFlag(),
 					&ucli.IntFlag{Name: "last", Value: 24, Usage: "how many samples to show"},
+					acceptHostKeyFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+					SetAcceptNewHostKey(c.Bool("accept-host-key"))
 					name := c.Args().First()
 					if name == "" {
 						return Usage(errors.New("the host name is required"))
@@ -346,9 +356,11 @@ func App() *ucli.Command {
 					&ucli.StringFlag{Name: "host", Usage: "only this entry"},
 					&ucli.BoolFlag{Name: "matrix", Value: true, Usage: "the topology matrix, every link and protocol"},
 					&ucli.IntFlag{Name: "timeout", Value: 5, Usage: "seconds per handshake"},
+					acceptHostKeyFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+					SetAcceptNewHostKey(c.Bool("accept-host-key"))
 					return ProbeMatrix(c.String("dir"), c.String("host"), time.Duration(c.Int("timeout"))*time.Second)
 				},
 			},
@@ -459,9 +471,10 @@ func App() *ucli.Command {
 					{
 						Name:  "status",
 						Usage: "head, origin and the marker of every host",
-						Flags: []ucli.Flag{dirFlag(), jsonFlag(), atFlag()},
+						Flags: []ucli.Flag{dirFlag(), jsonFlag(), atFlag(), acceptHostKeyFlag()},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+							SetAcceptNewHostKey(c.Bool("accept-host-key"))
 							at, err := dayArg(c)
 							if err != nil {
 								return err

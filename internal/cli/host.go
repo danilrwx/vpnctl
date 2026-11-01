@@ -16,7 +16,7 @@ import (
 
 // HostAdd creates a host with its inbound, keys and routing.
 func HostAdd(dir string, o ops.HostOptions, nocommit bool) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer, at time
 	if name == "" {
 		return Usage(fmt.Errorf("the host name is required"))
 	}
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer, at time
 
 // HostRemove drops a host from the state.
 func HostRemove(dir, name string, nocommit bool) error {
-	st, err := state.Load(dir)
+	st, err := loadState(dir)
 	if err != nil {
 		return err
 	}
