@@ -29,6 +29,8 @@ type ProbeCell struct {
 // ParseProbePlan reads the rendered plan.
 func ParseProbePlan(b []byte) (ProbePlan, error) {
 	var p ProbePlan
+
 	err := json.Unmarshal(b, &p)
+
 	return p, err
 }

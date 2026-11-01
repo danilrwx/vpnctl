@@ -11,10 +11,12 @@ import (
 
 func fixtureState(t *testing.T, role state.Role, engine string, awgLink bool) *state.State {
 	t.Helper()
+
 	links := []state.Link{}
 	if awgLink {
 		links = append(links, state.Link{From: "entry", To: "node", Protocols: []string{"awg"}, Tunnel: "10.9.1.0/30"})
 	}
+
 	st := &state.State{
 		Hosts: map[string]state.Host{
 			"node": {Role: role, Engine: engine, IP: "203.0.113.10", Domain: "vpn.example", SSH: "root@203.0.113.10"},
@@ -46,22 +48,27 @@ func fixtureState(t *testing.T, role state.Role, engine string, awgLink bool) *s
 		st.Inbounds["node"]["ws"] = state.Inbound{Port: 8444, Path: "/ws"}
 		st.Inbounds["node"]["mtg"] = state.Inbound{Port: 2053}
 	}
+
 	if awgLink {
 		st.Hosts["entry"] = state.Host{Role: state.Entry, IP: "198.51.100.1", Domain: "e.example", SSH: "root@198.51.100.1"}
 		awg := st.Inbounds["node"]["awg"]
 		awg.Port = 51820
 		st.Inbounds["node"]["awg"] = awg
 	}
+
 	st.FillStubSecrets()
+
 	return st
 }
 
 func TestScriptEntryRunning(t *testing.T) {
 	st := fixtureState(t, state.Entry, "", false)
+
 	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{
 		"#!/bin/sh",
 		"# vpnctl · bootstrap node (entry)",
@@ -78,6 +85,7 @@ func TestScriptEntryRunning(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
+
 	if strings.Contains(s, "dkms") {
 		t.Error("dkms must not appear without AWG")
 	}
@@ -85,19 +93,24 @@ func TestScriptEntryRunning(t *testing.T) {
 
 func TestScriptExitAndAWG(t *testing.T) {
 	st := fixtureState(t, state.Exit, "", true)
+
 	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(s, "OnCalendar=*-*-02,04") {
 		t.Error("an exit must reboot on even days")
 	}
+
 	if !strings.Contains(s, "git clone -q --depth 1 --branch \"v1.0.20250706\"") {
 		t.Error("the AWG module is not built")
 	}
+
 	if !strings.Contains(s, "awg-quick@awg0") {
 		t.Error("the awg interface is not enabled")
 	}
+
 	if strings.Contains(s, "caddy") {
 		t.Error("an exit must not install caddy")
 	}
@@ -105,15 +118,18 @@ func TestScriptExitAndAWG(t *testing.T) {
 
 func TestScriptXray(t *testing.T) {
 	st := fixtureState(t, state.Exit, "xray", false)
+
 	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{"Xray-linux-64.zip", "xray version", "geosite.dat", "geoip.dat"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q", want)
 		}
 	}
+
 	if strings.Contains(s, "sing-box-1.12.4") {
 		t.Error("sing-box must not be installed for an xray host")
 	}
@@ -122,6 +138,7 @@ func TestScriptXray(t *testing.T) {
 func TestScriptMissingPin(t *testing.T) {
 	st := fixtureState(t, state.Exit, "", true)
 	delete(st.Versions, "sing-box")
+
 	if _, err := Script(st, "node", testDay()); err == nil {
 		t.Fatal("a missing pin was accepted")
 	}
@@ -129,10 +146,12 @@ func TestScriptMissingPin(t *testing.T) {
 
 func TestRuleSetTags(t *testing.T) {
 	cfg := `{"route":{"rule_set":[{"type":"local","tag":"set-a","format":"source"},{"type":"local","tag":"geoip-ru","format":"binary"},{"type":"local","tag":"geoip-ru","format":"binary"}]}}`
+
 	tags := RuleSetTags(cfg)
 	if len(tags) != 1 || tags[0] != "geoip-ru" {
 		t.Fatalf("%v", tags)
 	}
+
 	if RuleSetTags("not json") != nil {
 		t.Fatal("broken json must not panic")
 	}
@@ -142,6 +161,7 @@ func TestRuleSetURL(t *testing.T) {
 	if got := RuleSetURL("geoip-ru", "latest"); !strings.Contains(got, "sing-geoip/rule-set/geoip-ru.srs") {
 		t.Fatal(got)
 	}
+
 	if got := RuleSetURL("geosite-ru", "1.12.0"); !strings.Contains(got, "sing-geosite/releases/download/1.12.0/geosite-ru.srs") {
 		t.Fatal(got)
 	}
@@ -151,6 +171,7 @@ func TestRebootDays(t *testing.T) {
 	if got := RebootDays(state.Entry); !strings.HasPrefix(got, "01,03") || strings.Contains(got, "02") {
 		t.Fatal(got)
 	}
+
 	if got := RebootDays(state.Exit); !strings.HasPrefix(got, "02,04") {
 		t.Fatal(got)
 	}
@@ -165,10 +186,12 @@ func TestScriptNtfy(t *testing.T) {
 	st := fixtureState(t, state.Entry, "", false)
 	st.Versions["ntfy"] = state.Pin{Version: "2.36.0", SHA256: strings.Repeat("a", 64)}
 	st.Alerts = state.Alerts{Ntfy: "https://ntfy.vpn.example/topic", Serve: "node"}
+
 	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{
 		"ntfy_2.36.0_linux_amd64.tar.gz",
 		"install -m 0755 /var/lib/vpnctl/dl/ntfy_2.36.0_linux_amd64/ntfy /usr/local/bin/ntfy",
@@ -178,11 +201,14 @@ func TestScriptNtfy(t *testing.T) {
 			t.Errorf("the bootstrap script lacks %q", want)
 		}
 	}
+
 	plain := fixtureState(t, state.Entry, "", false)
+
 	s, err = Script(plain, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if strings.Contains(s, "ntfy_") {
 		t.Error("a host without a topic installs the server anyway")
 	}

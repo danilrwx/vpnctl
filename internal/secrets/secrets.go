@@ -15,6 +15,7 @@ func bytes(n int) []byte {
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
+
 	return b
 }
 
@@ -38,6 +39,7 @@ func x25519Keys(enc *base64.Encoding) (priv, pub string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+
 	return enc.EncodeToString(k.Bytes()), enc.EncodeToString(k.PublicKey().Bytes()), nil
 }
 
@@ -47,6 +49,7 @@ func RealityKeys() (priv, pub, sid string, err error) {
 	if err != nil {
 		return "", "", "", err
 	}
+
 	return priv, pub, hex.EncodeToString(bytes(8)), nil
 }
 

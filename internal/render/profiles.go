@@ -30,24 +30,31 @@ func SubAccounts(st *state.State, entry, user string, u state.User, mode string)
 	if err != nil {
 		return nil, err
 	}
+
 	if h.Domain == "" {
 		return nil, fmt.Errorf("the entry has no domain")
 	}
+
 	inb := st.Inbounds[entry]
 	hs := st.Secrets.Hosts[entry]
+
 	sec, ok := st.Secrets.Users[user]
 	if !ok {
 		return nil, fmt.Errorf("no secrets for user %s", user)
 	}
+
 	var v []Acc
+
 	for _, p := range []string{"reality", "ws", "hy2"} {
 		if !containsStr(u.Protocols, p) {
 			continue
 		}
+
 		i, ok := inb[p]
 		if !ok || !i.IsEnabled() {
 			continue
 		}
+
 		a := Acc{
 			Proto:    p,
 			Email:    st.Email(user, mode, p),
@@ -61,6 +68,7 @@ func SubAccounts(st *state.State, entry, user string, u state.User, mode string)
 		if p == "ws" {
 			a.Port = 443
 		}
+
 		if p == "reality" {
 			a.SNI, _, _ = RealityTarget(st, entry, i)
 			if hs.Reality != nil {
@@ -69,8 +77,10 @@ func SubAccounts(st *state.State, entry, user string, u state.User, mode string)
 		} else {
 			a.SNI = h.Domain
 		}
+
 		v = append(v, a)
 	}
+
 	return v, nil
 }
 
@@ -90,8 +100,10 @@ func SingboxJSON(st *state.State, entry, user string, u state.User, mode string)
 	if err != nil {
 		return "", err
 	}
+
 	outs := []any{}
 	tags := []string{}
+
 	for _, a := range accs {
 		switch a.Proto {
 		case "reality":
@@ -109,12 +121,15 @@ func SingboxJSON(st *state.State, entry, user string, u state.User, mode string)
 			outs = append(outs, obj("type", "hysteria2", "tag", a.Email, "server", a.Domain, "server_port", a.Port,
 				"password", a.Password, "tls", obj("enabled", true, "server_name", a.Domain)))
 		}
+
 		tags = append(tags, a.Email)
 	}
+
 	group := user + "-" + mode
 	outs = append([]any{obj("type", "urltest", "tag", group, "outbounds", tags, "url", ProbeURL, "interval", "60s")}, outs...)
 	outs = append(outs, obj("type", "direct", "tag", "direct"))
 	cfg := obj("outbounds", outs, "route", obj("final", group, "auto_detect_interface", true))
+
 	return toJSON(cfg)
 }
 
@@ -124,8 +139,10 @@ func ClashYAML(st *state.State, entry, user string, u state.User, mode string) (
 	if err != nil {
 		return "", err
 	}
+
 	proxies := []any{}
 	names := []string{}
+
 	for _, a := range accs {
 		switch a.Proto {
 		case "reality":
@@ -141,14 +158,17 @@ func ClashYAML(st *state.State, entry, user string, u state.User, mode string) (
 			proxies = append(proxies, obj("name", a.Email, "type", "hysteria2", "server", a.Domain, "port", a.Port,
 				"password", a.Password, "sni", a.Domain))
 		}
+
 		names = append(names, a.Email)
 	}
+
 	group := user + "-" + mode
 	cfg := obj(
 		"proxies", proxies,
 		"proxy-groups", []any{obj("name", group, "type", "url-test", "proxies", names, "url", ProbeURL, "interval", 60)},
 		"rules", []any{"MATCH," + group},
 	)
+
 	return yamlDoc(cfg), nil
 }
 
@@ -157,6 +177,7 @@ func ClashYAML(st *state.State, entry, user string, u state.User, mode string) (
 func yamlDoc(m map[string]any) string {
 	var b strings.Builder
 	emitMap(&b, m, 0, false)
+
 	return b.String()
 }
 
@@ -165,12 +186,16 @@ func emitMap(b *strings.Builder, m map[string]any, indent int, inline bool) {
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
+
 	for i, k := range keys {
 		if i > 0 || !inline {
 			b.WriteString(strings.Repeat(" ", indent))
 		}
+
 		b.WriteString(k + ":")
+
 		switch v := m[k].(type) {
 		case map[string]any:
 			b.WriteString("\n")
@@ -180,6 +205,7 @@ func emitMap(b *strings.Builder, m map[string]any, indent int, inline bool) {
 				b.WriteString(" []\n")
 				break
 			}
+
 			b.WriteString("\n")
 			emitSeq(b, v, indent)
 		case []string:
@@ -187,6 +213,7 @@ func emitMap(b *strings.Builder, m map[string]any, indent int, inline bool) {
 				b.WriteString(" []\n")
 				break
 			}
+
 			b.WriteString("\n")
 			emitSeq(b, anyList(v), indent)
 		default:
@@ -198,6 +225,7 @@ func emitMap(b *strings.Builder, m map[string]any, indent int, inline bool) {
 func emitSeq(b *strings.Builder, s []any, indent int) {
 	for _, it := range s {
 		b.WriteString(strings.Repeat(" ", indent) + "- ")
+
 		switch v := it.(type) {
 		case map[string]any:
 			emitMap(b, v, indent+2, true)
@@ -219,6 +247,7 @@ func anyList(v []string) []any {
 	for i, x := range v {
 		out[i] = x
 	}
+
 	return out
 }
 
@@ -228,15 +257,18 @@ func yamlScalar(v any) string {
 		if needsQuote(x) {
 			return "'" + strings.ReplaceAll(x, "'", "''") + "'"
 		}
+
 		return x
 	case bool:
 		if x {
 			return "true"
 		}
+
 		return "false"
 	case int:
 		return strconv.Itoa(x)
 	}
+
 	return fmt.Sprint(v)
 }
 
@@ -245,18 +277,23 @@ func needsQuote(s string) bool {
 	if s == "" || strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") {
 		return true
 	}
+
 	if strings.ContainsAny(s, "\n\t") || strings.Contains(s, ": ") || strings.Contains(s, " #") {
 		return true
 	}
+
 	if strings.ContainsRune("!&*|>'\"%@`{}[],#?:-", rune(s[0])) {
 		return true
 	}
+
 	if _, err := strconv.ParseFloat(s, 64); err == nil {
 		return true
 	}
+
 	switch strings.ToLower(s) {
 	case "true", "false", "null", "~", "yes", "no", "on", "off":
 		return true
 	}
+
 	return false
 }

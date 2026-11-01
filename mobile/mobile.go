@@ -49,14 +49,17 @@ func Open(dir, keyPath string) (*App, error) {
 			return nil, err
 		}
 	}
+
 	st, err := state.Load(dir)
 	if err != nil {
 		return nil, err
 	}
+
 	repo, err := gitsync.Open(dir)
 	if err != nil {
 		repo = nil // read-only mode is fine
 	}
+
 	return &App{st: st, repo: repo, dir: dir}, nil
 }
 
@@ -70,7 +73,9 @@ func (a *App) Users() []UserInfo {
 	for n := range a.st.Users {
 		names = append(names, n)
 	}
+
 	sort.Strings(names)
+
 	out := make([]UserInfo, 0, len(names))
 	for _, n := range names {
 		u := a.st.Users[n]
@@ -82,6 +87,7 @@ func (a *App) Users() []UserInfo {
 			Enabled:   u.Enabled == nil || *u.Enabled,
 		})
 	}
+
 	return out
 }
 
@@ -91,28 +97,35 @@ func (a *App) Links(user string) ([]Link, error) {
 	if !ok {
 		return nil, fmt.Errorf("user %q is not described", user)
 	}
+
 	entry, err := a.st.Entry()
 	if err != nil {
 		return nil, err
 	}
+
 	mode := "split"
 	if len(u.Modes) > 0 {
 		mode = u.Modes[0]
 	}
+
 	var out []Link
 	if sub, err := render.SubURL(a.st, entry, user, mode); err == nil {
 		out = append(out, Link{Label: "subscription " + mode, URL: sub})
 	}
+
 	links, err := render.Links(a.st, entry, user, mode)
 	if err != nil {
 		return nil, err
 	}
+
 	for i, l := range links {
 		out = append(out, Link{Label: fmt.Sprintf("direct %d", i+1), URL: l})
 	}
+
 	if tg, ok := render.TGLink(a.st, entry); ok {
 		out = append(out, Link{Label: "telegram", URL: tg})
 	}
+
 	return out, nil
 }
 
@@ -130,20 +143,25 @@ func (a *App) AddUser(name string, modes, protocols []string, tg bool) (string, 
 	if err != nil {
 		return "", err
 	}
+
 	if err := state.SaveUsers(a.dir, a.st.Users); err != nil {
 		return "", err
 	}
+
 	if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
 		return "", err
 	}
+
 	if errs := validate.State(a.st); len(errs) > 0 {
 		return "", fmt.Errorf("invalid state: %s", errs[0])
 	}
+
 	if a.repo != nil {
 		if err := a.repo.Commit(msg); err != nil {
 			return "", err
 		}
 	}
+
 	return msg, nil
 }
 
@@ -153,24 +171,30 @@ func (a *App) Plan(host string) (string, error) {
 	if errs := validate.State(a.st); len(errs) > 0 {
 		return "", fmt.Errorf("invalid state: %s", errs[0])
 	}
+
 	rendered, err := render.Check(a.st, time.Now().UTC())
 	if err != nil {
 		return "", err
 	}
+
 	one := render.Rendered{}
+
 	for name, files := range rendered {
 		if host == "" || host == name {
 			one[name] = files
 		}
 	}
+
 	plans, err := plan.Plan(a.st, one, time.Now().UTC())
 	if err != nil {
 		return "", err
 	}
+
 	b, err := json.MarshalIndent(plan.JSONOf(plans), "", "  ")
 	if err != nil {
 		return "", err
 	}
+
 	return string(b), nil
 }
 
@@ -182,12 +206,15 @@ func (a *App) Apply(host string) (string, error) {
 		if errors.As(err, &ge) {
 			return "", fmt.Errorf("guard: %w", err)
 		}
+
 		return "", err
 	}
+
 	b, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
 		return "", err
 	}
+
 	return string(b), nil
 }
 
@@ -196,5 +223,6 @@ func (a *App) Sync() error {
 	if a.repo == nil {
 		return fmt.Errorf("no git repository")
 	}
+
 	return a.repo.Push()
 }

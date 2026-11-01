@@ -20,31 +20,39 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 	if err != nil {
 		return err
 	}
+
 	if _, err := st.Host(host); err != nil {
 		return err
 	}
+
 	if binary == "" {
 		binary = defaultAgentBinary()
 	}
+
 	body, err := os.ReadFile(binary)
 	if err != nil {
 		return fmt.Errorf("agent binary %s: %w (build it with go build -o vpnctl-agent ./cmd/vpnctl-agent)", binary, err)
 	}
+
 	key, err := agent.LoadKey(agent.KeyPath())
 	if err != nil {
 		return err
 	}
+
 	pubPEM, err := agent.PublicPEM(key)
 	if err != nil {
 		return err
 	}
+
 	sshPub, err := ssh.NewPublicKey(&key.PublicKey)
 	if err != nil {
 		return err
 	}
+
 	if operator == "" {
 		operator, _ = os.Hostname()
 	}
+
 	line := fmt.Sprintf(`restrict,no-pty,command="/usr/local/bin/vpnctl-agent" %s vpnctl-agent:%s`,
 		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))), operator)
 
@@ -73,6 +81,7 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %s: %w", host, s.name, err)
 		}
+
 		if !out.OK() {
 			return fmt.Errorf("%s: %s: %s", host, s.name, strings.TrimSpace(string(out.Stderr)))
 		}
@@ -82,10 +91,12 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 	if err != nil {
 		return err
 	}
+
 	resp, err := agent.Call(c, req)
 	if err != nil {
 		return fmt.Errorf("%s: the agent did not answer: %w", host, err)
 	}
+
 	return emit(struct {
 		Host     string `json:"host"`
 		Operator string `json:"operator"`
@@ -105,6 +116,7 @@ func defaultAgentBinary() string {
 			return p
 		}
 	}
+
 	return "vpnctl-agent"
 }
 

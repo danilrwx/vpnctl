@@ -24,23 +24,29 @@ func KeyInit(st *state.State, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if recs != nil {
 		return "", fmt.Errorf("%s already exists", ageio.RecipientsFile)
 	}
+
 	own, err := ageio.OwnRecipient(state.KeyPath())
 	if err != nil {
 		return "", err
 	}
+
 	recs = &ageio.Recipients{}
 	if err := recs.Add(name, own); err != nil {
 		return "", err
 	}
+
 	if err := recs.Save(st.Dir); err != nil {
 		return "", err
 	}
+
 	if err := state.SaveSecrets(st.Dir, st.Secrets); err != nil {
 		return "", err
 	}
+
 	return fmt.Sprintf("keys: init %s with %s", ageio.RecipientsFile, name), nil
 }
 
@@ -50,15 +56,19 @@ func KeyAdd(st *state.State, name, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if err := recs.Add(name, key); err != nil {
 		return "", err
 	}
+
 	if err := recs.Save(st.Dir); err != nil {
 		return "", err
 	}
+
 	if err := state.SaveSecrets(st.Dir, st.Secrets); err != nil {
 		return "", err
 	}
+
 	return fmt.Sprintf("keys: + %s", name), nil
 }
 
@@ -68,19 +78,24 @@ func KeyRemove(st *state.State, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	ok, err := recs.Remove(name)
 	if err != nil {
 		return "", err
 	}
+
 	if !ok {
 		return "", fmt.Errorf("recipient %q is not listed", name)
 	}
+
 	if err := recs.Save(st.Dir); err != nil {
 		return "", err
 	}
+
 	if err := state.SaveSecrets(st.Dir, st.Secrets); err != nil {
 		return "", err
 	}
+
 	return fmt.Sprintf("keys: - %s", name), nil
 }
 
@@ -90,14 +105,18 @@ func Keys(st *state.State) ([]KeyInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if recs == nil {
 		return nil, fmt.Errorf("no %s: run key init", ageio.RecipientsFile)
 	}
+
 	own, ownErr := ageio.OwnRecipient(state.KeyPath())
+
 	out := make([]KeyInfo, 0, len(recs.Recipients))
 	for _, r := range recs.Recipients {
 		out = append(out, KeyInfo{Name: r.Name, Key: r.Key, Added: r.Added, This: ownErr == nil && r.Key == own})
 	}
+
 	return out, nil
 }
 
@@ -106,9 +125,11 @@ func loadRecipients(st *state.State) (*ageio.Recipients, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if recs == nil {
 		return nil, fmt.Errorf("no %s: run key init first", ageio.RecipientsFile)
 	}
+
 	return recs, nil
 }
 
@@ -133,15 +154,18 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 	if _, err := os.Stat(filepath.Join(dir, "hosts.yaml")); err == nil {
 		return InitResult{}, fmt.Errorf("%s already contains a state", dir)
 	}
+
 	if opt.Name == "" {
 		h, _ := os.Hostname()
 		opt.Name = h
 	}
+
 	if err := os.MkdirAll(filepath.Join(dir, "sets"), 0o755); err != nil {
 		return InitResult{}, err
 	}
 
 	keyPath := state.KeyPath()
+
 	own, err := ageio.Identity(keyPath)
 	if err != nil {
 		if !ageio.HasIdentity(keyPath) {
@@ -149,6 +173,7 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 			if err != nil {
 				return InitResult{}, err
 			}
+
 			if err := ageio.WriteIdentity(keyPath, own); err != nil {
 				return InitResult{}, err
 			}
@@ -156,16 +181,20 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 			return InitResult{}, err
 		}
 	}
+
 	recs := &ageio.Recipients{}
 	if err := recs.Add(opt.Name, ageio.RecipientOf(own)); err != nil {
 		return InitResult{}, err
 	}
+
 	res := InitResult{Recipient: ageio.RecipientOf(own)}
+
 	if opt.BackupPassphrase != "" {
 		backup, err := ageio.NewIdentity()
 		if err != nil {
 			return InitResult{}, err
 		}
+
 		blob, err := ageio.SealIdentity(backup, opt.BackupPassphrase)
 		if err != nil {
 			return InitResult{}, err
@@ -175,11 +204,14 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 		if err != nil || back.String() != backup.String() {
 			return InitResult{}, fmt.Errorf("the backup identity does not round-trip: %w", err)
 		}
+
 		if err := recs.Add("backup", ageio.RecipientOf(backup)); err != nil {
 			return InitResult{}, err
 		}
+
 		res.BackupBlob = blob
 	}
+
 	if err := recs.Save(dir); err != nil {
 		return InitResult{}, err
 	}
@@ -196,6 +228,7 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 			return InitResult{}, err
 		}
 	}
+
 	versions := map[string]state.Pin{
 		"sing-box": {Version: "1.12.4"},
 		"xray":     {Version: "25.9.11"},
@@ -207,6 +240,7 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 	if err := state.SaveVersions(dir, versions); err != nil {
 		return InitResult{}, err
 	}
+
 	defaults := map[string]string{
 		"sets/ru-direct.yaml": "geosite:\n- category-ru\n- yandex\n- vk\ndomains:\n- gosuslugi.ru\n",
 		"sets/ads.yaml":       "geosite:\n- category-ads-all\n",
@@ -216,10 +250,13 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 			return InitResult{}, err
 		}
 	}
+
 	if err := state.SaveSecrets(dir, state.Secrets{}); err != nil {
 		return InitResult{}, err
 	}
+
 	res.Message = "init: empty state"
+
 	return res, nil
 }
 
@@ -230,30 +267,38 @@ func KeyBackup(st *state.State, passphrase string) (string, string, error) {
 	if passphrase == "" {
 		return "", "", fmt.Errorf("a passphrase is required: it is the only thing protecting the backup")
 	}
+
 	recs, err := loadRecipients(st)
 	if err != nil {
 		return "", "", err
 	}
+
 	backup, err := ageio.NewIdentity()
 	if err != nil {
 		return "", "", err
 	}
+
 	blob, err := ageio.SealIdentity(backup, passphrase)
 	if err != nil {
 		return "", "", err
 	}
+
 	back, err := ageio.OpenIdentity(blob, passphrase)
 	if err != nil || back.String() != backup.String() {
 		return "", "", fmt.Errorf("the backup identity does not round-trip: %w", err)
 	}
+
 	if err := recs.Replace("backup", ageio.RecipientOf(backup)); err != nil {
 		return "", "", err
 	}
+
 	if err := recs.Save(st.Dir); err != nil {
 		return "", "", err
 	}
+
 	if err := state.SaveSecrets(st.Dir, st.Secrets); err != nil {
 		return "", "", err
 	}
+
 	return blob, "keys: new backup identity", nil
 }

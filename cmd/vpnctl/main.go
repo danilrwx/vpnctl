@@ -20,6 +20,7 @@ func main() {
 		fmt.Println("vpnctl", version.String())
 		return
 	}
+
 	app := cli.App()
 	// urfave exits 3 for an unknown command, which is our guard code: a typo
 	// must not look like "pull the repository". The shell completion asks about
@@ -30,11 +31,14 @@ func main() {
 		cli.PrintUsage(app, os.Stderr)
 		os.Exit(cli.ExitUsage)
 	}
+
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		cli.ReportError(err)
+
 		if !errors.Is(err, cli.ErrSilent) && !cli.JSON() {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 		}
+
 		os.Exit(cli.ExitCode(err))
 	}
 }
@@ -47,6 +51,7 @@ func wantsCompletion(args []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -57,14 +62,17 @@ func known(app *ucli.Command, arg string) bool {
 	if len(arg) > 0 && arg[0] == '-' {
 		return true
 	}
+
 	switch arg {
 	case "help", "completion", "version":
 		return true
 	}
+
 	for _, c := range app.Commands {
 		if c.HasName(arg) {
 			return true
 		}
 	}
+
 	return false
 }

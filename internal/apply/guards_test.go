@@ -17,33 +17,42 @@ import (
 func pushedState(t *testing.T) (string, *gitsync.Repo) {
 	t.Helper()
 	root := t.TempDir()
+
 	bare := filepath.Join(root, "origin.git")
 	if _, err := git.PlainInit(bare, true); err != nil {
 		t.Fatal(err)
 	}
+
 	dir := filepath.Join(root, "state")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	repo, err := gitsync.Init(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo.AddRemote(bare); err != nil {
 		t.Fatal(err)
 	}
+
 	write(t, filepath.Join(dir, "hosts.yaml"), "hosts: {}\n")
+
 	if err := repo.Commit("init: state"); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo.Push(); err != nil {
 		t.Fatal(err)
 	}
+
 	return dir, repo
 }
 
 func write(t *testing.T, path, body string) {
 	t.Helper()
+
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +60,7 @@ func write(t *testing.T, path, body string) {
 
 func TestGuardsPushedState(t *testing.T) {
 	dir, _ := pushedState(t)
+
 	st := &state.State{Dir: dir}
 	if err := Guards(st, &Opts{}); err != nil {
 		t.Fatalf("a clean pushed state was rejected: %v", err)
@@ -60,17 +70,22 @@ func TestGuardsPushedState(t *testing.T) {
 func TestGuardsUnpushedState(t *testing.T) {
 	dir, repo := pushedState(t)
 	write(t, filepath.Join(dir, "users.yaml"), "users: {}\n")
+
 	if err := repo.Commit("users: probe"); err != nil {
 		t.Fatal(err)
 	}
+
 	st := &state.State{Dir: dir}
+
 	err := Guards(st, &Opts{})
 	if err == nil {
 		t.Fatal("an unpushed commit was accepted")
 	}
+
 	if !strings.Contains(err.Error(), "is not pushed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if err := Guards(st, &Opts{Unpushed: true}); err != nil {
 		t.Fatalf("--unpushed was rejected: %v", err)
 	}
@@ -79,6 +94,7 @@ func TestGuardsUnpushedState(t *testing.T) {
 func TestGuardsDirtyTree(t *testing.T) {
 	dir, _ := pushedState(t)
 	write(t, filepath.Join(dir, "hosts.yaml"), "hosts: {}\nextra: 1\n")
+
 	st := &state.State{Dir: dir}
 	if err := Guards(st, &Opts{}); err == nil || !strings.Contains(err.Error(), "dirty") {
 		t.Fatalf("a dirty worktree was accepted: %v", err)
@@ -87,14 +103,18 @@ func TestGuardsDirtyTree(t *testing.T) {
 
 func TestCheckAncestors(t *testing.T) {
 	dir, repo := pushedState(t)
+
 	a, err := repo.Head()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	write(t, filepath.Join(dir, "users.yaml"), "users: {}\n")
+
 	if err := repo.Commit("users: probe"); err != nil {
 		t.Fatal(err)
 	}
+
 	b, err := repo.Head()
 	if err != nil {
 		t.Fatal(err)

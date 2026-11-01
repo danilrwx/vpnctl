@@ -41,6 +41,7 @@ func TestMessageUsesDomain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{
 		"VPN · vpn.example",
 		"https://vpn.example/s/sub1/split",
@@ -55,6 +56,7 @@ func TestMessageUsesDomain(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, msg)
 		}
 	}
+
 	if strings.Contains(msg, "203.0.113.10") {
 		t.Error("the IP leaked into the default message")
 	}
@@ -65,6 +67,7 @@ func TestMessageIPModeKeepsNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(msg, "@203.0.113.10:443") {
 		t.Errorf("the address is not the IP:\n%s", msg)
 	}
@@ -72,9 +75,11 @@ func TestMessageIPModeKeepsNames(t *testing.T) {
 	if !strings.Contains(msg, "sni=vpn.example") || !strings.Contains(msg, "host=vpn.example") {
 		t.Errorf("sni or host lost the domain:\n%s", msg)
 	}
+
 	if strings.Contains(msg, "Подписка") {
 		t.Errorf("the subscription needs DNS and must be omitted:\n%s", msg)
 	}
+
 	if !strings.Contains(msg, "server=203.0.113.10") {
 		t.Errorf("the telegram proxy is not switched to the IP:\n%s", msg)
 	}
@@ -85,9 +90,11 @@ func TestMessageMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(msg, "**VPN · vpn.example**") {
 		t.Errorf("no bold title:\n%s", msg)
 	}
+
 	if strings.Contains(msg, "reality") {
 		t.Errorf("links were not omitted:\n%s", msg)
 	}
@@ -110,11 +117,13 @@ func TestMessageLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, want := range []string{"1) Client", "2) Subscription", "Check: after enabling"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("missing %q in:\n%s", want, msg)
 		}
 	}
+
 	if strings.Contains(msg, "Приложение") {
 		t.Errorf("russian text leaked into the english message:\n%s", msg)
 	}

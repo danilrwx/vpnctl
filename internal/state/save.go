@@ -14,14 +14,18 @@ import (
 // written this way since the Rust core, and four spaces make every diff noisy.
 func marshal(v any) ([]byte, error) {
 	var b bytes.Buffer
+
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
+
 	if err := enc.Encode(v); err != nil {
 		return nil, err
 	}
+
 	if err := enc.Close(); err != nil {
 		return nil, err
 	}
+
 	return b.Bytes(), nil
 }
 
@@ -31,6 +35,7 @@ func SaveUsers(dir string, users map[string]User) error {
 	if err != nil {
 		return fmt.Errorf("marshal users: %w", err)
 	}
+
 	return os.WriteFile(filepath.Join(dir, "users.yaml"), b, 0o644)
 }
 
@@ -41,18 +46,23 @@ func SaveSecrets(dir string, sec Secrets) error {
 	if err != nil {
 		return fmt.Errorf("marshal secrets: %w", err)
 	}
+
 	path := filepath.Join(dir, "secrets.age.yaml")
+
 	recs, err := ageio.LoadRecipients(dir)
 	if err != nil {
 		return err
 	}
+
 	if recs != nil && len(recs.Recipients) > 0 {
 		keys, err := recs.Keys()
 		if err != nil {
 			return err
 		}
+
 		return ageio.EncryptTo(path, keys, b)
 	}
+
 	return ageio.Write(path, KeyPath(), b)
 }
 
@@ -62,6 +72,7 @@ func SaveLinks(dir string, links []Link) error {
 	if err != nil {
 		return fmt.Errorf("marshal links: %w", err)
 	}
+
 	return os.WriteFile(filepath.Join(dir, "links.yaml"), b, 0o644)
 }
 
@@ -71,6 +82,7 @@ func SaveHosts(dir string, hosts map[string]Host) error {
 	if err != nil {
 		return fmt.Errorf("marshal hosts: %w", err)
 	}
+
 	return os.WriteFile(filepath.Join(dir, "hosts.yaml"), b, 0o644)
 }
 
@@ -80,6 +92,7 @@ func SaveVersions(dir string, versions map[string]Pin) error {
 	if err != nil {
 		return fmt.Errorf("marshal versions: %w", err)
 	}
+
 	return os.WriteFile(filepath.Join(dir, "versions.yaml"), b, 0o644)
 }
 
@@ -89,6 +102,7 @@ func SaveInbounds(dir string, inbounds map[string]map[string]Inbound) error {
 	if err != nil {
 		return fmt.Errorf("marshal inbounds: %w", err)
 	}
+
 	return os.WriteFile(filepath.Join(dir, "protocols.yaml"), b, 0o644)
 }
 
@@ -97,9 +111,11 @@ func SaveRouting(dir, host string, r Routing) error {
 	if err := os.MkdirAll(filepath.Join(dir, "routing"), 0o755); err != nil {
 		return err
 	}
+
 	b, err := marshal(r)
 	if err != nil {
 		return fmt.Errorf("marshal routing: %w", err)
 	}
+
 	return os.WriteFile(filepath.Join(dir, "routing", host+".yaml"), b, 0o644)
 }

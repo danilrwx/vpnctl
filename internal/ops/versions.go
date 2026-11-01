@@ -41,26 +41,34 @@ func VersionsPin(st *state.State, only string) ([]string, error) {
 			names = append(names, n)
 		}
 	}
+
 	sort.Strings(names)
+
 	if len(names) == 0 {
 		return nil, fmt.Errorf("no such component in versions.yaml")
 	}
+
 	var log []string
+
 	for _, n := range names {
 		p := st.Versions[n]
+
 		url, ok := releaseURL(n, p.Version)
 		if !ok {
 			log = append(log, fmt.Sprintf("%s: not a downloadable release, skipped", n))
 			continue
 		}
+
 		sum, err := fetchSum(url)
 		if err != nil {
 			return log, fmt.Errorf("%s %s: %w", n, p.Version, err)
 		}
+
 		p.SHA256 = sum
 		st.Versions[n] = p
 		log = append(log, fmt.Sprintf("%s %s: %s", n, p.Version, sum))
 	}
+
 	return log, nil
 }
 
@@ -69,19 +77,25 @@ func fetchSum(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	req.Header.Set("User-Agent", "vpnctl")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
+
 	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
+
 	h := sha256.New()
 	if _, err := io.Copy(h, resp.Body); err != nil {
 		return "", err
 	}
+
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
@@ -108,16 +122,21 @@ func LatestTag(repo string) (string, error) {
 			return http.ErrUseLastResponse
 		},
 	}
+
 	resp, err := client.Head("https://github.com/" + repo + "/releases/latest")
 	if err != nil {
 		return "", err
 	}
+
 	defer func() { _ = resp.Body.Close() }()
+
 	loc := resp.Header.Get("Location")
+
 	i := strings.LastIndex(loc, "/tag/")
 	if i < 0 {
 		return "", fmt.Errorf("%s: no redirect to a tag (status %s)", repo, resp.Status)
 	}
+
 	return strings.TrimPrefix(loc[i+len("/tag/"):], "v"), nil
 }
 
@@ -133,10 +152,12 @@ type Update struct {
 // not parse is a major, because a version we cannot read is not a safe upgrade.
 func VersionKind(pinned, latest string) string {
 	p, ok1 := parseVersion(pinned)
+
 	l, ok2 := parseVersion(latest)
 	if !ok1 || !ok2 {
 		return "major"
 	}
+
 	switch {
 	case l[0] != p[0]:
 		return "major"
@@ -149,17 +170,21 @@ func VersionKind(pinned, latest string) string {
 
 func parseVersion(v string) ([3]int, bool) {
 	var out [3]int
+
 	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(v), "v"), ".")
 	if len(parts) != 3 {
 		return out, false
 	}
+
 	for i, p := range parts {
 		n, err := strconv.Atoi(p)
 		if err != nil {
 			return out, false
 		}
+
 		out[i] = n
 	}
+
 	return out, true
 }
 
@@ -173,19 +198,25 @@ func Check(st *state.State) ([]Update, error) {
 			names = append(names, n)
 		}
 	}
+
 	sort.Strings(names)
+
 	var out []Update
+
 	for _, n := range names {
 		latest, err := LatestTag(repoOf[n])
 		if err != nil {
 			return out, fmt.Errorf("%s: %w", n, err)
 		}
+
 		pinned := st.Versions[n].Version
 		if latest == pinned {
 			continue
 		}
+
 		out = append(out, Update{Name: n, Pinned: pinned, Latest: latest, Kind: VersionKind(pinned, latest)})
 	}
+
 	return out, nil
 }
 
@@ -193,10 +224,12 @@ func Check(st *state.State) ([]Update, error) {
 // and minor, so the config language is the one we already render.
 func Patches(updates []Update) []Update {
 	var out []Update
+
 	for _, u := range updates {
 		if u.Kind == "patch" {
 			out = append(out, u)
 		}
 	}
+
 	return out
 }

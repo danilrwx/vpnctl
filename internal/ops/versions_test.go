@@ -24,6 +24,7 @@ func TestPatches(t *testing.T) {
 		{Name: "b", Kind: "minor"},
 		{Name: "c", Kind: "major"},
 	}
+
 	got := Patches(up)
 	if len(got) != 1 || got[0].Name != "a" {
 		t.Fatalf("%v", got)

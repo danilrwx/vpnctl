@@ -35,11 +35,14 @@ func RealityTarget(st *state.State, host string, i state.Inbound) (sni, server s
 		if h, p, ok := splitHostPort(i.Handshake); ok {
 			return i.SNI, h, p
 		}
+
 		return i.SNI, i.SNI, 443
 	}
+
 	if h, ok := st.Hosts[host]; ok && h.Domain != "" {
 		return h.Domain, "127.0.0.1", CaddyPort
 	}
+
 	return "www.microsoft.com", "www.microsoft.com", 443
 }
 
@@ -47,14 +50,17 @@ func splitHostPort(s string) (string, int, bool) {
 	if s == "" {
 		return "", 0, false
 	}
+
 	i := strings.LastIndex(s, ":")
 	if i < 0 {
 		return "", 0, false
 	}
+
 	p, err := strconv.Atoi(s[i+1:])
 	if err != nil || p < 0 || p > 65535 {
 		return "", 0, false
 	}
+
 	return s[:i], p, true
 }
 
@@ -63,6 +69,7 @@ func EngineBin(engine string) string {
 	if engine == engineXray {
 		return engineXray
 	}
+
 	return engineSingBox
 }
 
@@ -80,25 +87,31 @@ type OutLink struct {
 // OutLinks returns the links leaving the host, numbered from 1.
 func OutLinks(st *state.State, host string) []OutLink {
 	var out []OutLink
+
 	n := 0
+
 	for i := range st.Links {
 		if st.Links[i].From != host {
 			continue
 		}
+
 		n++
 		out = append(out, OutLink{N: n, L: &st.Links[i]})
 	}
+
 	return out
 }
 
 // InLinks returns the links arriving at the host, in state order.
 func InLinks(st *state.State, host string) []*state.Link {
 	var out []*state.Link
+
 	for i := range st.Links {
 		if st.Links[i].To == host {
 			out = append(out, &st.Links[i])
 		}
 	}
+
 	return out
 }
 
@@ -116,18 +129,24 @@ func UsersOf(st *state.State, entry string, at time.Time) []Account {
 	for name := range st.Users {
 		names = append(names, name)
 	}
+
 	sort.Strings(names)
+
 	var out []Account
+
 	for _, name := range names {
 		u := st.Users[name]
 		if !u.IsEnabled() || state.Expired(u.Expires, at) {
 			continue
 		}
+
 		if e, ok := st.EntryOf(u); !ok || e != entry {
 			continue
 		}
+
 		out = append(out, Account{Name: name, U: u})
 	}
+
 	return out
 }
 
@@ -137,8 +156,10 @@ func CertPaths(st *state.State, host string) (crt, key string) {
 	if ok && h.Role == state.Entry && h.Domain != "" {
 		base := "/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/" +
 			h.Domain + "/" + h.Domain
+
 		return base + ".crt", base + ".key"
 	}
+
 	return "/etc/vpnctl/self.crt", "/etc/vpnctl/self.key"
 }
 
@@ -148,19 +169,24 @@ func hostsOf(cidr string) []string {
 	if err != nil {
 		return nil
 	}
+
 	ip := n.IP.To4()
 	if ip == nil {
 		return nil
 	}
+
 	ones, bits := n.Mask.Size()
 	total := 1 << (bits - ones)
+
 	var out []string
+
 	for i := 1; i < total-1; i++ {
 		v := make(net.IP, len(ip))
 		copy(v, ip)
 		v[3] += byte(i)
 		out = append(out, v.String())
 	}
+
 	return out
 }
 
@@ -169,22 +195,27 @@ func Gateway(cidr string) string {
 	if h := hostsOf(cidr); len(h) > 0 {
 		return h[0]
 	}
+
 	if _, n, err := net.ParseCIDR(cidr); err == nil {
 		return n.IP.String()
 	}
+
 	return cidr
 }
 
 // TunnelAddr is side 1 or 2 of the /30 tunnel between nodes.
 func TunnelAddr(cidr string, side int) string {
 	h := hostsOf(cidr)
+
 	idx := side - 1
 	if idx < 0 || idx >= len(h) {
 		if _, n, err := net.ParseCIDR(cidr); err == nil {
 			return n.IP.String() + "/30"
 		}
+
 		return cidr
 	}
+
 	return h[idx] + "/30"
 }
 

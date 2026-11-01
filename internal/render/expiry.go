@@ -16,14 +16,17 @@ import (
 // peer go with them. It lists only accounts that are still alive today.
 func expiryFile(st *state.State, entry string, at time.Time) string {
 	exp := state.Expiry{Users: map[string]state.ExpiryEntry{}}
+
 	for _, acc := range UsersOf(st, entry, at) {
 		if acc.U.Expires == "" {
 			continue
 		}
+
 		e := state.ExpiryEntry{Expires: acc.U.Expires, SubID: st.Secrets.Users[acc.Name].SubID}
 		if acc.U.AWG != nil && containsStr(acc.U.Protocols, "awg") {
 			e.AWGIP = acc.U.AWG.IP
 		}
+
 		for _, m := range acc.U.Modes {
 			for _, p := range acc.U.Protocols {
 				if isEngineUser(p) {
@@ -31,22 +34,29 @@ func expiryFile(st *state.State, entry string, at time.Time) string {
 				}
 			}
 		}
+
 		sort.Strings(e.Emails)
 		exp.Users[acc.Name] = e
 	}
+
 	var b bytes.Buffer
 	b.WriteString("# vpnctl · account expiry, read by vpnctl-agent tick\n")
+
 	if len(exp.Users) == 0 {
 		return b.String()
 	}
+
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
+
 	if err := enc.Encode(exp); err != nil {
 		return b.String()
 	}
+
 	if err := enc.Close(); err != nil {
 		return b.String()
 	}
+
 	return b.String()
 }
 
@@ -58,6 +68,7 @@ func tickUnit(st *state.State, host, engine string) string {
 	if _, ok := st.Inbounds[host]["awg"]; ok {
 		awg = " --awg /etc/amnezia/amneziawg/awg0.conf"
 	}
+
 	return fmt.Sprintf(`# vpnctl · %s
 [Unit]
 Description=vpnctl expiry tick (%s)

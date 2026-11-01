@@ -20,9 +20,11 @@ func dayArg(c *ucli.Command) (time.Time, error) {
 	if s == "" {
 		return time.Now().UTC(), nil
 	}
+
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
 		return time.Time{}, Usage(fmt.Errorf("--at %q is not YYYY-MM-DD", s))
 	}
+
 	return t, nil
 }

@@ -28,23 +28,29 @@ func TestPushFetchAncestry(t *testing.T) {
 	if err := os.MkdirAll(first, 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	repo, err := Init(first)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo.AddRemote(bare); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := os.WriteFile(filepath.Join(first, "hosts.yaml"), []byte("hosts: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo.Commit("state: a host"); err != nil {
 		t.Fatal(err)
 	}
+
 	head1, err := repo.Head()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo.Push(); err != nil {
 		t.Fatal(err)
 	}
@@ -53,17 +59,21 @@ func TestPushFetchAncestry(t *testing.T) {
 	if _, err := git.PlainClone(second, false, &git.CloneOptions{URL: bare}); err != nil {
 		t.Fatal(err)
 	}
+
 	repo2, err := Open(second)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo2.Fetch(); err != nil {
 		t.Fatal(err)
 	}
+
 	origin, err := repo2.OriginMain()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if origin != head1 {
 		t.Fatalf("origin/main %s, want %s", origin, head1)
 	}
@@ -72,16 +82,20 @@ func TestPushFetchAncestry(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(second, "users.yaml"), []byte("users: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := repo2.Commit("state: a user"); err != nil {
 		t.Fatal(err)
 	}
+
 	head2, err := repo2.Head()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if ok, err := repo2.IsAncestor(head1, head2); err != nil || !ok {
 		t.Fatalf("head1 must be an ancestor of head2: %v %v", ok, err)
 	}
+
 	if ok, err := repo2.IsAncestor(head2, head1); err != nil || ok {
 		t.Fatalf("head2 must not be an ancestor of head1: %v %v", ok, err)
 	}
@@ -91,9 +105,11 @@ func TestPushFetchAncestry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, ok := files["hosts.yaml"]; !ok {
 		t.Fatalf("FilesAt at the first commit: %v", files)
 	}
+
 	clean, err := repo2.Clean()
 	if err != nil || !clean {
 		t.Fatalf("a committed worktree must be clean: %v %v", clean, err)

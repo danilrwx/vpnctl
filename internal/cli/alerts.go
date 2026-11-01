@@ -25,12 +25,16 @@ func AlertsSet(dir, ntfy, serve, topic, tokenFile string, nocommit bool) error {
 	if err != nil {
 		return err
 	}
+
 	token, err := alertsToken(tokenFile)
 	if err != nil {
 		return err
 	}
+
 	before := st.Secrets.Alerts.Token
+
 	var msg string
+
 	switch {
 	case serve != "":
 		msg, err = ops.AlertsServe(st, serve, topic, token)
@@ -38,17 +42,22 @@ func AlertsSet(dir, ntfy, serve, topic, tokenFile string, nocommit bool) error {
 		if topic != "" {
 			return Usage(errors.New("--topic belongs to --serve: pass the whole path in --ntfy instead"))
 		}
+
 		msg, err = ops.AlertsSet(st, ntfy, token)
 	default:
 		return Usage(errors.New("either --ntfy <url> or --serve <host> --topic <name> is required"))
 	}
+
 	if err != nil {
 		return err
 	}
+
 	if err := saveAlerts(st, dir, msg, st.Secrets.Alerts.Token != before, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	return nil
 }
 
@@ -58,15 +67,20 @@ func AlertsOff(dir string, nocommit bool) error {
 	if err != nil {
 		return err
 	}
+
 	before := st.Secrets.Alerts.Token
+
 	msg, err := ops.AlertsSet(st, "", "")
 	if err != nil {
 		return err
 	}
+
 	if err := saveAlerts(st, dir, msg, st.Secrets.Alerts.Token != before, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	return nil
 }
 
@@ -76,13 +90,17 @@ func AlertsShow(dir string) error {
 	if err != nil {
 		return err
 	}
+
 	var entries []string
+
 	for name := range st.Hosts {
 		if st.Hosts[name].Role == state.Entry {
 			entries = append(entries, name)
 		}
 	}
+
 	sort.Strings(entries)
+
 	type row struct {
 		Ntfy     string   `json:"ntfy"`
 		Serve    string   `json:"serve,omitempty"`
@@ -90,23 +108,29 @@ func AlertsShow(dir string) error {
 		TokenSet bool     `json:"token_set"`
 		Entries  []string `json:"entries"`
 	}
+
 	r := row{Ntfy: st.Alerts.Ntfy, Serve: st.Alerts.Serve, TokenSet: st.Secrets.Alerts.Token != "", Entries: entries}
 	if st.Alerts.Serve != "" {
 		r.Local = render.NtfyLocal(st.Alerts.Ntfy)
 	}
+
 	if r.Entries == nil {
 		r.Entries = []string{}
 	}
+
 	return emit(r, func() {
 		if r.Ntfy == "" {
 			fmt.Println("alerts: off")
 			return
 		}
+
 		token := "no token"
 		if r.TokenSet {
 			token = "token set"
 		}
+
 		fmt.Printf("alerts: %s (%s) from %s\n", r.Ntfy, token, strings.Join(entries, ", "))
+
 		if r.Serve != "" {
 			fmt.Printf("  served on %s, the probe posts to %s\n", r.Serve, r.Local)
 		}
@@ -121,27 +145,34 @@ func AlertsTest(dir string) error {
 	if err != nil {
 		return err
 	}
+
 	if st.Alerts.Ntfy == "" {
 		return errors.New("no topic: run alerts set --ntfy <url> or --serve <host> --topic <name> first")
 	}
+
 	type row struct {
 		Ntfy   string `json:"ntfy"`
 		Local  string `json:"local,omitempty"`
 		Status int    `json:"status"`
 	}
+
 	r := row{Ntfy: st.Alerts.Ntfy}
+
 	status, err := postAlertTo(st.Alerts.Ntfy, alertTitle(st), st.Secrets.Alerts.Token, "vpnctl test: the topic works", "default")
 	if err != nil {
 		return err
 	}
+
 	r.Status = status
 	if st.Alerts.Serve != "" {
 		// the loopback address only exists on the host itself, so it is printed
 		// and not dialled from here: apply's probe already proves that path
 		r.Local = render.NtfyLocal(st.Alerts.Ntfy)
 	}
+
 	return emit(r, func() {
 		fmt.Printf("✓ %s answered %d\n", r.Ntfy, r.Status)
+
 		if r.Local != "" {
 			fmt.Printf("  the host's probe posts to %s\n", r.Local)
 		}
@@ -156,6 +187,7 @@ func alertTitle(st *state.State) string {
 			return "vpnctl " + name
 		}
 	}
+
 	return "vpnctl"
 }
 
@@ -170,21 +202,28 @@ func postAlertTo(topic, title, token, text, priority string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	req.Header.Set("Title", title)
 	req.Header.Set("Priority", priority)
+
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+
 	client := &http.Client{Timeout: 15 * time.Second}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("the topic did not answer: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
+
 	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode >= 300 {
 		return resp.StatusCode, fmt.Errorf("the topic answered %s — check the topic and the token", resp.Status)
 	}
+
 	return resp.StatusCode, nil
 }
 
@@ -195,22 +234,27 @@ func saveAlerts(st *state.State, dir, msg string, tokenChanged, nocommit bool) e
 	if err := checkState(st); err != nil {
 		return err
 	}
+
 	if err := state.SaveAlerts(dir, st.Alerts); err != nil {
 		return err
 	}
+
 	if tokenChanged {
 		if err := state.SaveSecrets(dir, st.Secrets); err != nil {
 			return err
 		}
 	}
+
 	if nocommit {
 		fmt.Println("(not committed)")
 		return nil
 	}
+
 	repo, err := gitsync.Open(dir)
 	if err != nil {
 		return err
 	}
+
 	return repo.Commit(msg)
 }
 
@@ -222,27 +266,37 @@ func alertsToken(file string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("read the token file: %w", err)
 		}
+
 		if t := strings.TrimSpace(string(b)); t != "" {
 			return t, nil
 		}
+
 		return "", fmt.Errorf("the token file %s is empty", file)
 	}
+
 	if v := os.Getenv("VPNCTL_ALERTS_TOKEN"); v != "" {
 		return strings.TrimSpace(v), nil
 	}
+
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			return "", err
 		}
+
 		return strings.TrimSpace(line), nil
 	}
+
 	fmt.Fprint(os.Stderr, "ntfy token, empty for a public topic: ")
+
 	b, err := term.ReadPassword(fd)
+
 	fmt.Fprintln(os.Stderr)
+
 	if err != nil {
 		return "", err
 	}
+
 	return strings.TrimSpace(string(b)), nil
 }

@@ -16,27 +16,33 @@ func Render(dir, out, host string, stub bool, at time.Time) error {
 	if err != nil {
 		return err
 	}
+
 	if stub {
 		st.FillStubSecrets()
 	} else if errs := validate.State(st); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Println("  ✗", e)
 		}
+
 		return fmt.Errorf("%d errors in the state", len(errs))
 	}
+
 	r, err := render.Render(st, host, at)
 	if err != nil {
 		return err
 	}
+
 	if out != "" {
 		if err := render.Write(r, out); err != nil {
 			return err
 		}
 	}
+
 	counts := map[string]int{}
 	for name, files := range r {
 		counts[name] = len(files)
 	}
+
 	return emit(struct {
 		Out   string         `json:"out,omitempty"`
 		Hosts map[string]int `json:"hosts"`

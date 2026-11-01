@@ -8,6 +8,9 @@ linters:
     - misspell
     - nilerr
     - unconvert
+    # wsl keeps one thing per thought: a blank line between statements that are
+    # not related, none between those that are
+    - wsl_v5
   settings:
     errcheck:
       # writing to a terminal is not worth an error path

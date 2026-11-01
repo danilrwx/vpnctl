@@ -17,21 +17,26 @@ func UserAdd(st *state.State, name string, modes, protocols []string, tg bool) (
 	if name == "" {
 		return "", fmt.Errorf("name is empty")
 	}
+
 	if _, ok := st.Users[name]; ok {
 		return "", fmt.Errorf("user %q already exists", name)
 	}
+
 	if len(modes) == 0 {
 		return "", fmt.Errorf("user %q: no modes", name)
 	}
+
 	if len(protocols) == 0 {
 		return "", fmt.Errorf("user %q: no protocols", name)
 	}
+
 	st.Users[name] = state.User{Modes: modes, Protocols: protocols, TG: tg}
 	st.Secrets.Users[name] = state.UserSecrets{
 		UUID:    secrets.UUID(),
 		Hy2Pass: secrets.Password(),
 		SubID:   secrets.SubID(),
 	}
+
 	return fmt.Sprintf("users: + %s (%s)", name, modes[0]), nil
 }
 
@@ -40,8 +45,10 @@ func UserRm(st *state.State, name string) (string, error) {
 	if _, ok := st.Users[name]; !ok {
 		return "", fmt.Errorf("user %q is not described", name)
 	}
+
 	delete(st.Users, name)
 	delete(st.Secrets.Users, name)
+
 	return fmt.Sprintf("users: - %s", name), nil
 }
 
@@ -51,7 +58,9 @@ func SortedUsers(st *state.State) []string {
 	for n := range st.Users {
 		out = append(out, n)
 	}
+
 	sort.Strings(out)
+
 	return out
 }
 
@@ -70,37 +79,53 @@ func UserEdit(st *state.State, name string, p UserPatch) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("user %q is not described", name)
 	}
+
 	var what []string
+
 	if p.Modes != nil {
 		if len(p.Modes) == 0 {
 			return "", fmt.Errorf("user %q: no modes", name)
 		}
+
 		u.Modes = p.Modes
+
 		what = append(what, "modes")
 	}
+
 	if p.Protocols != nil {
 		if len(p.Protocols) == 0 {
 			return "", fmt.Errorf("user %q: no protocols", name)
 		}
+
 		u.Protocols = p.Protocols
+
 		what = append(what, "protocols")
 	}
+
 	if p.TG != nil {
 		u.TG = *p.TG
+
 		what = append(what, "tg")
 	}
+
 	if p.Expires != nil {
 		u.Expires = *p.Expires
+
 		what = append(what, "expiry")
 	}
+
 	if p.Note != nil {
 		u.Note = *p.Note
+
 		what = append(what, "note")
 	}
+
 	if len(what) == 0 {
 		return "", fmt.Errorf("nothing to change")
 	}
+
 	st.Users[name] = u
+
 	return fmt.Sprintf("users: %s: %s", name, strings.Join(what, ", ")), nil
 }
 
@@ -111,20 +136,24 @@ func UserRotate(st *state.State, name string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("user %q is not described", name)
 	}
+
 	sec := st.Secrets.Users[name]
 	sec.UUID = secrets.UUID()
 	sec.Hy2Pass = secrets.Password()
 	sec.SubID = secrets.SubID()
 	st.Secrets.Users[name] = sec
+
 	if u.AWG != nil {
 		priv, pub, err := secrets.AWGKeys()
 		if err != nil {
 			return "", err
 		}
+
 		sec.AWG = &state.KeyPair{Private: priv, Public: pub}
 		sec.AWGPreshared = secrets.Preshared()
 		st.Secrets.Users[name] = sec
 	}
+
 	return fmt.Sprintf("users: %s: rotate credentials", name), nil
 }
 
@@ -137,18 +166,23 @@ func UserRenew(st *state.State, name string, days int, until string, now time.Ti
 	if !ok {
 		return "", fmt.Errorf("user %q is not described", name)
 	}
+
 	today := now.UTC().Truncate(24 * time.Hour)
 	base := today
+
 	if u.Expires != "" {
 		cur, err := time.Parse("2006-01-02", u.Expires)
 		if err != nil {
 			return "", fmt.Errorf("user %q: expiry %q is not YYYY-MM-DD", name, u.Expires)
 		}
+
 		if cur.After(base) {
 			base = cur
 		}
 	}
+
 	var next time.Time
+
 	switch {
 	case until != "" && days != 0:
 		return "", fmt.Errorf("either --days or --until, not both")
@@ -157,16 +191,20 @@ func UserRenew(st *state.State, name string, days int, until string, now time.Ti
 		if err != nil {
 			return "", fmt.Errorf("--until %q is not YYYY-MM-DD", until)
 		}
+
 		if !d.After(today) {
 			return "", fmt.Errorf("--until %s is not after today %s", until, today.Format("2006-01-02"))
 		}
+
 		next = d
 	case days > 0:
 		next = base.AddDate(0, 0, days)
 	default:
 		return "", fmt.Errorf("--days or --until is required")
 	}
+
 	u.Expires = next.Format("2006-01-02")
 	st.Users[name] = u
+
 	return fmt.Sprintf("users: %s: renew to %s", name, u.Expires), nil
 }

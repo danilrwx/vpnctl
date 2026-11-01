@@ -34,6 +34,7 @@ notify() {
 }
 `
 	}
+
 	return fmt.Sprintf(`#!/bin/sh
 # vpnctl · chain probe on %s · every minute by vpnctl-probe.timer
 set -u
@@ -103,10 +104,12 @@ WantedBy=timers.target
 // ingress cannot swallow the message about the ingress being broken.
 func alertsEnv(st *state.State, host string) string {
 	token := st.Secrets.Alerts.Token
+
 	local := ""
 	if st.Alerts.Serve == host && st.Alerts.Ntfy != "" {
 		local = NtfyLocal(st.Alerts.Ntfy)
 	}
+
 	return fmt.Sprintf("VPNCTL_ALERTS_URL=%q\nVPNCTL_ALERTS_LOCAL=%q\nVPNCTL_ALERTS_TOKEN=%q\n",
 		st.Alerts.Ntfy, local, token)
 }
@@ -121,10 +124,12 @@ func probePlanJSON(st *state.State, host string) string {
 		if l.From != host {
 			continue
 		}
+
 		to, ok := st.Hosts[l.To]
 		if !ok {
 			continue
 		}
+
 		pl := state.ProbeLink{From: l.From, To: l.To, Addr: to.IP, Probes: []state.ProbeCell{}}
 		for _, p := range l.Protocols {
 			c := state.ProbeCell{Protocol: p, Port: 443}
@@ -132,10 +137,12 @@ func probePlanJSON(st *state.State, host string) string {
 				if inb.Port != 0 {
 					c.Port = inb.Port
 				}
+
 				if p == "ws" {
 					c.Path = pathOr(inb.Path)
 				}
 			}
+
 			switch p {
 			case "reality":
 				if inb, ok := st.Inbounds[l.To][p]; ok {
@@ -144,13 +151,17 @@ func probePlanJSON(st *state.State, host string) string {
 			case "hy2", "ws":
 				c.SNI = l.To
 			}
+
 			pl.Probes = append(pl.Probes, c)
 		}
+
 		plan.Links = append(plan.Links, pl)
 	}
+
 	b, err := json.MarshalIndent(plan, "", "  ")
 	if err != nil {
 		return "{}"
 	}
+
 	return string(b) + "\n"
 }

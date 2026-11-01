@@ -18,26 +18,33 @@ func UserAdd(dir, name string, modes, protocols []string, tg bool, entry string,
 	if name == "" {
 		return Usage(fmt.Errorf("the user name is required"))
 	}
+
 	st, err := state.Load(dir)
 	if err != nil {
 		return err
 	}
+
 	if _, ok := st.Users[name]; ok {
 		return fmt.Errorf("user %q already exists", name)
 	}
+
 	msg, err := ops.UserAdd(st, name, modes, protocols, tg)
 	if err != nil {
 		return err
 	}
+
 	if entry != "" {
 		u := st.Users[name]
 		u.Entry = entry
 		st.Users[name] = u
 	}
+
 	if err := save(st, dir, msg, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s: %s (%s)\n", msg, strings.Join(modes, ","), strings.Join(protocols, ","))
+
 	return nil
 }
 
@@ -47,14 +54,18 @@ func UserRm(dir, name string, nocommit bool) error {
 	if err != nil {
 		return err
 	}
+
 	msg, err := ops.UserRm(st, name)
 	if err != nil {
 		return err
 	}
+
 	if err := save(st, dir, msg, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	return nil
 }
 
@@ -64,14 +75,18 @@ func UserRotate(dir, name string, nocommit bool) error {
 	if err != nil {
 		return err
 	}
+
 	msg, err := ops.UserRotate(st, name)
 	if err != nil {
 		return err
 	}
+
 	if err := save(st, dir, msg, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	return nil
 }
 
@@ -81,20 +96,26 @@ func UserSetEnabled(dir, name string, on bool, nocommit bool) error {
 	if err != nil {
 		return err
 	}
+
 	u, ok := st.Users[name]
 	if !ok {
 		return fmt.Errorf("user %q is not described", name)
 	}
+
 	u.Enabled = &on
 	st.Users[name] = u
+
 	msg := fmt.Sprintf("users: %s: disable", name)
 	if on {
 		msg = fmt.Sprintf("users: %s: enable", name)
 	}
+
 	if err := save(st, dir, msg, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	return nil
 }
 
@@ -104,16 +125,20 @@ func UserEdit(dir, name string, modes, protocols []string, tg *bool, expires, no
 	if err != nil {
 		return err
 	}
+
 	msg, err := ops.UserEdit(st, name, ops.UserPatch{
 		Modes: modes, Protocols: protocols, TG: tg, Expires: expires, Note: note,
 	})
 	if err != nil {
 		return err
 	}
+
 	if err := save(st, dir, msg, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	return nil
 }
 
@@ -124,19 +149,25 @@ func UserRenew(dir, name string, days int, until string, nocommit bool) error {
 	if err != nil {
 		return err
 	}
+
 	before := st.Users[name]
+
 	msg, err := ops.UserRenew(st, name, days, until, time.Now().UTC())
 	if err != nil {
 		return err
 	}
+
 	if err := save(st, dir, msg, nocommit); err != nil {
 		return err
 	}
+
 	fmt.Printf("✓ %s\n", msg)
+
 	was := state.Expired(before.Expires, time.Now().UTC())
 	if was {
 		fmt.Println("  the term had run out: run vpnctl apply to put the account back on the host")
 	}
+
 	return nil
 }
 
@@ -146,6 +177,7 @@ func UserList(dir string) error {
 	if err != nil {
 		return err
 	}
+
 	type row struct {
 		Name      string   `json:"name"`
 		Enabled   bool     `json:"enabled"`
@@ -154,17 +186,21 @@ func UserList(dir string) error {
 		TG        bool     `json:"tg"`
 		AWG       bool     `json:"awg"`
 	}
+
 	rows := []row{}
+
 	for _, n := range ops.SortedUsers(st) {
 		u := st.Users[n]
 		rows = append(rows, row{Name: n, Enabled: u.IsEnabled(), Modes: u.Modes, Protocols: u.Protocols, TG: u.TG, AWG: u.AWG != nil})
 	}
+
 	return emit(rows, func() {
 		for _, r := range rows {
 			status := "on"
 			if !r.Enabled {
 				status = "off"
 			}
+
 			fmt.Printf("%-14s %-4s modes=%-12s protos=%-22s tg=%v awg=%v\n",
 				r.Name, status, strings.Join(r.Modes, ","), strings.Join(r.Protocols, ","), r.TG, r.AWG)
 		}
@@ -177,37 +213,48 @@ func UserLink(dir, name string) error {
 	if err != nil {
 		return err
 	}
+
 	entry, err := st.Entry()
 	if err != nil {
 		return err
 	}
+
 	u, ok := st.Users[name]
 	if !ok {
 		return fmt.Errorf("user %q is not described", name)
 	}
+
 	mode := "split"
 	if len(u.Modes) > 0 {
 		mode = u.Modes[0]
 	}
+
 	if state.Expired(u.Expires, time.Now().UTC()) {
 		fmt.Printf("term: %s — run out: the account is off the host, renew it and apply\n", u.Expires)
 	}
+
 	fmt.Printf("domain: %s\n", st.Hosts[entry].Domain)
+
 	sub, err := render.SubURL(st, entry, name, mode)
 	if err != nil {
 		return err
 	}
+
 	fmt.Printf("sub: %s\n", sub)
+
 	links, err := render.Links(st, entry, name, mode)
 	if err != nil {
 		return err
 	}
+
 	for _, l := range links {
 		fmt.Println(l)
 	}
+
 	if tg, ok := render.TGLink(st, entry); ok {
 		fmt.Printf("tg:  %s\n", tg)
 	}
+
 	return nil
 }
 
@@ -229,7 +276,9 @@ func UserMessage(o MessageOpts) error {
 	if err != nil {
 		return err
 	}
+
 	markdown := false
+
 	switch o.Format {
 	case "", "text":
 	case "markdown", "md":
@@ -237,10 +286,12 @@ func UserMessage(o MessageOpts) error {
 	default:
 		return fmt.Errorf("unknown format %q: expected text or markdown", o.Format)
 	}
+
 	lang := o.Lang
 	if lang == "" {
 		lang = SystemLang()
 	}
+
 	msg, err := render.Message(st, o.Name, render.MessageOptions{
 		Lang:     lang,
 		Markdown: markdown,
@@ -252,7 +303,9 @@ func UserMessage(o MessageOpts) error {
 	if err != nil {
 		return err
 	}
+
 	fmt.Print(msg)
+
 	return nil
 }
 
@@ -263,6 +316,7 @@ func SystemLang() string {
 			return render.NormalizeLang(v)
 		}
 	}
+
 	return "en"
 }
 
@@ -273,31 +327,38 @@ func UserConfig(dir, name, mode, format, out string) error {
 	if err != nil {
 		return err
 	}
+
 	entry, err := st.Entry()
 	if err != nil {
 		return err
 	}
+
 	u, ok := st.Users[name]
 	if !ok {
 		return fmt.Errorf("user %q is not described", name)
 	}
+
 	modes := u.Modes
 	if mode != "" {
 		if !containsStr(u.Modes, mode) {
 			return fmt.Errorf("user %q has no mode %q", name, mode)
 		}
+
 		modes = []string{mode}
 	}
+
 	ext := map[string]string{"singbox": "json", "clash": "yaml", "sub": "txt", "links": "txt"}[format]
 	if ext == "" {
 		return fmt.Errorf("unknown format %q: expected singbox, clash, sub or links", format)
 	}
+
 	multi := len(modes) > 1
 	for _, m := range modes {
 		body, err := profile(st, entry, name, u, m, format)
 		if err != nil {
 			return err
 		}
+
 		switch {
 		case out == "" && multi:
 			fmt.Printf("=== %s %s ===\n%s\n", name, m, body)
@@ -308,14 +369,17 @@ func UserConfig(dir, name, mode, format, out string) error {
 			if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 				return err
 			}
+
 			fmt.Println(p)
 		default:
 			if err := os.WriteFile(out, []byte(body), 0o600); err != nil {
 				return err
 			}
+
 			fmt.Println(out)
 		}
 	}
+
 	return nil
 }
 
@@ -330,16 +394,20 @@ func profile(st *state.State, entry, name string, u state.User, mode, format str
 		if err != nil {
 			return "", err
 		}
+
 		return render.Base64List(links), nil
 	}
+
 	links, err := render.Links(st, entry, name, mode)
 	if err != nil {
 		return "", err
 	}
+
 	var b strings.Builder
 	for _, l := range links {
 		b.WriteString(l + "\n")
 	}
+
 	return b.String(), nil
 }
 
@@ -347,7 +415,9 @@ func isDir(p string) bool {
 	if strings.HasSuffix(p, "/") {
 		return true
 	}
+
 	st, err := os.Stat(p)
+
 	return err == nil && st.IsDir()
 }
 
@@ -358,9 +428,11 @@ func checkState(st *state.State) error {
 	if len(errs) == 0 {
 		return nil
 	}
+
 	for _, e := range errs {
 		fmt.Fprintln(os.Stderr, "  ✗", e)
 	}
+
 	return fmt.Errorf("%d errors in the state", len(errs))
 }
 
@@ -370,20 +442,25 @@ func save(st *state.State, dir, msg string, nocommit bool) error {
 	if err := checkState(st); err != nil {
 		return err
 	}
+
 	if err := state.SaveUsers(dir, st.Users); err != nil {
 		return err
 	}
+
 	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
 		return err
 	}
+
 	if nocommit {
 		fmt.Println("(not committed)")
 		return nil
 	}
+
 	repo, err := gitsync.Open(dir)
 	if err != nil {
 		return err
 	}
+
 	return repo.Commit(msg)
 }
 
@@ -393,5 +470,6 @@ func containsStr(list []string, v string) bool {
 			return true
 		}
 	}
+
 	return false
 }

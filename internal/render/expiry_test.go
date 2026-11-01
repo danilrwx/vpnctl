@@ -25,6 +25,7 @@ func expiryFixture() *state.State {
 		Versions: map[string]state.Pin{},
 	}
 	st.FillStubSecrets()
+
 	return st
 }
 
@@ -42,16 +43,19 @@ func TestExpiredUserIsGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cfg := before["/etc/sing-box/config.json"]
 	for _, email := range []string{"goner-split-reality", "goner-full-ws", "stays-split-reality"} {
 		if !strings.Contains(cfg, email) {
 			t.Errorf("the day before expiry %s is missing from the engine", email)
 		}
 	}
+
 	sub := "/var/www/sub/STUB-sub-goner/split"
 	if _, ok := before[sub]; !ok {
 		t.Errorf("the day before expiry %s is missing", sub)
 	}
+
 	exp := before["/etc/vpnctl/expiry"]
 	for _, want := range []string{"goner:", `expires: "2026-06-01"`, "sub_id: STUB-sub-goner", "- goner-split-reality"} {
 		if !strings.Contains(exp, want) {
@@ -63,18 +67,22 @@ func TestExpiredUserIsGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cfg = after["/etc/sing-box/config.json"]
 	for _, email := range []string{"goner-split-reality", "goner-full-ws"} {
 		if strings.Contains(cfg, email) {
 			t.Errorf("on the expiry date %s is still in the engine", email)
 		}
 	}
+
 	if !strings.Contains(cfg, "stays-split-reality") {
 		t.Error("the other user vanished too")
 	}
+
 	if _, ok := after[sub]; ok {
 		t.Errorf("on the expiry date %s is still served", sub)
 	}
+
 	if strings.Contains(after["/etc/vpnctl/expiry"], "goner") {
 		t.Error("an expired user is still in the expiry file")
 	}
@@ -96,6 +104,7 @@ func TestExpiryFileCarriesThePeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	exp := files["/etc/vpnctl/expiry"]
 	if !strings.Contains(exp, "awg_ip: 10.8.1.2") {
 		t.Errorf("the peer address is not in the plan:\n%s", exp)

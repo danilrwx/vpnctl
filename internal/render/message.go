@@ -77,9 +77,11 @@ func NormalizeLang(s string) string {
 	if i := strings.IndexAny(s, "_-.@"); i >= 0 {
 		s = s[:i]
 	}
+
 	if _, ok := messageTexts[s]; ok {
 		return s
 	}
+
 	return "en"
 }
 
@@ -87,43 +89,54 @@ func NormalizeLang(s string) string {
 // links and the Telegram proxy. The domain is used everywhere unless IP is set.
 func Message(st *state.State, user string, opt MessageOptions) (string, error) {
 	t := messageTexts[NormalizeLang(opt.Lang)]
+
 	u, ok := st.Users[user]
 	if !ok {
 		return "", fmt.Errorf("user %q is not described", user)
 	}
+
 	entry, err := st.Entry()
 	if err != nil {
 		return "", err
 	}
+
 	h := st.Hosts[entry]
+
 	domain := h.Domain
 	if domain == "" {
 		domain = h.IP
 	}
+
 	host := domain
 	if opt.IP {
 		host = h.IP
 	}
+
 	modes := u.Modes
 	if opt.Mode != "" {
 		if !containsStr(u.Modes, opt.Mode) {
 			return "", fmt.Errorf("user %q has no mode %q", user, opt.Mode)
 		}
+
 		modes = []string{opt.Mode}
 	}
+
 	if len(modes) == 0 {
 		modes = []string{"split"}
 	}
+
 	bold := func(s string) string {
 		if opt.Markdown {
 			return "**" + s + "**"
 		}
+
 		return s
 	}
 	code := func(s string) string {
 		if opt.Markdown {
 			return "`" + s + "`"
 		}
+
 		return s
 	}
 
@@ -140,36 +153,44 @@ func Message(st *state.State, user string, opt MessageOptions) (string, error) {
 		b.WriteString(t.NoDNS + "\n\n")
 	} else {
 		b.WriteString(bold(t.Subscription) + "\n")
+
 		for _, m := range modes {
 			sub, err := SubURL(st, entry, user, m)
 			if err != nil {
 				continue
 			}
+
 			fmt.Fprintf(&b, "   %-6s%s\n", m, code(sub))
 		}
+
 		b.WriteString("   " + t.SubNote + "\n\n")
 	}
 
 	if !opt.NoLinks {
 		var lines []string
+
 		for _, m := range modes {
 			links, err := Links(st, entry, user, m)
 			if err != nil {
 				continue
 			}
+
 			for _, l := range links {
 				label := protoOf(l)
 				if len(modes) > 1 {
 					label = m + " " + label
 				}
+
 				lines = append(lines, fmt.Sprintf("   %s\n   %s\n", label, code(withHost(l, domain, host))))
 			}
 		}
+
 		if len(lines) > 0 {
 			title := t.Links
 			if opt.IP {
 				title = t.LinksNoDNS
 			}
+
 			b.WriteString(bold(title) + "\n")
 			b.WriteString(strings.Join(lines, "\n"))
 			b.WriteString("\n")
@@ -186,7 +207,9 @@ func Message(st *state.State, user string, opt MessageOptions) (string, error) {
 	if !strings.HasSuffix(b.String(), "\n\n") {
 		b.WriteString("\n")
 	}
+
 	b.WriteString(t.Check + "\n")
+
 	return b.String(), nil
 }
 
@@ -198,6 +221,7 @@ func withHost(link, domain, host string) string {
 	// only the address changes: a TLS certificate and the ws virtual host still need the name
 	link = strings.ReplaceAll(link, "@"+domain+":", "@"+host+":")
 	link = strings.ReplaceAll(link, "server="+domain, "server="+host)
+
 	return link
 }
 
@@ -207,9 +231,11 @@ func protoOf(link string) string {
 	if i < 0 {
 		return "link"
 	}
+
 	parts := strings.Split(link[i+1:], "-")
 	if len(parts) < 3 {
 		return "link"
 	}
+
 	return parts[len(parts)-1]
 }

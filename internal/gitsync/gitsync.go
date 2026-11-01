@@ -31,6 +31,7 @@ func Open(dir string) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open repo: %w", err)
 	}
+
 	return &Repo{r: r, dir: dir}, nil
 }
 
@@ -46,6 +47,7 @@ func Init(dir string) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init repo: %w", err)
 	}
+
 	return &Repo{r: r, dir: dir}, nil
 }
 
@@ -56,9 +58,11 @@ func (r *Repo) AddRemote(url string) error {
 			return fmt.Errorf("delete remote: %w", err)
 		}
 	}
+
 	if _, err := r.r.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{url}}); err != nil {
 		return fmt.Errorf("add remote: %w", err)
 	}
+
 	return nil
 }
 
@@ -68,22 +72,27 @@ func (r *Repo) Commit(msg string) error {
 	if err != nil {
 		return fmt.Errorf("worktree: %w", err)
 	}
+
 	if err := w.AddWithOptions(&git.AddOptions{All: true}); err != nil {
 		return fmt.Errorf("stage: %w", err)
 	}
+
 	st, err := w.Status()
 	if err != nil {
 		return fmt.Errorf("status: %w", err)
 	}
+
 	if st.IsClean() {
 		return nil
 	}
+
 	_, err = w.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{Name: "vpnctl", Email: "vpnctl@localhost", When: time.Now()},
 	})
 	if err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
+
 	return nil
 }
 
@@ -93,6 +102,7 @@ func (r *Repo) Head() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("head: %w", err)
 	}
+
 	return h.Hash().String()[:7], nil
 }
 
@@ -102,10 +112,12 @@ func (r *Repo) Clean() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("worktree: %w", err)
 	}
+
 	st, err := w.Status()
 	if err != nil {
 		return false, fmt.Errorf("status: %w", err)
 	}
+
 	return st.IsClean(), nil
 }
 
@@ -114,6 +126,7 @@ func (r *Repo) Push() error {
 	if err := r.r.Push(&git.PushOptions{}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("push: %w", err)
 	}
+
 	return nil
 }
 
@@ -123,9 +136,11 @@ func (r *Repo) Pull() error {
 	if err != nil {
 		return fmt.Errorf("worktree: %w", err)
 	}
+
 	if err := w.Pull(&git.PullOptions{RemoteName: "origin"}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("pull: %w", err)
 	}
+
 	return nil
 }
 
@@ -135,6 +150,7 @@ func (r *Repo) Branch() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("head: %w", err)
 	}
+
 	return h.Name().Short(), nil
 }
 
@@ -144,9 +160,11 @@ func (r *Repo) Tag(name string) error {
 	if err != nil {
 		return fmt.Errorf("head: %w", err)
 	}
+
 	if _, err := r.r.CreateTag(name, h.Hash(), nil); err != nil {
 		return fmt.Errorf("tag %s: %w", name, err)
 	}
+
 	return nil
 }
 
@@ -156,28 +174,36 @@ func (r *Repo) FilesAt(rev string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", rev, err)
 	}
+
 	commit, err := r.r.CommitObject(*hash)
 	if err != nil {
 		return nil, fmt.Errorf("commit %s: %w", rev, err)
 	}
+
 	tree, err := commit.Tree()
 	if err != nil {
 		return nil, fmt.Errorf("tree %s: %w", rev, err)
 	}
+
 	files := map[string][]byte{}
+
 	it := tree.Files()
 	defer it.Close()
+
 	err = it.ForEach(func(f *object.File) error {
 		body, err := f.Contents()
 		if err != nil {
 			return err
 		}
+
 		files[f.Name] = []byte(body)
+
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("walk %s: %w", rev, err)
 	}
+
 	return files, nil
 }
 
@@ -189,11 +215,13 @@ func (r *Repo) Fetch() error {
 	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil
 	}
+
 	if r.dir != "" {
 		if cmd := exec.Command("git", "-C", r.dir, "fetch", "-q", "origin"); cmd.Run() == nil {
 			return nil
 		}
 	}
+
 	return fmt.Errorf("fetch: %w", err)
 }
 
@@ -203,6 +231,7 @@ func (r *Repo) OriginMain() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("origin/main: %w", err)
 	}
+
 	return h.Hash().String()[:7], nil
 }
 
@@ -213,10 +242,12 @@ func (r *Repo) IsAncestor(anc, desc string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	d, err := r.commitOf(desc)
 	if err != nil {
 		return false, err
 	}
+
 	return a.IsAncestor(d)
 }
 
@@ -225,10 +256,12 @@ func (r *Repo) commitOf(rev string) (*object.Commit, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", rev, err)
 	}
+
 	c, err := r.r.CommitObject(*hash)
 	if err != nil {
 		return nil, fmt.Errorf("commit %s: %w", rev, err)
 	}
+
 	return c, nil
 }
 
@@ -239,26 +272,31 @@ func SSHAuth() (transport.AuthMethod, error) {
 			return a, nil
 		}
 	}
+
 	home, _ := os.UserHomeDir()
 	for _, name := range []string{"id_ed25519", "id_ecdsa", "id_rsa"} {
 		p := filepath.Join(home, ".ssh", name)
 		if _, err := os.Stat(p); err != nil {
 			continue
 		}
+
 		if a, err := gitssh.NewPublicKeysFromFile("git", p, ""); err == nil {
 			return a, nil
 		}
 	}
+
 	return nil, fmt.Errorf("no ssh key for the remote: no agent and no key in ~/.ssh")
 }
 
 // ListRemote lists the refs of a remote without cloning it.
 func ListRemote(url string, auth transport.AuthMethod) ([]*plumbing.Reference, error) {
 	rem := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{Name: "origin", URLs: []string{url}})
+
 	refs, err := rem.List(&git.ListOptions{Auth: auth})
 	if err != nil {
 		return nil, fmt.Errorf("list %s: %w", url, err)
 	}
+
 	return refs, nil
 }
 
@@ -267,15 +305,18 @@ func (r *Repo) FetchAuth(auth transport.AuthMethod) error {
 	if err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin", Auth: auth}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("fetch: %w", err)
 	}
+
 	return nil
 }
 
 // PushRefs pushes the given refspecs, optionally forcing.
 func (r *Repo) PushRefs(auth transport.AuthMethod, force bool, refs ...config.RefSpec) error {
 	opts := &git.PushOptions{RemoteName: "origin", Auth: auth, Force: force}
+
 	opts.RefSpecs = refs
 	if err := r.r.Push(opts); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("push: %w", err)
 	}
+
 	return nil
 }

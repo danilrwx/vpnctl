@@ -16,6 +16,7 @@ func TestKnownAcceptsBuiltins(t *testing.T) {
 			t.Errorf("%q was rejected", arg)
 		}
 	}
+
 	for _, arg := range []string{"nope", "comp"} {
 		if known(app, arg) {
 			t.Errorf("%q was accepted", arg)
@@ -29,6 +30,7 @@ func TestCompletionBypassesTheGuard(t *testing.T) {
 	if !wantsCompletion([]string{"vpnctl", "appl", "--generate-shell-completion"}) {
 		t.Fatal("a completion request was treated as a typo")
 	}
+
 	if wantsCompletion([]string{"vpnctl", "apply"}) {
 		t.Fatal("a plain command was taken for a completion request")
 	}

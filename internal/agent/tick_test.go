@@ -33,7 +33,9 @@ const tickConfig = `{
 
 func tickOptions(t *testing.T, dir string, now time.Time) TickOptions {
 	t.Helper()
+
 	expiry := filepath.Join(dir, "expiry")
+
 	body := `# vpnctl · account expiry
 users:
   anna:
@@ -50,14 +52,17 @@ users:
 	if err := os.WriteFile(expiry, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	cfg := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(cfg, []byte(tickConfig), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	subs := filepath.Join(dir, "sub")
 	if err := os.MkdirAll(filepath.Join(subs, "sub-anna"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	return TickOptions{
 		ExpiryPath:   expiry,
 		EngineConfig: cfg,
@@ -74,32 +79,41 @@ users:
 // shrinks, the subscription leaves the web root, and the other user is untouched.
 func TestTickRemovesTheExpired(t *testing.T) {
 	opts := tickOptions(t, t.TempDir(), time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC))
+
 	rep, err := Tick(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(rep.Expired) != 1 || rep.Expired[0] != "anna" {
 		t.Fatalf("expired %v", rep.Expired)
 	}
+
 	if !rep.Changed || len(rep.Subs) != 1 || rep.Subs[0] != "sub-anna" {
 		t.Fatalf("report %+v", rep)
 	}
+
 	cfg, err := os.ReadFile(opts.EngineConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if strings.Contains(string(cfg), "anna-split-reality") {
 		t.Errorf("the expired identity is still in the engine:\n%s", cfg)
 	}
+
 	if !strings.Contains(string(cfg), "boris-split-reality") {
 		t.Errorf("the other user was removed too:\n%s", cfg)
 	}
+
 	if !strings.Contains(string(cfg), "geoip-ru") {
 		t.Errorf("an unrelated rule was dropped:\n%s", cfg)
 	}
+
 	if _, err := os.Stat(filepath.Join(opts.SubRoot, "sub-anna")); !os.IsNotExist(err) {
 		t.Error("the subscription is still served")
 	}
+
 	if _, err := os.Stat(filepath.Join(opts.ExpiredDir, "sub-sub-anna")); err != nil {
 		t.Errorf("the subscription was not kept: %v", err)
 	}
@@ -112,20 +126,25 @@ func TestTickIsIdempotent(t *testing.T) {
 	if _, err := Tick(opts); err != nil {
 		t.Fatal(err)
 	}
+
 	restarts := 0
 	opts.Run = func(cmd string) (string, error) {
 		if strings.Contains(cmd, "systemctl restart") {
 			restarts++
 		}
+
 		return "", nil
 	}
+
 	rep, err := Tick(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if rep.Changed || len(rep.Subs) > 0 {
 		t.Fatalf("the second run changed something: %+v", rep)
 	}
+
 	if restarts != 0 {
 		t.Errorf("the second run restarted the engine %d times", restarts)
 	}
@@ -142,28 +161,34 @@ func TestTickRollsBack(t *testing.T) {
 			if strings.Contains(cmd, " check ") {
 				return "FATAL bad config", os.ErrInvalid
 			}
+
 			return "", nil
 		}},
 		{"the chain stops answering", func(cmd string) (string, error) {
 			if strings.Contains(cmd, "probe.sh") {
 				return "chain probe: 000 instead of 204", os.ErrDeadlineExceeded
 			}
+
 			return "", nil
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			opts := tickOptions(t, t.TempDir(), time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC))
+
 			opts.Run = c.run
 			if _, err := Tick(opts); err == nil {
 				t.Fatal("the failure was swallowed")
 			}
+
 			cfg, err := os.ReadFile(opts.EngineConfig)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if !strings.Contains(string(cfg), "anna-split-reality") {
 				t.Errorf("the config was not restored:\n%s", cfg)
 			}
+
 			if _, err := os.Stat(filepath.Join(opts.SubRoot, "sub-anna")); err != nil {
 				t.Error("the subscription was taken down before the probe failed")
 			}
@@ -174,10 +199,12 @@ func TestTickRollsBack(t *testing.T) {
 // TestTickNothingExpired: no edits, no restarts, no subscription moves.
 func TestTickNothingExpired(t *testing.T) {
 	opts := tickOptions(t, t.TempDir(), time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+
 	rep, err := Tick(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(rep.Expired) != 0 || rep.Changed {
 		t.Fatalf("report %+v", rep)
 	}
@@ -225,13 +252,16 @@ func TestStripUsersMatchesTheRenderer(t *testing.T) {
   }
 }
 `
+
 	got, changed, err := StripUsers([]byte(before), map[string]bool{"goner-split-reality": true})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !changed {
 		t.Fatal("nothing changed")
 	}
+
 	if string(got) != after {
 		t.Fatalf("the agent's edit differs from the render\n--- got ---\n%s\n--- want ---\n%s", got, after)
 	}
@@ -240,6 +270,7 @@ func TestStripUsersMatchesTheRenderer(t *testing.T) {
 // TestDropPeer: the peer block goes, its neighbours stay.
 func TestDropPeer(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "awg0.conf")
+
 	body := `[Interface]
 PrivateKey = x
 
@@ -254,23 +285,29 @@ AllowedIPs = 10.8.1.3/32
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	changed, err := DropPeer(path, "10.8.1.2")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !changed {
 		t.Fatal("nothing changed")
 	}
+
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if strings.Contains(string(got), "10.8.1.2") {
 		t.Errorf("the peer is still there:\n%s", got)
 	}
+
 	if !strings.Contains(string(got), "10.8.1.3") {
 		t.Errorf("the other peer was removed:\n%s", got)
 	}
+
 	if again, err := DropPeer(path, "10.8.1.2"); err != nil || again {
 		t.Errorf("a second run changed the file again: %v %v", again, err)
 	}
@@ -282,12 +319,15 @@ func TestParseExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if e := exp.Users["a"]; e.Expires != "2026-01-01" || len(e.Emails) != 1 {
 		t.Fatalf("entry %+v", e)
 	}
+
 	if !state.Expired("2026-01-01", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Error("the expiry date itself is not expired")
 	}
+
 	if state.Expired("2026-01-02", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Error("a future date is expired")
 	}
@@ -322,22 +362,28 @@ func TestTickEditEqualsTheRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	after, err := render.RenderHost(st, "node", time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	const path = "/etc/sing-box/config.json"
+
 	emails := map[string]bool{
 		"goner-split-reality": true, "goner-split-ws": true,
 		"goner-full-reality": true, "goner-full-ws": true,
 	}
+
 	got, changed, err := StripUsers([]byte(before[path]), emails)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !changed {
 		t.Fatal("the strip found nothing to remove")
 	}
+
 	if string(got) != after[path] {
 		t.Fatalf("the timer's edit differs from the render\n--- timer ---\n%s\n--- render ---\n%s", got, after[path])
 	}

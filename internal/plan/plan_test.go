@@ -35,16 +35,20 @@ func TestParseProbe(t *testing.T) {
 	out := "abc1234\nyes\n-\n" +
 		"deadbeef /etc/nftables.conf\n" +
 		"missing /etc/caddy/Caddyfile\n"
+
 	p := ParseProbe(out)
 	if !p.HasMarker || p.Marker != "abc1234" {
 		t.Fatalf("marker: %+v", p)
 	}
+
 	if !p.Bootstrapped {
 		t.Fatal("bootstrap flag lost")
 	}
+
 	if p.Hashes["/etc/nftables.conf"] != "deadbeef" {
 		t.Fatalf("hash: %+v", p.Hashes)
 	}
+
 	if !p.Missing["/etc/caddy/Caddyfile"] {
 		t.Fatalf("missing: %+v", p.Missing)
 	}
@@ -55,6 +59,7 @@ func TestParseProbeNoMarker(t *testing.T) {
 	if p.HasMarker {
 		t.Fatal("a bare dash means no marker")
 	}
+
 	if p.Bootstrapped {
 		t.Fatal("bootstrap must be false")
 	}
@@ -65,6 +70,7 @@ func TestProbeScriptQuotesPaths(t *testing.T) {
 	if !strings.Contains(s, "'/etc/nftables.conf' '/etc/sing-box/rules/ru.json'") {
 		t.Fatalf("paths are not quoted: %s", s)
 	}
+
 	if !strings.HasPrefix(s, "cat /etc/vpnctl/applied-commit") {
 		t.Fatalf("marker is not first: %s", s)
 	}
@@ -73,6 +79,7 @@ func TestProbeScriptQuotesPaths(t *testing.T) {
 func TestUnifiedDiff(t *testing.T) {
 	old := "a\nb\nc\n"
 	next := "a\nB\nc\n"
+
 	got := unifiedDiff("host:/etc/x", "render", old, next)
 	for _, want := range []string{"--- host:/etc/x", "+++ render", "@@ -1,3 +1,3 @@", "-b", "+B", " a", " c"} {
 		if !strings.Contains(got, want) {
@@ -103,13 +110,16 @@ func TestProbeScriptEndsTheManifestLine(t *testing.T) {
 // first file of every render look new.
 func TestParseProbeManifest(t *testing.T) {
 	manifest := base64Of("aaaa /etc/caddy/Caddyfile\nbbbb /etc/sing-box/config.json\n")
+
 	p := ParseProbe("abc1234\nyes\n" + manifest + "\n1111 /etc/caddy/Caddyfile\n")
 	if got := p.Manifest["/etc/caddy/Caddyfile"]; got != "aaaa" {
 		t.Fatalf("manifest %v", p.Manifest)
 	}
+
 	if got := p.Manifest["/etc/sing-box/config.json"]; got != "bbbb" {
 		t.Fatalf("manifest %v", p.Manifest)
 	}
+
 	if got := p.Hashes["/etc/caddy/Caddyfile"]; got != "1111" {
 		t.Fatalf("a manifest line swallowed a hash: %v", p.Hashes)
 	}

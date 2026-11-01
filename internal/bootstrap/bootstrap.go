@@ -55,16 +55,22 @@ func RuleSetTags(configJSON string) []string {
 	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
 		return nil
 	}
+
 	seen := map[string]bool{}
+
 	var out []string
+
 	for _, r := range cfg.Route.RuleSet {
 		if r.Format != "binary" || r.Tag == "" || seen[r.Tag] {
 			continue
 		}
+
 		seen[r.Tag] = true
 		out = append(out, r.Tag)
 	}
+
 	sort.Strings(out)
+
 	return out
 }
 
@@ -74,9 +80,11 @@ func RuleSetURL(tag, release string) string {
 	if strings.HasPrefix(tag, "geoip-") {
 		repo = "sing-geoip"
 	}
+
 	if release == "latest" {
 		return fmt.Sprintf("https://raw.githubusercontent.com/SagerNet/%s/rule-set/%s.srs", repo, tag)
 	}
+
 	return fmt.Sprintf("https://github.com/SagerNet/%s/releases/download/%s/%s.srs", repo, release, tag)
 }
 
@@ -86,10 +94,12 @@ func RebootDays(role state.Role) string {
 	if role != state.Entry {
 		start = 2
 	}
+
 	var days []string
 	for d := start; d <= 31; d += 2 {
 		days = append(days, fmt.Sprintf("%02d", d))
 	}
+
 	return strings.Join(days, ",")
 }
 
@@ -98,15 +108,18 @@ func pin(st *state.State, name string) (state.Pin, error) {
 	if !ok {
 		return state.Pin{}, fmt.Errorf("versions.yaml has no %q", name)
 	}
+
 	return p, nil
 }
 
 func download(name string, p state.Pin, url, check, install string) Download {
 	u := strings.ReplaceAll(url, "{v}", p.Version)
+
 	file := u
 	if i := strings.LastIndex(u, "/"); i >= 0 {
 		file = u[i+1:]
 	}
+
 	return Download{Name: name, Version: p.Version, URL: u, SHA: p.SHA256, File: file, Check: check, Install: install}
 }
 
@@ -116,18 +129,23 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	files, err := render.RenderHost(st, host, at)
 	if err != nil {
 		return "", err
 	}
+
 	const dl = "/var/lib/vpnctl/dl"
+
 	var downloads []Download
+
 	switch render.EngineBin(h.Engine) {
 	case "sing-box":
 		p, err := pin(st, "sing-box")
 		if err != nil {
 			return "", err
 		}
+
 		v := p.Version
 		downloads = append(downloads, download("sing-box", p, SingBoxURL,
 			fmt.Sprintf("sing-box version 2>/dev/null | grep -q 'version %s$'", v),
@@ -137,6 +155,7 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		if err != nil {
 			return "", err
 		}
+
 		v := p.Version
 		downloads = append(downloads, download("xray", p, XrayURL,
 			fmt.Sprintf("xray version 2>/dev/null | grep -q '^Xray %s '", v),
@@ -146,6 +165,7 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		if err != nil {
 			return "", err
 		}
+
 		for _, f := range []string{"geosite", "geoip"} {
 			url := fmt.Sprintf("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/{v}/download/%s.dat", f)
 			downloads = append(downloads, download(f, g, url,
@@ -153,18 +173,22 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 				fmt.Sprintf("install -m 0644 %s/%s.dat /usr/local/bin/%s.dat", dl, f, f)))
 		}
 	}
+
 	if h.Role == state.Entry {
 		p, err := pin(st, "caddy")
 		if err != nil {
 			return "", err
 		}
+
 		downloads = append(downloads, download("caddy", p, CaddyURL,
 			fmt.Sprintf("caddy version 2>/dev/null | grep -q '^v%s '", p.Version),
 			fmt.Sprintf("tar -xzf %s/caddy_%s_linux_amd64.tar.gz -C %s caddy && install -m 0755 %s/caddy /usr/local/bin/caddy", dl, p.Version, dl, dl)))
+
 		m, err := pin(st, "mtg")
 		if err != nil {
 			return "", err
 		}
+
 		downloads = append(downloads, download("mtg", m, MTGURL,
 			fmt.Sprintf("mtg --version 2>/dev/null | grep -q '%s'", m.Version),
 			fmt.Sprintf("tar -xzf %s/mtg-%s-linux-amd64.tar.gz -C %s && install -m 0755 %s/mtg-%s-linux-amd64/mtg /usr/local/bin/mtg", dl, m.Version, dl, dl, m.Version)))
@@ -174,58 +198,75 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 			if err != nil {
 				return "", err
 			}
+
 			downloads = append(downloads, download("ntfy", n, NtfyURL,
 				fmt.Sprintf("ntfy --version 2>/dev/null | grep -q 'version %s$'", n.Version),
 				fmt.Sprintf("tar -xzf %s/ntfy_%s_linux_amd64.tar.gz -C %s && install -m 0755 %s/ntfy_%s_linux_amd64/ntfy /usr/local/bin/ntfy", dl, n.Version, dl, dl, n.Version)))
 		}
 	}
+
 	geodata, err := pin(st, "geodata")
 	if err != nil {
 		return "", err
 	}
+
 	var ruleSets []RuleSet
+
 	if render.EngineBin(h.Engine) == "sing-box" {
 		cfg := files[render.EngineConfigPath(h.Engine)]
 		for _, tag := range RuleSetTags(cfg) {
 			ruleSets = append(ruleSets, RuleSet{Tag: tag, URL: RuleSetURL(tag, geodata.Version)})
 		}
 	}
-	var units []map[string]string
-	var enable []string
+
+	var (
+		units  []map[string]string
+		enable []string
+	)
+
 	for path, body := range files {
 		if name, ok := strings.CutPrefix(path, "/etc/systemd/system/"); ok {
 			units = append(units, map[string]string{"name": name, "body": body})
 			enable = append(enable, name)
 		}
+
 		if f, ok := strings.CutPrefix(path, "/etc/amnezia/amneziawg/"); ok {
 			enable = append(enable, "awg-quick@"+strings.TrimSuffix(f, ".conf"))
 		}
 	}
+
 	sort.Slice(units, func(i, j int) bool { return units[i]["name"] < units[j]["name"] })
+
 	if h.Role == state.Entry {
 		enable = append(enable, "caddy")
 	}
+
 	sort.Strings(enable)
 	// AWG is needed when there is an awg inbound or an awg link involving the host
 	awg := false
 	if _, ok := st.Inbounds[host]["awg"]; ok {
 		awg = true
 	}
+
 	for _, l := range st.Links {
 		if (l.From == host || l.To == host) && containsStr(l.Protocols, "awg") {
 			awg = true
 		}
 	}
+
 	commit := "-"
+
 	if repo, err := gitsync.Open(st.Dir); err == nil {
 		if h, err := repo.Head(); err == nil {
 			commit = h
 		}
 	}
+
 	awgPin, err := pin(st, "awg")
 	if err != nil {
 		return "", err
 	}
+
 	role := "exit"
 	if h.Role == state.Entry {
 		role = "entry"
@@ -238,10 +279,12 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 			"sha": d.SHA, "file": d.File, "check": d.Check, "install": d.Install,
 		})
 	}
+
 	rsCtx := make([]map[string]string, 0, len(ruleSets))
 	for _, r := range ruleSets {
 		rsCtx = append(rsCtx, map[string]string{"tag": r.Tag, "url": r.URL})
 	}
+
 	return render.Template(st, "bootstrap.sh.j2", map[string]any{
 		"host":        host,
 		"role":        role,
@@ -266,48 +309,62 @@ func Run(st *state.State, host, sshOverride string, out io.Writer, at time.Time)
 	if err != nil {
 		return err
 	}
+
 	changed := false
+
 	if sshOverride != "" && sshOverride != h.SSH {
 		h.SSH = sshOverride
 		st.Hosts[host] = h
 		changed = true
 	}
+
 	if h.HostKey == "" {
 		key, err := remote.ScanKey(st, host)
 		if err != nil {
 			return err
 		}
+
 		h = st.Hosts[host]
 		h.HostKey = key
 		st.Hosts[host] = h
 		changed = true
+
 		fmt.Fprintf(out, "  ✓ host key accepted, recorded in the state\n")
 	}
+
 	if changed {
 		if err := state.SaveHosts(st.Dir, st.Hosts); err != nil {
 			return err
 		}
+
 		repo, err := gitsync.Open(st.Dir)
 		if err != nil {
 			return err
 		}
+
 		if err := repo.Commit(fmt.Sprintf("hosts: %s: host key", host)); err != nil {
 			return err
 		}
 	}
+
 	script, err := Script(st, host, at)
 	if err != nil {
 		return err
 	}
+
 	fmt.Fprintf(out, "▸ bootstrap %s · %s\n", host, h.SSH)
+
 	c, err := remote.Dial(st, host)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = c.Close() }()
+
 	if err := c.Stream("sh -s", []byte(script), out); err != nil {
 		return fmt.Errorf("bootstrap %s failed; a re-run will finish the rest: %w", host, err)
 	}
+
 	return nil
 }
 
@@ -317,5 +374,6 @@ func containsStr(list []string, v string) bool {
 			return true
 		}
 	}
+
 	return false
 }

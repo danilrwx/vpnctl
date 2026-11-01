@@ -27,11 +27,14 @@ func emit(v any, text func()) error {
 		text()
 		return nil
 	}
+
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	fmt.Println(string(b))
+
 	return nil
 }
 
@@ -48,7 +51,9 @@ func loadState(dir string) (*state.State, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	st.AcceptNewHostKey = acceptNewHostKey
+
 	return st, nil
 }
 
@@ -82,6 +87,7 @@ func Usage(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return &usageError{err}
 }
 
@@ -90,6 +96,7 @@ func Guard(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return &guardError{err}
 }
 
@@ -98,6 +105,7 @@ func ExitCode(err error) int {
 	if err == nil {
 		return 0
 	}
+
 	var u *usageError
 	if errors.As(err, &u) {
 		return ExitUsage
@@ -107,13 +115,16 @@ func ExitCode(err error) int {
 		strings.Contains(msg, "unknown command") || strings.Contains(msg, "Incorrect Usage") {
 		return ExitUsage
 	}
+
 	var g *guardError
 	if errors.As(err, &g) {
 		return ExitGuard
 	}
+
 	if errors.Is(err, ErrSilent) {
 		return ExitError
 	}
+
 	return ExitError
 }
 
@@ -130,16 +141,21 @@ func ReportError(err error) {
 	if !jsonOut {
 		return
 	}
+
 	var body errorJSON
+
 	body.Error.Code = "error"
+
 	var u *usageError
 	if errors.As(err, &u) {
 		body.Error.Code = "usage"
 	}
+
 	var g *guardError
 	if errors.As(err, &g) {
 		body.Error.Code = "guard"
 	}
+
 	body.Error.Message = err.Error()
 	b, _ := json.MarshalIndent(body, "", "  ")
 	fmt.Fprintln(os.Stderr, string(b))

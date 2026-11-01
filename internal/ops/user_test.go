@@ -12,6 +12,7 @@ func ptr[T any](v T) *T { return &v }
 // message names what changed so the history reads as a list of decisions.
 func TestUserEdit(t *testing.T) {
 	st := fixture(t)
+
 	msg, err := UserEdit(st, "u", UserPatch{
 		Modes:     []string{"split", "full"},
 		Protocols: []string{"reality", "ws"},
@@ -22,13 +23,16 @@ func TestUserEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if want := "users: u: modes, protocols, tg, expiry, note"; msg != want {
 		t.Fatalf("message %q, want %q", msg, want)
 	}
+
 	u := st.Users["u"]
 	if strings.Join(u.Modes, ",") != "split,full" || strings.Join(u.Protocols, ",") != "reality,ws" {
 		t.Fatalf("unexpected lists: %+v", u)
 	}
+
 	if !u.TG || u.Expires != "2026-12-01" || u.Note != "a note" {
 		t.Fatalf("unexpected flags: %+v", u)
 	}
@@ -41,9 +45,11 @@ func TestUserEditClearsExpiry(t *testing.T) {
 	if _, err := UserEdit(st, "u", UserPatch{Expires: ptr("2026-12-01")}); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := UserEdit(st, "u", UserPatch{Expires: ptr("")}); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := st.Users["u"].Expires; got != "" {
 		t.Fatalf("expiry is %q, want it cleared", got)
 	}
@@ -69,6 +75,7 @@ func TestUserEditRejects(t *testing.T) {
 			if _, err := UserEdit(st, c.user, c.patch); err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("error %v, want %q", err, c.want)
 			}
+
 			if c.user == "u" && len(st.Users["u"].Modes) == 0 {
 				t.Fatal("a rejected patch changed the state")
 			}
@@ -81,6 +88,7 @@ func TestUserEditRejects(t *testing.T) {
 // again from today.
 func TestUserRenew(t *testing.T) {
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+
 	cases := []struct {
 		name    string
 		expires string
@@ -99,13 +107,16 @@ func TestUserRenew(t *testing.T) {
 			u := st.Users["u"]
 			u.Expires = c.expires
 			st.Users["u"] = u
+
 			msg, err := UserRenew(st, "u", c.days, c.until, now)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got := st.Users["u"].Expires; got != c.want {
 				t.Fatalf("expiry %s, want %s", got, c.want)
 			}
+
 			if !strings.Contains(msg, c.want) {
 				t.Errorf("message %q does not name the new date", msg)
 			}
@@ -115,6 +126,7 @@ func TestUserRenew(t *testing.T) {
 
 func TestUserRenewRejects(t *testing.T) {
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+
 	cases := []struct {
 		name  string
 		user  string
@@ -131,6 +143,7 @@ func TestUserRenewRejects(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			st := fixture(t)
+
 			_, err := UserRenew(st, c.user, c.days, c.until, now)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("error %v, want %q", err, c.want)
@@ -143,32 +156,41 @@ func TestUserRenewRejects(t *testing.T) {
 // and removing it takes the secrets with it.
 func TestUserAddAndRm(t *testing.T) {
 	st := fixture(t)
+
 	msg, err := UserAdd(st, "newbie", []string{"split"}, []string{"reality"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(msg, "newbie") {
 		t.Errorf("message %q", msg)
 	}
+
 	sec := st.Secrets.Users["newbie"]
 	if len(sec.UUID) != 36 || sec.SubID == "" || sec.Hy2Pass == "" {
 		t.Fatalf("secrets %+v", sec)
 	}
+
 	if _, err := UserAdd(st, "newbie", []string{"split"}, []string{"reality"}, false); err == nil {
 		t.Fatal("a duplicate user was accepted")
 	}
+
 	if got := SortedUsers(st); len(got) != 2 || got[0] != "newbie" || got[1] != "u" {
 		t.Fatalf("%v", got)
 	}
+
 	if _, err := UserRm(st, "newbie"); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, ok := st.Users["newbie"]; ok {
 		t.Fatal("the user survived removal")
 	}
+
 	if _, ok := st.Secrets.Users["newbie"]; ok {
 		t.Fatal("the secrets survived removal")
 	}
+
 	if _, err := UserRm(st, "ghost"); err == nil {
 		t.Fatal("removing an unknown user was accepted")
 	}
@@ -183,6 +205,7 @@ func TestReleaseURL(t *testing.T) {
 			t.Errorf("%s: %q %v", name, u, ok)
 		}
 	}
+
 	if _, ok := releaseURL("geodata", "latest"); ok {
 		t.Error("a moving latest was given a pinned URL")
 	}

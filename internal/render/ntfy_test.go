@@ -25,6 +25,7 @@ func ntfyFixture(serve string) *state.State {
 	}
 	st.Alerts = state.Alerts{Ntfy: "https://ntfy.vpn.example/vpnctl-abc", Serve: serve}
 	st.FillStubSecrets()
+
 	return st
 }
 
@@ -33,10 +34,12 @@ func TestNtfyServedByTheEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	server, ok := files["/etc/ntfy/server.yml"]
 	if !ok {
 		t.Fatal("the entry that serves ntfy has no server config")
 	}
+
 	for _, want := range []string{
 		`base-url: "https://ntfy.vpn.example"`,
 		`listen-http: "127.0.0.1:2586"`,
@@ -47,20 +50,25 @@ func TestNtfyServedByTheEntry(t *testing.T) {
 			t.Errorf("server.yml lacks %q:\n%s", want, server)
 		}
 	}
+
 	if _, ok := files["/etc/systemd/system/ntfy.service"]; !ok {
 		t.Error("no unit for the notification server")
 	}
+
 	caddy := files["/etc/caddy/Caddyfile"]
 	if !strings.Contains(caddy, "https://ntfy.vpn.example:8443") {
 		t.Errorf("caddy does not serve the ntfy name:\n%s", caddy)
 	}
+
 	if !strings.Contains(caddy, "reverse_proxy 127.0.0.1:2586") {
 		t.Errorf("caddy does not forward to ntfy:\n%s", caddy)
 	}
+
 	env := files["/etc/vpnctl/alerts.env"]
 	if !strings.Contains(env, `VPNCTL_ALERTS_LOCAL="http://127.0.0.1:2586/vpnctl-abc"`) {
 		t.Errorf("alerts.env has no loopback topic:\n%s", env)
 	}
+
 	if !strings.Contains(files["/etc/vpnctl/probe.sh"], "VPNCTL_ALERTS_LOCAL") {
 		t.Error("the probe ignores the loopback topic")
 	}
@@ -74,9 +82,11 @@ func TestNtfyOnlyOnItsHost(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if _, ok := files["/etc/ntfy/server.yml"]; ok {
 			t.Errorf("%s runs a notification server it was not asked to run", host)
 		}
+
 		if strings.Contains(files["/etc/caddy/Caddyfile"], "ntfy.") {
 			t.Errorf("%s has an ntfy site", host)
 		}
@@ -86,13 +96,16 @@ func TestNtfyOnlyOnItsHost(t *testing.T) {
 func TestNtfyOff(t *testing.T) {
 	st := ntfyFixture("")
 	st.Alerts = state.Alerts{}
+
 	files, err := RenderHost(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, ok := files["/etc/ntfy/server.yml"]; ok {
 		t.Error("a server was rendered without a topic")
 	}
+
 	if !strings.Contains(files["/etc/vpnctl/alerts.env"], `VPNCTL_ALERTS_LOCAL=""`) {
 		t.Error("alerts.env has a loopback topic without a server")
 	}
@@ -131,20 +144,24 @@ func TestProbePlanIsRenderedOnTheEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	plan, ok := files["/etc/vpnctl/probe.json"]
 	if !ok {
 		t.Fatal("the entry has no probe plan")
 	}
+
 	for _, want := range []string{`"to": "exit"`, `"addr": "203.0.113.12"`, `"protocol": "reality"`, `"protocol": "hy2"`, `"protocol": "awg"`, `"port": 51820`} {
 		if !strings.Contains(plan, want) {
 			t.Errorf("the plan lacks %q:\n%s", want, plan)
 		}
 	}
+
 	for _, secret := range []string{"STUB-uuid", "STUB-hy2", "password", "uuid"} {
 		if strings.Contains(plan, secret) {
 			t.Errorf("the plan carries %q", secret)
 		}
 	}
+
 	if _, ok := mustRender(t, st, "exit")["/etc/vpnctl/probe.json"]; ok {
 		t.Error("an exit renders a probe plan it can never measure")
 	}
@@ -152,9 +169,11 @@ func TestProbePlanIsRenderedOnTheEntry(t *testing.T) {
 
 func mustRender(t *testing.T, st *state.State, host string) map[string]string {
 	t.Helper()
+
 	files, err := RenderHost(st, host, testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return files
 }

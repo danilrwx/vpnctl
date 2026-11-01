@@ -15,18 +15,23 @@ import (
 // loadFixture reads the shared state with the plain-text fixture secrets.
 func loadFixture(t *testing.T) *state.State {
 	t.Helper()
+
 	dir := filepath.Join("..", "..", "testdata", "basic")
+
 	st, err := state.Load(dir)
 	if err != nil {
 		t.Fatalf("load fixture: %v", err)
 	}
+
 	b, err := os.ReadFile(filepath.Join(dir, "secrets.sops.yaml"))
 	if err != nil {
 		t.Fatalf("read fixture secrets: %v", err)
 	}
+
 	if err := yaml.Unmarshal(b, &st.Secrets); err != nil {
 		t.Fatalf("parse fixture secrets: %v", err)
 	}
+
 	return st
 }
 
@@ -118,12 +123,15 @@ func TestCases(t *testing.T) {
 			name: "an awg peer without the protocol",
 			mutate: func(st *state.State) {
 				u := st.Users["brat"]
+
 				var kept []string
+
 				for _, p := range u.Protocols {
 					if p != "awg" {
 						kept = append(kept, p)
 					}
 				}
+
 				u.Protocols = kept
 				st.Users["brat"] = u
 			},
@@ -175,6 +183,7 @@ func TestCases(t *testing.T) {
 				for i := range r.Groups.All {
 					r.Groups.All[i].Match.Sets = []string{"nope"}
 				}
+
 				st.Routing["ru-msk-1"] = r
 			},
 			want: "set «nope» is not described",
@@ -203,13 +212,16 @@ func TestCases(t *testing.T) {
 			st := loadFixture(t)
 			c.mutate(st)
 			errs := State(st)
+
 			joined := strings.Join(errs, "\n")
 			if c.absent {
 				if len(errs) > 0 {
 					t.Fatalf("expected no errors, got:\n%s", joined)
 				}
+
 				return
 			}
+
 			if !strings.Contains(joined, c.want) {
 				t.Fatalf("expected %q, got:\n%s", c.want, joined)
 			}
@@ -220,10 +232,12 @@ func TestCases(t *testing.T) {
 func TestWarnings(t *testing.T) {
 	st := loadFixture(t)
 	st.Hosts["lonely"] = state.Host{Role: state.Entry, IP: "203.0.113.99", Domain: "lonely.example", SSH: "root@203.0.113.99"}
+
 	w := strings.Join(Warnings(st), "\n")
 	if !strings.Contains(w, "the entry has no link to an exit") {
 		t.Fatalf("no warning about a lone entry:\n%s", w)
 	}
+
 	if !strings.Contains(w, "host key is not recorded") {
 		t.Fatalf("no warning about the host key:\n%s", w)
 	}
@@ -238,12 +252,15 @@ func TestWarningsAboutExpiry(t *testing.T) {
 	u := st.Users["olga"]
 	u.Expires = soon
 	st.Users["olga"] = u
+
 	warns := strings.Join(Warnings(st), "\n")
 	if !strings.Contains(warns, "the term ends on "+soon) {
 		t.Errorf("no warning for a term that ends in three days:\n%s", warns)
 	}
+
 	u.Expires = past
 	st.Users["olga"] = u
+
 	warns = strings.Join(Warnings(st), "\n")
 	if !strings.Contains(warns, "the term ran out on "+past) {
 		t.Errorf("no warning for a term that ran out:\n%s", warns)

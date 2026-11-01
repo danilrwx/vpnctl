@@ -18,19 +18,25 @@ func AlertsSet(st *state.State, ntfy, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if topic == "" && token != "" {
 		return "", fmt.Errorf("a token without a topic does nothing; drop it or set the topic")
 	}
+
 	if topic == "" {
 		st.Alerts = state.Alerts{}
 		st.Secrets.Alerts = state.AlertsSecret{}
+
 		return "alerts: off", nil
 	}
+
 	st.Alerts = state.Alerts{Ntfy: topic}
+
 	st.Secrets.Alerts.Token = token
 	if token == "" {
 		return fmt.Sprintf("alerts: %s (no token)", topic), nil
 	}
+
 	return fmt.Sprintf("alerts: %s", topic), nil
 }
 
@@ -41,20 +47,26 @@ func AlertsServe(st *state.State, host, topic, token string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("host %q is not described", host)
 	}
+
 	if h.Role != state.Entry {
 		return "", fmt.Errorf("host %q is not an entry: notifications come from the entry", host)
 	}
+
 	if h.Domain == "" {
 		return "", fmt.Errorf("host %q has no domain: there is nowhere to serve ntfy", host)
 	}
+
 	if !topicName.MatchString(topic) {
 		return "", fmt.Errorf("topic %q must be 3-64 characters of a-z, A-Z, 0-9, _ or -", topic)
 	}
+
 	if _, ok := st.Versions["ntfy"]; !ok {
 		return "", fmt.Errorf("versions.yaml has no ntfy pin")
 	}
+
 	url := fmt.Sprintf("https://%s/%s", st.NtfyName(host), topic)
 	st.Alerts = state.Alerts{Ntfy: url, Serve: host}
 	st.Secrets.Alerts.Token = token
+
 	return fmt.Sprintf("alerts: %s served by %s", url, host), nil
 }

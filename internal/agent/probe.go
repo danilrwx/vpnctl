@@ -34,10 +34,13 @@ func RunProbePlan(body []byte, timeout time.Duration) ([]ProbeResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse the probe plan: %w", err)
 	}
+
 	if timeout <= 0 {
 		timeout = ProbeTimeout
 	}
+
 	var out []ProbeResult
+
 	for _, l := range plan.Links {
 		for _, c := range l.Probes {
 			r := ProbeResult{Link: l.From + "->" + l.To, Protocol: c.Protocol}
@@ -45,6 +48,7 @@ func RunProbePlan(body []byte, timeout time.Duration) ([]ProbeResult, error) {
 			out = append(out, r)
 		}
 	}
+
 	return out, nil
 }
 
@@ -56,6 +60,7 @@ func ProbeCell(addr string, c state.ProbeCell, timeout time.Duration) (string, b
 	switch c.Protocol {
 	case "reality":
 		dialer := &net.Dialer{Timeout: timeout}
+
 		conn, err := tls.DialWithDialer(dialer, "tcp", target, &tls.Config{
 			ServerName:         c.SNI,
 			InsecureSkipVerify: true,
@@ -65,35 +70,44 @@ func ProbeCell(addr string, c state.ProbeCell, timeout time.Duration) (string, b
 		if err != nil {
 			return err.Error(), false
 		}
+
 		defer func() { _ = conn.Close() }()
+
 		state := conn.ConnectionState()
+
 		return "tls " + tls.VersionName(state.Version), true
 	case "ws":
 		client := &http.Client{
 			Timeout:   timeout,
 			Transport: &http.Transport{TLSClientConfig: &tls.Config{ServerName: c.SNI, InsecureSkipVerify: true}},
 		}
+
 		req, err := http.NewRequest(http.MethodGet, "https://"+target+pathOrSlash(c.Path), nil)
 		if err != nil {
 			return err.Error(), false
 		}
+
 		req.Header.Set("Connection", "Upgrade")
 		req.Header.Set("Upgrade", "websocket")
 		req.Header.Set("Sec-WebSocket-Version", "13")
 		req.Header.Set("Sec-WebSocket-Key", "dmVwbmN0bC1wcm9iZS0=")
+
 		resp, err := client.Do(req)
 		if err != nil {
 			return err.Error(), false
 		}
+
 		defer func() { _ = resp.Body.Close() }()
 		// 101 is the upgrade; 400 and 426 are still an answer from a live server
 		if resp.StatusCode == http.StatusSwitchingProtocols {
 			return "101 switching protocols", true
 		}
+
 		return fmt.Sprintf("http %d without an upgrade", resp.StatusCode), resp.StatusCode < 500
 	case "hy2":
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
+
 		conn, err := quic.DialAddr(ctx, target, &tls.Config{
 			ServerName:         c.SNI,
 			InsecureSkipVerify: true,
@@ -102,11 +116,14 @@ func ProbeCell(addr string, c state.ProbeCell, timeout time.Duration) (string, b
 		if err != nil {
 			return err.Error(), false
 		}
+
 		_ = conn.CloseWithError(0, "")
+
 		return "quic handshake", true
 	case "awg":
 		return "unverified: a wireguard handshake needs the peer, and inventing one would be a lie", false
 	}
+
 	return "unverified: no probe for " + c.Protocol, false
 }
 
@@ -114,5 +131,6 @@ func pathOrSlash(p string) string {
 	if p == "" {
 		return "/"
 	}
+
 	return p
 }

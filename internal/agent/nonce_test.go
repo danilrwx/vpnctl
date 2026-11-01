@@ -13,12 +13,15 @@ func TestNonceUsedOnce(t *testing.T) {
 	if err := c.Use("abc"); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := c.Use("abc"); err == nil {
 		t.Fatal("the same nonce was accepted twice")
 	}
+
 	if err := c.Use("def"); err != nil {
 		t.Fatalf("a fresh nonce was refused: %v", err)
 	}
+
 	if err := c.Use(""); err == nil {
 		t.Fatal("an empty nonce was accepted")
 	}
@@ -28,6 +31,7 @@ func TestNonceUsedOnce(t *testing.T) {
 // ever and a clock-skew replay outside the window still works.
 func TestNonceExpires(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nonces")
+
 	c := NonceCache{Dir: dir, TTL: time.Minute}
 	if err := c.Use("old"); err != nil {
 		t.Fatal(err)

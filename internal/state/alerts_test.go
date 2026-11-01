@@ -17,10 +17,12 @@ func TestCheckNtfy(t *testing.T) {
 			t.Errorf("%q: %v", in, err)
 			continue
 		}
+
 		if got != want {
 			t.Errorf("%q: got %q, want %q", in, got, want)
 		}
 	}
+
 	bad := []string{
 		"ntfy.sh/vpnctl",
 		"http://ntfy.sh/vpnctl",

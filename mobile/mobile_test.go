@@ -16,34 +16,42 @@ import (
 // use, so it is tested as plain Go even though it is built with gomobile.
 func openFixture(t *testing.T) *App {
 	t.Helper()
+
 	src := filepath.Join("..", "testdata", "basic")
 	dir := t.TempDir()
+
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
+
 		b, err := os.ReadFile(filepath.Join(src, e.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if err := os.WriteFile(filepath.Join(dir, e.Name()), b, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	for _, sub := range []string{"routing", "sets", "templates"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
+
 		if ents, err := os.ReadDir(filepath.Join(src, sub)); err == nil {
 			for _, e := range ents {
 				b, err := os.ReadFile(filepath.Join(src, sub, e.Name()))
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				if err := os.WriteFile(filepath.Join(dir, sub, e.Name()), b, 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -56,15 +64,19 @@ func openFixture(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var sec state.Secrets
 	if err := yaml.Unmarshal(b, &sec); err != nil {
 		t.Fatal(err)
 	}
+
 	app, err := Open(dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	app.st.Secrets = sec
+
 	return app
 }
 
@@ -72,26 +84,33 @@ func openFixture(t *testing.T) *App {
 // the one message a person forwards.
 func TestUsersAndShare(t *testing.T) {
 	app := openFixture(t)
+
 	users := app.Users()
 	if len(users) == 0 {
 		t.Fatal("no users")
 	}
+
 	var brat bool
+
 	for _, u := range users {
 		if u.Name == "brat" {
 			brat = u.Enabled
 		}
 	}
+
 	if !brat {
 		t.Fatal("brat is enabled in the fixture but not in the list")
 	}
+
 	share, err := app.Share("brat")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(share, "vless://") {
 		t.Fatalf("the shared text has no link:\n%s", share)
 	}
+
 	if _, err := app.Share("ghost"); err == nil {
 		t.Fatal("sharing for an unknown user was accepted")
 	}
@@ -106,6 +125,7 @@ func TestMessageLanguages(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", lang, err)
 		}
+
 		if strings.TrimSpace(msg) == "" {
 			t.Fatalf("%s: an empty message", lang)
 		}
@@ -116,6 +136,7 @@ func TestMessageLanguages(t *testing.T) {
 // would refuse.
 func TestPlanRejectsBrokenState(t *testing.T) {
 	app := openFixture(t)
+
 	app.st.Users["brat"] = state.User{Modes: []string{"weird"}, Protocols: []string{"reality"}}
 	if _, err := app.Plan(""); err == nil {
 		t.Fatal("plan accepted an invalid state")

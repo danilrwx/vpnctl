@@ -33,7 +33,9 @@ func JSONOf(plans []HostPlan) JSON {
 		for _, f := range p.Files {
 			h.Files = append(h.Files, JSONFile{Path: f.Path, Status: f.Status.Mark()})
 		}
+
 		out = append(out, h)
 	}
+
 	return out
 }

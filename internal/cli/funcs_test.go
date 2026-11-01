@@ -16,6 +16,7 @@ func TestSplitList(t *testing.T) {
 	if len(got) != 2 || got[0] != "split" || got[1] != "full" {
 		t.Fatalf("%q", got)
 	}
+
 	if got := splitList(""); got != nil {
 		t.Fatalf("%q", got)
 	}
@@ -28,18 +29,22 @@ func TestDayArg(t *testing.T) {
 	if err := cmd.Run(t.Context(), []string{"x", "--at", "2026-06-01"}); err != nil {
 		t.Fatal(err)
 	}
+
 	d, err := dayArg(cmd)
 	if err != nil || d.Format("2006-01-02") != "2026-06-01" {
 		t.Fatalf("%v %v", d, err)
 	}
+
 	now := time.Now()
 	if d, err := dayArg(&ucli.Command{Flags: []ucli.Flag{atFlag()}}); err != nil || d.Location() != time.UTC {
 		t.Fatalf("the default day is not UTC: %v %v (%v)", d, err, now)
 	}
+
 	bad := &ucli.Command{Flags: []ucli.Flag{atFlag()}}
 	if err := bad.Run(t.Context(), []string{"x", "--at", "soon"}); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := dayArg(bad); err == nil || ExitCode(err) != ExitUsage {
 		t.Fatalf("a bad --at is not a usage error: %v", err)
 	}
@@ -59,10 +64,12 @@ func TestCheckAndRender(t *testing.T) {
 	if err := Check(dir, false, true); err != nil {
 		t.Fatalf("check: %v", err)
 	}
+
 	out := filepath.Join(t.TempDir(), "render")
 	if err := Render(dir, out, "ru-msk-1", true, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("render: %v", err)
 	}
+
 	if _, err := os.Stat(filepath.Join(out, "ru-msk-1", "etc", "sing-box", "config.json")); err != nil {
 		t.Fatalf("the render is missing the engine config: %v", err)
 	}
@@ -74,23 +81,30 @@ func TestStateFmtCheck(t *testing.T) {
 	if err := StateFmt(dir, false, true); err != nil {
 		t.Fatalf("the fixture must already be canonical: %v", err)
 	}
+
 	if err := StateFmt(dir, true, true); err != nil {
 		t.Fatalf("check on a canonical tree: %v", err)
 	}
+
 	users := filepath.Join(dir, "users.yaml")
+
 	body, err := os.ReadFile(users)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := os.WriteFile(users, []byte(strings.ReplaceAll(string(body), "\n  ", "\n    ")), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := StateFmt(dir, true, true); err == nil {
 		t.Fatal("check passed on a tree with four spaces")
 	}
+
 	if err := StateFmt(dir, false, true); err != nil {
 		t.Fatalf("fmt: %v", err)
 	}
+
 	if err := StateFmt(dir, true, true); err != nil {
 		t.Fatalf("check after fmt: %v", err)
 	}

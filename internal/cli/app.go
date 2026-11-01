@@ -49,6 +49,7 @@ func App() *ucli.Command {
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+
 					pass := c.String("backup-pass")
 					if pass == "" && c.Bool("backup") {
 						var err error
@@ -56,6 +57,7 @@ func App() *ucli.Command {
 							return err
 						}
 					}
+
 					return Init(c.String("dir"), c.String("name"), pass,
 						c.String("remote"), c.String("out"), c.Bool("fresh"), c.Bool("nocommit"))
 				},
@@ -74,10 +76,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the device name is required"))
 							}
+
 							return KeyInit(c.String("dir"), name, c.Bool("nocommit"))
 						},
 					},
@@ -119,10 +123,12 @@ func App() *ucli.Command {
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
 							name := c.Args().Get(0)
+
 							key := c.Args().Get(1)
 							if name == "" || key == "" {
 								return Usage(errors.New("usage: key add <name> <age1…>"))
 							}
+
 							return KeyAdd(c.String("dir"), name, key, c.Bool("nocommit"))
 						},
 					},
@@ -136,10 +142,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the device name is required"))
 							}
+
 							return KeyRemove(c.String("dir"), name, c.Bool("nocommit"))
 						},
 					},
@@ -180,10 +188,12 @@ func App() *ucli.Command {
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+
 					at, err := dayArg(c)
 					if err != nil {
 						return err
 					}
+
 					return Render(c.String("dir"), c.String("out"), c.String("host"), c.Bool("stub"), at)
 				},
 			},
@@ -203,10 +213,12 @@ func App() *ucli.Command {
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
 					SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 					at, err := dayArg(c)
 					if err != nil {
 						return err
 					}
+
 					return Plan(c.String("dir"), c.String("host"), c.String("diff"), c.String("adopt"), c.Bool("agent"), at)
 				},
 			},
@@ -227,10 +239,12 @@ func App() *ucli.Command {
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
 					SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 					at, err := dayArg(c)
 					if err != nil {
 						return err
 					}
+
 					return Apply(c.String("dir"), c.String("host"), c.String("branch"),
 						c.Bool("force"), c.Bool("unpushed"), c.Bool("agent"), at)
 				},
@@ -257,6 +271,7 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							return HostAdd(c.String("dir"), ops.HostOptions{
 								Name:   c.Args().First(),
 								Role:   c.String("role"),
@@ -283,6 +298,7 @@ func App() *ucli.Command {
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
 							SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 							return HostAgentInstall(c.String("dir"), c.Args().First(), c.String("binary"), c.String("operator"))
 						},
 					},
@@ -297,10 +313,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the host name is required"))
 							}
+
 							return HostRemove(c.String("dir"), name, c.Bool("nocommit"))
 						},
 					},
@@ -319,10 +337,12 @@ func App() *ucli.Command {
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
 							SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 							at, err := dayArg(c)
 							if err != nil {
 								return err
 							}
+
 							return HostBootstrap(c.String("dir"), c.Args().First(), c.String("ssh"), c.Bool("print"), os.Stdout, at)
 						},
 					},
@@ -341,10 +361,12 @@ func App() *ucli.Command {
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
 					SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 					name := c.Args().First()
 					if name == "" {
 						return Usage(errors.New("the host name is required"))
 					}
+
 					return Metrics(c.String("dir"), name, c.Int("last"))
 				},
 			},
@@ -361,6 +383,7 @@ func App() *ucli.Command {
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
 					SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 					return ProbeMatrix(c.String("dir"), c.String("host"), time.Duration(c.Int("timeout"))*time.Second)
 				},
 			},
@@ -381,9 +404,11 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							if c.String("ntfy") == "" && c.String("serve") == "" {
 								return Usage(errors.New("either --ntfy <url> or --serve <host> --topic <name> is required"))
 							}
+
 							return AlertsSet(c.String("dir"), c.String("ntfy"), c.String("serve"),
 								c.String("topic"), c.String("token-file"), c.Bool("nocommit"))
 						},
@@ -475,10 +500,12 @@ func App() *ucli.Command {
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
 							SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
 							at, err := dayArg(c)
 							if err != nil {
 								return err
 							}
+
 							return StateStatus(c.String("dir"), at)
 						},
 					},
@@ -515,10 +542,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserAdd(c.String("dir"), name,
 								splitList(c.String("modes")), splitList(c.String("protos")),
 								c.Bool("tg"), c.String("entry"), c.Bool("nocommit"))
@@ -535,10 +564,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserRm(c.String("dir"), name, c.Bool("nocommit"))
 						},
 					},
@@ -553,10 +584,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserRotate(c.String("dir"), name, c.Bool("nocommit"))
 						},
 					},
@@ -571,10 +604,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserSetEnabled(c.String("dir"), name, false, c.Bool("nocommit"))
 						},
 					},
@@ -589,10 +624,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserSetEnabled(c.String("dir"), name, true, c.Bool("nocommit"))
 						},
 					},
@@ -609,16 +646,20 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							if c.Int("days") == 0 && c.String("until") == "" {
 								return Usage(errors.New("either --days or --until is required"))
 							}
+
 							if c.Int("days") != 0 && c.String("until") != "" {
 								return Usage(errors.New("either --days or --until, not both"))
 							}
+
 							return UserRenew(c.String("dir"), name, c.Int("days"), c.String("until"), c.Bool("nocommit"))
 						},
 					},
@@ -639,18 +680,23 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							var modes, protos []string
 							if c.IsSet("modes") {
 								modes = splitList(c.String("modes"))
 							}
+
 							if c.IsSet("protos") {
 								protos = splitList(c.String("protos"))
 							}
+
 							var tg *bool
+
 							switch {
 							case c.Bool("tg") && c.Bool("no-tg"):
 								return Usage(errors.New("either --tg or --no-tg, not both"))
@@ -661,15 +707,19 @@ func App() *ucli.Command {
 								v := false
 								tg = &v
 							}
+
 							var expires, note *string
+
 							if c.IsSet("expires") {
 								v := c.String("expires")
 								expires = &v
 							}
+
 							if c.IsSet("note") {
 								v := c.String("note")
 								note = &v
 							}
+
 							return UserEdit(c.String("dir"), name, modes, protos, tg, expires, note, c.Bool("nocommit"))
 						},
 					},
@@ -690,10 +740,12 @@ func App() *ucli.Command {
 						Flags:         []ucli.Flag{dirFlag(), jsonFlag()},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserLink(c.String("dir"), name)
 						},
 					},
@@ -714,10 +766,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserMessage(MessageOpts{
 								Dir:     c.String("dir"),
 								Name:    name,
@@ -743,10 +797,12 @@ func App() *ucli.Command {
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
+
 							name := c.Args().First()
 							if name == "" {
 								return Usage(errors.New("the user name is required"))
 							}
+
 							return UserConfig(c.String("dir"), name, c.String("mode"), c.String("format"), c.String("out"))
 						},
 					},
@@ -754,6 +810,7 @@ func App() *ucli.Command {
 			},
 		},
 	}
+
 	return app
 }
 
@@ -762,12 +819,14 @@ func stateDir(c *ucli.Command) string {
 	if d := c.String("dir"); d != "" {
 		return d
 	}
+
 	args := c.Args().Slice()
 	for i, a := range args {
 		if (a == "-dir" || a == "--dir" || a == "-C" || a == "--C") && i+1 < len(args) {
 			return args[i+1]
 		}
 	}
+
 	return "."
 }
 
@@ -777,6 +836,7 @@ func completeUsers(_ context.Context, c *ucli.Command) {
 	if err != nil {
 		return
 	}
+
 	for _, n := range ops.SortedUsers(st) {
 		fmt.Fprintln(c.Root().Writer, n)
 	}
@@ -791,6 +851,7 @@ func completeHosts(_ context.Context, c *ucli.Command) {
 	if err != nil {
 		return
 	}
+
 	for name := range st.Hosts {
 		fmt.Fprintln(c.Root().Writer, name)
 	}
@@ -798,11 +859,13 @@ func completeHosts(_ context.Context, c *ucli.Command) {
 
 func splitList(s string) []string {
 	var out []string
+
 	for _, p := range strings.Split(s, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
 	}
+
 	return out
 }
 
@@ -816,12 +879,16 @@ func PrintUsage(app *ucli.Command, w io.Writer) {
 		if c.Hidden || c.Name == "help" || c.Name == "completion" {
 			continue
 		}
+
 		names = append(names, c.Name)
 	}
+
 	sort.Strings(names)
 	fmt.Fprintf(w, "usage: %s <command> [flags]\n\ncommands:\n", app.Name)
+
 	for _, n := range names {
 		fmt.Fprintf(w, "  %s\n", n)
 	}
+
 	fmt.Fprintf(w, "\nrun %s help <command> for the flags of one command\n", app.Name)
 }

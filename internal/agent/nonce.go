@@ -22,13 +22,16 @@ func (c NonceCache) Use(nonce string) error {
 	if nonce == "" {
 		return fmt.Errorf("empty nonce")
 	}
+
 	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
 		return err
 	}
+
 	now := time.Now
 	if c.Now != nil {
 		now = c.Now
 	}
+
 	if entries, err := os.ReadDir(c.Dir); err == nil {
 		for _, e := range entries {
 			info, err := e.Info()
@@ -37,9 +40,11 @@ func (c NonceCache) Use(nonce string) error {
 			}
 		}
 	}
+
 	f, err := os.OpenFile(filepath.Join(c.Dir, nonce), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("nonce %s: %w", nonce, err)
 	}
+
 	return f.Close()
 }

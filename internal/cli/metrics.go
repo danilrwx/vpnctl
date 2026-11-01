@@ -27,35 +27,46 @@ func Metrics(dir, host string, last int) error {
 	if err != nil {
 		return err
 	}
+
 	if _, err := st.Host(host); err != nil {
 		return err
 	}
+
 	c, err := remote.Dial(st, host)
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = c.Close() }()
+
 	out, err := c.SH(fmt.Sprintf("cat /var/lib/vpnctl/metrics/*.jsonl 2>/dev/null | tail -n %d", last))
 	if err != nil {
 		return err
 	}
+
 	var samples []Sample
+
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line == "" {
 			continue
 		}
+
 		var s Sample
 		if err := json.Unmarshal([]byte(line), &s); err != nil {
 			continue
 		}
+
 		samples = append(samples, s)
 	}
+
 	return emit(samples, func() {
 		if len(samples) == 0 {
 			fmt.Println("no samples yet: the metrics timer writes one every 5 minutes")
 			return
 		}
+
 		fmt.Printf("%-20s %6s %12s %6s %5s %6s %s\n", "time", "load", "memory", "disk", "conns", "up", "reboot")
+
 		for _, s := range samples {
 			fmt.Printf("%-20s %6.2f %5d/%d MB %5d%% %5d %5ds %v\n", timeOf(s.TS), s.Load1,
 				s.MemUsedMB, s.MemTotal, s.DiskPct, s.Conns, s.UptimeS, s.Reboot == 1)

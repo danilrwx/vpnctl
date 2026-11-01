@@ -93,6 +93,7 @@ func (s Subnets) ForMode(mode string) string {
 	if mode == "full" {
 		return s.Full
 	}
+
 	return s.Split
 }
 
@@ -141,6 +142,7 @@ func ParseAction(s string) (Action, error) {
 	case strings.HasPrefix(s, "link:"):
 		return Action{Kind: ActionLink, Link: strings.TrimPrefix(s, "link:")}, nil
 	}
+
 	return Action{}, fmt.Errorf("action %q: expected direct, block, link:auto or link:<host>", s)
 }
 
@@ -149,6 +151,7 @@ func (a Action) String() string {
 	case ActionLink:
 		return "link:" + a.Link
 	}
+
 	return string(a.Kind)
 }
 
@@ -162,19 +165,25 @@ func (a *Action) UnmarshalYAML(n *yaml.Node) error {
 		if err != nil {
 			return err
 		}
+
 		*a = v
+
 		return nil
 	}
+
 	var m struct {
 		Link string `yaml:"link"`
 	}
 	if err := n.Decode(&m); err != nil {
 		return err
 	}
+
 	if m.Link == "" {
 		return fmt.Errorf("action: expected a keyword or {link: <host>}")
 	}
+
 	*a = Action{Kind: ActionLink, Link: m.Link}
+
 	return nil
 }
 
@@ -182,6 +191,7 @@ func (a Action) MarshalYAML() (any, error) {
 	if a.Kind == ActionLink {
 		return map[string]string{"link": a.Link}, nil
 	}
+
 	return string(a.Kind), nil
 }
 
@@ -316,13 +326,16 @@ type State struct {
 
 func read(dir, name string, v any) error {
 	p := filepath.Join(dir, name)
+
 	b, err := os.ReadFile(p)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
+
 	if err := yaml.Unmarshal(b, v); err != nil {
 		return fmt.Errorf("parse %s: %w", name, err)
 	}
+
 	return nil
 }
 
@@ -338,12 +351,14 @@ func Load(dir string) (*State, error) {
 		Sets:     map[string]Set{},
 		Versions: map[string]Pin{},
 	}
+
 	var hosts struct {
 		Hosts map[string]Host `yaml:"hosts"`
 	}
 	if err := read(dir, "hosts.yaml", &hosts); err != nil {
 		return nil, err
 	}
+
 	st.Hosts = hosts.Hosts
 
 	var links struct {
@@ -352,6 +367,7 @@ func Load(dir string) (*State, error) {
 	if err := read(dir, "links.yaml", &links); err != nil {
 		return nil, err
 	}
+
 	st.Links = links.Links
 
 	var users struct {
@@ -360,6 +376,7 @@ func Load(dir string) (*State, error) {
 	if err := read(dir, "users.yaml", &users); err != nil {
 		return nil, err
 	}
+
 	st.Users = users.Users
 
 	var proto struct {
@@ -368,14 +385,17 @@ func Load(dir string) (*State, error) {
 	if err := read(dir, "protocols.yaml", &proto); err != nil {
 		return nil, err
 	}
+
 	st.Inbounds = proto.Inbounds
 
 	for _, name := range sortedKeys(st.Hosts) {
 		var r Routing
+
 		err := read(dir, filepath.Join("routing", name+".yaml"), &r)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
+
 		st.Routing[name] = r
 	}
 
@@ -398,10 +418,12 @@ func Load(dir string) (*State, error) {
 			if name == e.Name() {
 				continue
 			}
+
 			var s Set
 			if err := read(dir, filepath.Join("sets", e.Name()), &s); err != nil {
 				return nil, err
 			}
+
 			st.Sets[name] = s
 		}
 	}
@@ -410,6 +432,7 @@ func Load(dir string) (*State, error) {
 		if err := yaml.Unmarshal(b, &st.Secrets); err != nil {
 			return nil, fmt.Errorf("parse secrets: %w", err)
 		}
+
 		st.Encrypted = true
 	} else if b, rerr := os.ReadFile(filepath.Join(dir, "secrets.sops.yaml")); rerr == nil {
 		// fixtures and CI keep the secrets in plain text; a real sops file has
@@ -423,6 +446,7 @@ func Load(dir string) (*State, error) {
 			}
 		}
 	}
+
 	st.normalize()
 
 	return st, nil
@@ -435,9 +459,11 @@ func (s *State) normalize() {
 		if t.IntervalS == 0 {
 			t.IntervalS = 60
 		}
+
 		if t.ToleranceMS == 0 {
 			t.ToleranceMS = 300
 		}
+
 		if t.Failures == 0 {
 			t.Failures = 2
 		}
@@ -445,22 +471,29 @@ func (s *State) normalize() {
 	for i := range s.Links {
 		fillTest(&s.Links[i].URLTest)
 	}
+
 	for name, r := range s.Routing {
 		fillTest(&r.Exit.URLTest)
+
 		if len(r.DNS.Direct) == 0 {
 			r.DNS.Direct = []string{"77.88.8.8", "1.1.1.1"}
 		}
+
 		if r.DNS.Remote == "" {
 			r.DNS.Remote = "https://1.1.1.1/dns-query"
 		}
+
 		s.Routing[name] = r
 	}
+
 	if s.Secrets.Hosts == nil {
 		s.Secrets.Hosts = map[string]HostSecrets{}
 	}
+
 	if s.Secrets.Users == nil {
 		s.Secrets.Users = map[string]UserSecrets{}
 	}
+
 	if s.Secrets.Links == nil {
 		s.Secrets.Links = map[string]LinkSecrets{}
 	}
@@ -471,7 +504,9 @@ func sortedKeys(m map[string]Host) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	sort.Strings(out)
+
 	return out
 }
 
@@ -481,6 +516,7 @@ func (s *State) Host(name string) (Host, error) {
 	if !ok {
 		return Host{}, fmt.Errorf("host %q is not described", name)
 	}
+
 	return h, nil
 }
 
@@ -494,17 +530,22 @@ func (s *State) EntryOf(u User) (string, bool) {
 	if u.Entry != "" {
 		return u.Entry, true
 	}
+
 	var only string
+
 	n := 0
+
 	for name, h := range s.Hosts {
 		if h.Role == Entry {
 			only = name
 			n++
 		}
 	}
+
 	if n == 1 {
 		return only, true
 	}
+
 	return "", false
 }
 
@@ -515,17 +556,20 @@ func (s *State) Link(from, to string) (*Link, bool) {
 			return &s.Links[i], true
 		}
 	}
+
 	return nil, false
 }
 
 // LinksFrom counts the links leaving the host.
 func (s *State) LinksFrom(from string) int {
 	n := 0
+
 	for _, l := range s.Links {
 		if l.From == from {
 			n++
 		}
 	}
+
 	return n
 }
 
@@ -535,12 +579,15 @@ func (l Link) Key() string { return l.From + "->" + l.To }
 // Entry returns the only entry host, if there is exactly one.
 func (s *State) Entry() (string, error) {
 	var names []string
+
 	for n, h := range s.Hosts {
 		if h.Role == Entry {
 			names = append(names, n)
 		}
 	}
+
 	sort.Strings(names)
+
 	switch len(names) {
 	case 0:
 		return "", fmt.Errorf("the state has no entry")
@@ -556,7 +603,9 @@ func KeyPath() string {
 	if p := os.Getenv("VPNCTL_AGE_KEY"); p != "" {
 		return p
 	}
+
 	home, _ := os.UserHomeDir()
+
 	return filepath.Join(home, ".config/sops/age/keys.txt")
 }
 
@@ -566,24 +615,31 @@ func (s *State) FillStubSecrets() {
 	if s.Secrets.Hosts == nil {
 		s.Secrets.Hosts = map[string]HostSecrets{}
 	}
+
 	if s.Secrets.Users == nil {
 		s.Secrets.Users = map[string]UserSecrets{}
 	}
+
 	if s.Secrets.Links == nil {
 		s.Secrets.Links = map[string]LinkSecrets{}
 	}
+
 	stub := func(what string) string { return "STUB-" + what }
+
 	for n, u := range s.Users {
 		sec := s.Secrets.Users[n]
 		sec.UUID = stub("uuid-" + n)
 		sec.Hy2Pass = stub("hy2-" + n)
+
 		sec.SubID = stub("sub-" + n)
 		if u.AWG != nil {
 			sec.AWG = &KeyPair{Private: stub("awg-priv-" + n), Public: stub("awg-pub-" + n)}
 			sec.AWGPreshared = stub("awg-psk-" + n)
 		}
+
 		s.Secrets.Users[n] = sec
 	}
+
 	for n := range s.Hosts {
 		sec := s.Secrets.Hosts[n]
 		sec.Reality = &RealityKeys{
@@ -595,6 +651,7 @@ func (s *State) FillStubSecrets() {
 		sec.MTG = "ee00000000000000000000000000000000"
 		s.Secrets.Hosts[n] = sec
 	}
+
 	for _, l := range s.Links {
 		k := l.Key()
 		s.Secrets.Links[k] = LinkSecrets{

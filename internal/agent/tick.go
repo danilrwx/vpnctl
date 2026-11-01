@@ -48,24 +48,31 @@ func (o *TickOptions) defaults() {
 	if o.ExpiryPath == "" {
 		o.ExpiryPath = "/etc/vpnctl/expiry"
 	}
+
 	if o.EngineConfig == "" {
 		o.EngineConfig = "/etc/sing-box/config.json"
 	}
+
 	if o.EngineBin == "" {
 		o.EngineBin = "sing-box"
 	}
+
 	if o.SubRoot == "" {
 		o.SubRoot = "/var/www/sub"
 	}
+
 	if o.ExpiredDir == "" {
 		o.ExpiredDir = "/var/lib/vpnctl/expired"
 	}
+
 	if o.AlertsEnv == "" {
 		o.AlertsEnv = "/etc/vpnctl/alerts.env"
 	}
+
 	if o.Now.IsZero() {
 		o.Now = time.Now()
 	}
+
 	if o.Run == nil {
 		o.Run = func(cmd string) (string, error) {
 			out, err := exec.Command("/bin/sh", "-c", cmd).CombinedOutput()
@@ -81,6 +88,7 @@ func (o *TickOptions) defaults() {
 // back if the chain stops answering.
 func Tick(opts TickOptions) (TickReport, error) {
 	opts.defaults()
+
 	rep := TickReport{Expired: []string{}, Removed: []string{}, Subs: []string{}, Peers: []string{}}
 
 	body, err := os.ReadFile(opts.ExpiryPath)
@@ -88,25 +96,33 @@ func Tick(opts TickOptions) (TickReport, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return rep, nil
 		}
+
 		return rep, err
 	}
+
 	exp, err := state.ParseExpiry(body)
 	if err != nil {
 		return rep, err
 	}
+
 	var gone []string
+
 	for name, e := range exp.Users {
 		if state.Expired(e.Expires, opts.Now) {
 			gone = append(gone, name)
 		}
 	}
+
 	sort.Strings(gone)
+
 	if len(gone) == 0 {
 		return rep, nil
 	}
+
 	rep.Expired = gone
 
 	emails := map[string]bool{}
+
 	for _, name := range gone {
 		for _, e := range exp.Users[name].Emails {
 			emails[e] = true
@@ -125,18 +141,22 @@ func Tick(opts TickOptions) (TickReport, error) {
 		if err != nil {
 			return rep, err
 		}
+
 		if changed {
 			rep.Changed = true
+
 			rep.Removed = gone
 			if opts.DryRun {
 				return rep, nil
 			}
+
 			if err := swapChecked(opts, out); err != nil {
 				notifyFailure(opts, "expiry: "+err.Error())
 				return rep, err
 			}
 		}
 	}
+
 	if opts.DryRun {
 		return rep, nil
 	}
@@ -149,6 +169,7 @@ func Tick(opts TickOptions) (TickReport, error) {
 	}
 
 	rep.Subs = subs
+
 	rep.Peers, err = dropPeers(opts, exp, gone)
 	if err != nil {
 		return rep, err
@@ -165,6 +186,7 @@ func Tick(opts TickOptions) (TickReport, error) {
 			}
 		}
 	}
+
 	return rep, nil
 }
 
@@ -232,32 +254,41 @@ func dropPeers(opts TickOptions, exp state.Expiry, gone []string) ([]string, err
 func swapChecked(opts TickOptions, body []byte) error {
 	tmp := opts.EngineConfig + ".tick"
 	back := opts.EngineConfig + ".tick.bak"
+
 	if err := os.WriteFile(tmp, body, 0o600); err != nil {
 		return err
 	}
 	defer func() { _ = os.Remove(tmp) }()
+
 	check := fmt.Sprintf("sing-box check -c %s", tmp)
 	if opts.EngineBin == "xray" {
 		check = fmt.Sprintf("xray run -test -c %s", tmp)
 	}
+
 	if out, err := opts.Run(check); err != nil {
 		return fmt.Errorf("the engine rejected the new config: %s", strings.TrimSpace(out))
 	}
+
 	if err := copyFile(opts.EngineConfig, back); err != nil {
 		return err
 	}
+
 	if err := os.Rename(tmp, opts.EngineConfig); err != nil {
 		return err
 	}
+
 	if _, err := opts.Run("systemctl restart " + opts.EngineBin); err != nil {
 		restore(back, opts)
 		return fmt.Errorf("the engine did not restart")
 	}
+
 	if out, err := opts.Run("/bin/sh /etc/vpnctl/probe.sh"); err != nil {
 		restore(back, opts)
 		return fmt.Errorf("the chain stopped answering after the restart: %s", strings.TrimSpace(out))
 	}
+
 	_ = os.Remove(back)
+
 	return nil
 }
 
@@ -266,6 +297,7 @@ func restore(back string, opts TickOptions) {
 	if err := copyFile(back, opts.EngineConfig); err == nil {
 		_, _ = opts.Run("systemctl restart " + opts.EngineBin)
 	}
+
 	_ = os.Remove(back)
 }
 
@@ -274,6 +306,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
+
 	return os.WriteFile(dst, b, 0o600)
 }
 
@@ -283,18 +316,22 @@ func copyFile(src, dst string) error {
 func StripUsers(body []byte, emails map[string]bool) ([]byte, bool, error) {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
+
 	var cfg any
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, false, fmt.Errorf("parse the engine config: %w", err)
 	}
+
 	out, changed := stripNode(cfg, emails, false)
 	if !changed {
 		return body, false, nil
 	}
+
 	b, err := render.JSON(out)
 	if err != nil {
 		return nil, false, err
 	}
+
 	return b, true, nil
 }
 
@@ -315,6 +352,7 @@ func stripNode(v any, emails map[string]bool, droppable bool) (any, bool) {
 	switch t := v.(type) {
 	case map[string]any:
 		changed := false
+
 		for k, val := range t {
 			switch k {
 			case "users":
@@ -322,6 +360,7 @@ func stripNode(v any, emails map[string]bool, droppable bool) (any, bool) {
 				if !ok {
 					continue
 				}
+
 				kept := make([]any, 0, len(list))
 				for _, item := range list {
 					if m, ok := item.(map[string]any); ok {
@@ -330,30 +369,39 @@ func stripNode(v any, emails map[string]bool, droppable bool) (any, bool) {
 							continue
 						}
 					}
+
 					kept = append(kept, item)
 				}
+
 				t[k] = kept
 			case "auth_user":
 				list, ok := val.([]any)
 				if !ok {
 					continue
 				}
+
 				kept := make([]any, 0, len(list))
 				for _, item := range list {
 					if s, ok := item.(string); ok && emails[s] {
 						changed = true
 						continue
 					}
+
 					kept = append(kept, item)
 				}
+
 				if len(kept) == 0 {
 					delete(t, k)
+
 					changed = true
+
 					continue
 				}
+
 				t[k] = kept
 			case "rules":
 				list, _ := val.([]any)
+
 				nv, c := stripNode(val, emails, true)
 				if c {
 					changed = true
@@ -366,6 +414,7 @@ func stripNode(v any, emails map[string]bool, droppable bool) (any, bool) {
 					if mode == "and" && len(kept) < len(list) {
 						return map[string]any{}, true
 					}
+
 					t[k] = nv
 				}
 			default:
@@ -376,10 +425,12 @@ func stripNode(v any, emails map[string]bool, droppable bool) (any, bool) {
 				}
 			}
 		}
+
 		return t, changed
 	case []any:
 		kept := make([]any, 0, len(t))
 		changed := false
+
 		for _, item := range t {
 			nv, c := stripNode(item, emails, false)
 			if c {
@@ -393,10 +444,13 @@ func stripNode(v any, emails map[string]bool, droppable bool) (any, bool) {
 					continue
 				}
 			}
+
 			kept = append(kept, nv)
 		}
+
 		return kept, changed
 	}
+
 	return v, false
 }
 
@@ -408,11 +462,13 @@ func hasMatchKey(m map[string]any) bool {
 			return true
 		}
 	}
+
 	for k := range m {
 		if matchKeys[k] {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -423,32 +479,43 @@ func DropPeer(path, ip string) (bool, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
+
 		return false, err
 	}
+
 	lines := strings.Split(string(body), "\n")
+
 	var out []string
+
 	dropped := false
+
 	for i := 0; i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) != "[Peer]" {
 			out = append(out, lines[i])
 			continue
 		}
+
 		end := i + 1
 		for end < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[end]), "[") {
 			end++
 		}
+
 		block := strings.Join(lines[i:end], "\n")
 		if strings.Contains(block, ip+"/32") || strings.Contains(block, ip+"/") {
 			dropped = true
 			i = end - 1
+
 			continue
 		}
+
 		out = append(out, lines[i:end]...)
 		i = end - 1
 	}
+
 	if !dropped {
 		return false, nil
 	}
+
 	return true, os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o600)
 }
 
@@ -459,31 +526,38 @@ func notifyFailure(opts TickOptions, text string) {
 	if err != nil {
 		return
 	}
+
 	vars := map[string]string{}
+
 	for _, line := range strings.Split(string(env), "\n") {
 		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
 		if !ok {
 			continue
 		}
+
 		if s, err := strconv.Unquote(v); err == nil {
 			vars[k] = s
 		} else {
 			vars[k] = v
 		}
 	}
+
 	url := vars["VPNCTL_ALERTS_LOCAL"]
 	if url == "" {
 		url = vars["VPNCTL_ALERTS_URL"]
 	}
+
 	if url == "" {
 		return
 	}
+
 	cmd := fmt.Sprintf("curl -sS --max-time 10 -o /dev/null -H 'Title: vpnctl expiry' -H 'Priority: high' -d %s %s",
 		shellQuote(text), shellQuote(url))
 	if t := vars["VPNCTL_ALERTS_TOKEN"]; t != "" {
 		cmd = fmt.Sprintf("curl -sS --max-time 10 -o /dev/null -H 'Title: vpnctl expiry' -H 'Priority: high' -H %s -d %s %s",
 			shellQuote("Authorization: Bearer "+t), shellQuote(text), shellQuote(url))
 	}
+
 	_, _ = opts.Run(cmd)
 }
 
@@ -499,10 +573,13 @@ func RunTick(opts TickOptions) error {
 	if err != nil {
 		return err
 	}
+
 	b, err := json.Marshal(rep)
 	if err != nil {
 		return err
 	}
+
 	fmt.Println(string(b))
+
 	return nil
 }

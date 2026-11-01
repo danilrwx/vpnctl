@@ -18,13 +18,16 @@ func SubURL(st *state.State, entry, user, mode string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("host %q is not described", entry)
 	}
+
 	if h.Domain == "" {
 		return "", fmt.Errorf("the entry has no domain")
 	}
+
 	sec, ok := st.Secrets.Users[user]
 	if !ok {
 		return "", fmt.Errorf("no secrets for user %s", user)
 	}
+
 	return fmt.Sprintf("https://%s/s/%s/%s", h.Domain, sec.SubID, mode), nil
 }
 
@@ -34,11 +37,14 @@ func Links(st *state.State, entry, user, mode string) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("user %q is not described", user)
 	}
+
 	accs, err := SubAccounts(st, entry, user, u, mode)
 	if err != nil {
 		return nil, err
 	}
+
 	var out []string
+
 	for _, a := range accs {
 		switch a.Proto {
 		case "reality":
@@ -54,6 +60,7 @@ func Links(st *state.State, entry, user, mode string) ([]string, error) {
 				"hysteria2://%s@%s:%d?sni=%s#%s", a.Password, a.Domain, a.Port, a.SNI, a.Email))
 		}
 	}
+
 	return out, nil
 }
 
@@ -63,14 +70,17 @@ func TGLink(st *state.State, entry string) (string, bool) {
 	if !ok || h.Domain == "" {
 		return "", false
 	}
+
 	i, ok := st.Inbounds[entry]["mtg"]
 	if !ok || !i.IsEnabled() {
 		return "", false
 	}
+
 	sec := st.Secrets.Hosts[entry].MTG
 	if sec == "" {
 		return "", false
 	}
+
 	return fmt.Sprintf("tg://proxy?server=%s&port=%d&secret=%s", h.Domain, i.Port, sec), true
 }
 

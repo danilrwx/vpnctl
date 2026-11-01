@@ -16,10 +16,12 @@ func CheckNtfy(raw string) (string, error) {
 	if raw == "" {
 		return "", nil
 	}
+
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("the notification topic is not a URL: %w", err)
 	}
+
 	switch {
 	case u.Scheme != "https":
 		return "", fmt.Errorf("the notification topic must be https, not %q", u.Scheme)
@@ -32,6 +34,7 @@ func CheckNtfy(raw string) (string, error) {
 	case strings.Trim(u.Path, "/") == "":
 		return "", errors.New("the notification topic has no name, e.g. https://ntfy.sh/vpnctl-xxxx")
 	}
+
 	return strings.TrimRight(raw, "/"), nil
 }
 
@@ -42,6 +45,7 @@ func (st *State) NtfyName(host string) string {
 	if !ok || h.Domain == "" {
 		return ""
 	}
+
 	return "ntfy." + h.Domain
 }
 
@@ -53,17 +57,21 @@ func SaveAlerts(dir string, a Alerts) error {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+
 		return nil
 	}
+
 	b, err := marshal(func() map[string]any {
 		m := map[string]any{"ntfy": a.Ntfy}
 		if a.Serve != "" {
 			m["serve"] = a.Serve
 		}
+
 		return m
 	}())
 	if err != nil {
 		return fmt.Errorf("marshal alerts: %w", err)
 	}
+
 	return os.WriteFile(path, b, 0o644)
 }

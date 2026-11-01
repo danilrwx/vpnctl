@@ -19,11 +19,14 @@ func NtfyLocal(topicURL string) string {
 	if i < 0 {
 		return ""
 	}
+
 	rest := topicURL[i+3:]
+
 	j := strings.Index(rest, "/")
 	if j < 0 {
 		return ""
 	}
+
 	return fmt.Sprintf("http://127.0.0.1:%d%s", NtfyPort, rest[j:])
 }
 

@@ -37,5 +37,6 @@ func ParseExpiry(b []byte) (Expiry, error) {
 	if err := yaml.Unmarshal(b, &e); err != nil {
 		return Expiry{}, fmt.Errorf("parse the expiry file: %w", err)
 	}
+
 	return e, nil
 }

@@ -95,8 +95,10 @@ func TreeHash(files []File) string {
 	for _, f := range files {
 		lines = append(lines, fmt.Sprintf("%s\x00%s\x00%d", f.Path, f.SHA256, f.Mode))
 	}
+
 	sort.Strings(lines)
 	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+
 	return hex.EncodeToString(sum[:])
 }
 
@@ -105,35 +107,44 @@ func Verify(r *Request, host string, pub *ecdsa.PublicKey, now time.Time) error 
 	if r.V != Version {
 		return &Error{Code: "version", Err: fmt.Errorf("protocol %d, this agent speaks %d", r.V, Version)}
 	}
+
 	if r.Host != host {
 		return &Error{Code: "host", Err: fmt.Errorf("the request is for %q, this host is %q", r.Host, host)}
 	}
+
 	skew := now.Sub(time.Unix(r.TS, 0))
 	if skew < -ClockSkew || skew > ClockSkew {
 		return &Error{Code: "stale", Err: fmt.Errorf("request is %s old", skew.Round(time.Second))}
 	}
+
 	if r.Nonce == "" {
 		return &Error{Code: "replay", Err: errors.New("no nonce")}
 	}
+
 	if got := TreeHash(r.Files); got != r.TreeHash {
 		return &Error{Code: "tree", Err: fmt.Errorf("tree hash %s, files give %s", r.TreeHash, got)}
 	}
+
 	if err := verifySig(Message(r), r.Sig, pub); err != nil {
 		return &Error{Code: "signature", Err: err}
 	}
+
 	for _, f := range r.Files {
 		if err := CheckPath(f.Path, f.Mode); err != nil {
 			return err
 		}
+
 		body, err := base64.StdEncoding.DecodeString(f.Body)
 		if err != nil {
 			return &Error{Code: "tree", Err: fmt.Errorf("%s: body: %w", f.Path, err)}
 		}
+
 		sum := sha256.Sum256(body)
 		if hex.EncodeToString(sum[:]) != f.SHA256 {
 			return &Error{Code: "tree", Err: fmt.Errorf("%s: content does not match its hash", f.Path)}
 		}
 	}
+
 	return nil
 }
 
@@ -143,28 +154,36 @@ func CheckPath(path string, mode int) error {
 	if !filepath.IsAbs(path) {
 		return &Error{Code: "path", Err: fmt.Errorf("%s: not an absolute path", path)}
 	}
+
 	if strings.Contains(path, "..") {
 		return &Error{Code: "path", Err: fmt.Errorf("%s: contains a parent directory reference", path)}
 	}
+
 	if strings.ContainsFunc(path, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return &Error{Code: "path", Err: fmt.Errorf("%q: control character", path)}
 	}
+
 	ok := false
+
 	for _, p := range AllowedPrefixes {
 		if strings.HasPrefix(path, p) {
 			ok = true
 			break
 		}
 	}
+
 	if !ok {
 		return &Error{Code: "path", Err: fmt.Errorf("%s: outside %s", path, strings.Join(AllowedPrefixes, ", "))}
 	}
+
 	allowed := false
+
 	for _, m := range AllowedModes {
 		if mode == m {
 			allowed = true
 		}
 	}
+
 	if !allowed {
 		return &Error{Code: "path", Err: fmt.Errorf("%s: mode %o is not allowed", path, mode)}
 	}
@@ -174,6 +193,7 @@ func CheckPath(path string, mode int) error {
 			return &Error{Code: "path", Err: fmt.Errorf("%s: %s is a symlink", path, p)}
 		}
 	}
+
 	return nil
 }
 
@@ -192,6 +212,7 @@ func ParsePublicKey(data []byte) (*ecdsa.PublicKey, error) {
 	if block, _ := pem.Decode(data); block != nil {
 		der = block.Bytes
 	}
+
 	key, err := x509.ParsePKIXPublicKey(der)
 	if err != nil {
 		if cert, cerr := x509.ParseCertificate(der); cerr == nil {
@@ -200,10 +221,12 @@ func ParsePublicKey(data []byte) (*ecdsa.PublicKey, error) {
 			return nil, err
 		}
 	}
+
 	pub, ok := key.(*ecdsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("not an ECDSA key")
 	}
+
 	return pub, nil
 }
 
@@ -212,20 +235,24 @@ func verifySig(msg, sigB64 string, pub *ecdsa.PublicKey) error {
 	if err != nil {
 		return fmt.Errorf("signature: %w", err)
 	}
+
 	sum := sha256.Sum256([]byte(msg))
 	if !ecdsa.VerifyASN1(pub, sum[:], raw) {
 		return errors.New("signature does not match")
 	}
+
 	return nil
 }
 
 // Sign produces the signature of a request with the operator's key.
 func Sign(r *Request, key *ecdsa.PrivateKey) (string, error) {
 	sum := sha256.Sum256([]byte(Message(r)))
+
 	sig, err := ecdsa.SignASN1(rand.Reader, key, sum[:])
 	if err != nil {
 		return "", err
 	}
+
 	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
@@ -235,18 +262,22 @@ func Plan(r *Request, markerPath, bootstrapPath string) Response {
 	if m, err := os.ReadFile(markerPath); err == nil {
 		res.Marker = strings.TrimSpace(string(m))
 	}
+
 	if _, err := os.Stat(bootstrapPath); err == nil {
 		res.Bootstrapped = true
 	}
+
 	for _, p := range r.Paths {
 		if _, err := os.Lstat(p); err != nil {
 			res.Hashes[p] = ""
 			continue
 		}
+
 		if sum, err := hashFile(p); err == nil {
 			res.Hashes[p] = sum
 		}
 	}
+
 	return res
 }
 
@@ -256,37 +287,45 @@ func Apply(r *Request, root string, out func(string)) Response {
 	res := Response{V: Version, OK: true}
 	// the engine and the role follow from the tree itself, no extra fields to sign
 	engine, role := "sing-box", "exit"
+
 	for _, f := range r.Files {
 		if strings.HasPrefix(f.Path, "/etc/xray/") {
 			engine = "xray"
 		}
+
 		if f.Path == "/etc/caddy/Caddyfile" {
 			role = "entry"
 		}
 	}
+
 	stage := filepath.Join(root, ".vpnctl")
 	if err := os.RemoveAll(stage); err != nil {
 		return fail(res, "io", err)
 	}
+
 	hp := plan.HostPlan{Name: r.Host}
 	for _, f := range r.Files {
 		body, err := base64.StdEncoding.DecodeString(f.Body)
 		if err != nil {
 			return fail(res, "tree", err)
 		}
+
 		dst := filepath.Join(stage, strings.TrimPrefix(f.Path, "/"))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return fail(res, "io", err)
 		}
+
 		if err := os.WriteFile(dst, body, os.FileMode(f.Mode)); err != nil {
 			return fail(res, "io", err)
 		}
+
 		status := plan.Changed
 		if cur, err := hashFile(f.Path); err != nil {
 			status = plan.New
 		} else if cur == f.SHA256 {
 			status = plan.Unchanged
 		}
+
 		hp.Files = append(hp.Files, plan.FileStatus{Path: f.Path, Status: status})
 		res.Changes = append(res.Changes, Change{Path: f.Path, Status: status.Mark()})
 	}
@@ -295,34 +334,47 @@ func Apply(r *Request, root string, out func(string)) Response {
 		if f.Status == plan.Unchanged {
 			continue
 		}
+
 		cmd, ok := hostscript.CheckCmd(engine, f.Path)
 		if !ok {
 			continue
 		}
+
 		if err := runSh(cmd); err != nil {
 			out("check failed: " + f.Path)
 			return fail(res, "check", err)
 		}
+
 		out("check ok: " + f.Path)
 	}
+
 	backup := filepath.Join(root, "backup", r.Commit)
 	if err := runSh(hostscript.InstallScript(hp, backup)); err != nil {
 		out("swap failed, rolling back")
+
 		_ = runSh(hostscript.RollbackScript(hp, backup))
 		res.RolledBack = true
+
 		return fail(res, "io", err)
 	}
+
 	out("swapped")
+
 	probe := hostscript.ProbeScript(roleOf(role))
+
 	code, err := outputSh(probe)
 	if err != nil || strings.TrimSpace(code) != "204" {
 		out("probe failed: " + strings.TrimSpace(code))
+
 		_ = runSh(hostscript.RollbackScript(hp, backup))
 		res.RolledBack = true
 		r2 := fail(res, "probe", fmt.Errorf("probe returned %q", strings.TrimSpace(code)))
+
 		return r2
 	}
+
 	res.Probe = "204"
+
 	return res
 }
 
@@ -330,6 +382,7 @@ func roleOf(role string) state.Role {
 	if role == "entry" {
 		return state.Entry
 	}
+
 	return state.Exit
 }
 
@@ -337,6 +390,7 @@ func fail(res Response, code string, err error) Response {
 	res.OK = false
 	res.Code = code
 	res.Error = err.Error()
+
 	return res
 }
 
@@ -345,7 +399,9 @@ func hashFile(p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	sum := sha256.Sum256(b)
+
 	return hex.EncodeToString(sum[:]), nil
 }
 
@@ -372,6 +428,7 @@ func newNonce() string {
 	if _, err := rand.Read(b); err != nil {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
+
 	return hex.EncodeToString(b)
 }
 
