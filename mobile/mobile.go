@@ -3,12 +3,17 @@
 package mobile
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 
+	"github.com/danilrwx/vpnctl-go/apply"
 	"github.com/danilrwx/vpnctl-go/gitsync"
 	"github.com/danilrwx/vpnctl-go/ops"
+	"github.com/danilrwx/vpnctl-go/plan"
 	"github.com/danilrwx/vpnctl-go/render"
 	"github.com/danilrwx/vpnctl-go/state"
 	"github.com/danilrwx/vpnctl-go/validate"
@@ -139,6 +144,50 @@ func (a *App) AddUser(name string, modes, protocols []string, tg bool) (string, 
 		}
 	}
 	return msg, nil
+}
+
+// Plan returns the plan as JSON: the same shape the CLI prints with --json.
+// An empty host plans every host of the state.
+func (a *App) Plan(host string) (string, error) {
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+	rendered, err := render.Check(a.st)
+	if err != nil {
+		return "", err
+	}
+	one := render.Rendered{}
+	for name, files := range rendered {
+		if host == "" || host == name {
+			one[name] = files
+		}
+	}
+	plans, err := plan.Plan(a.st, one)
+	if err != nil {
+		return "", err
+	}
+	b, err := json.MarshalIndent(plan.JSONOf(plans), "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// Apply installs the state on the hosts and returns the result as JSON.
+func (a *App) Apply(host string) (string, error) {
+	res, err := apply.Apply(a.st, &apply.Opts{Host: host}, io.Discard)
+	if err != nil {
+		var ge *apply.GuardError
+		if errors.As(err, &ge) {
+			return "", fmt.Errorf("guard: %w", err)
+		}
+		return "", err
+	}
+	b, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // Sync pushes the state to origin.
