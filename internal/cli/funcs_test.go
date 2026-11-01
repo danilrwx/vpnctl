@@ -109,3 +109,33 @@ func TestStateFmtCheck(t *testing.T) {
 		t.Fatalf("check after fmt: %v", err)
 	}
 }
+
+// TestAgentAuthorizeRejectsGarbage: a key the agent cannot read must be refused
+// before anything reaches authorized_keys, and it is a usage error, not a
+// failure of the host.
+func TestAgentAuthorizeRejectsGarbage(t *testing.T) {
+	dir := openFixtureDir(t)
+
+	path := filepath.Join(t.TempDir(), "key.pub")
+
+	if err := os.WriteFile(path, []byte("not a key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := HostAgentAuthorize(dir, "ru-msk-1", "phone", path)
+	if err == nil {
+		t.Fatal("a garbage key was filed")
+	}
+
+	if ExitCode(err) != ExitUsage {
+		t.Fatalf("code %d, want usage: %v", ExitCode(err), err)
+	}
+
+	// without an operator the key has no name to be filed under
+	empty := filepath.Join(t.TempDir(), "empty.pub")
+	_ = os.WriteFile(empty, nil, 0o600)
+
+	if err := HostAgentAuthorize(dir, "ru-msk-1", "", empty); err == nil {
+		t.Fatal("a key without an operator was accepted")
+	}
+}

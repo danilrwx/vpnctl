@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,3 +127,90 @@ func shellQuote(s string) string {
 }
 
 var _ = gitsync.Open
+
+// HostAgentAuthorize files a public key that already exists somewhere else: a
+// phone keeps its private half in the Keystore, so the only thing that can
+// travel is the public key, read from stdin or a file.
+func HostAgentAuthorize(dir, host, operator, keyFile string) error {
+	if operator == "" {
+		return Usage(errors.New("--operator is required: the name the key is filed under"))
+	}
+
+	st, err := loadState(dir)
+	if err != nil {
+		return err
+	}
+
+	if _, err := st.Host(host); err != nil {
+		return err
+	}
+
+	var body []byte
+
+	if keyFile == "" || keyFile == "-" {
+		body, err = io.ReadAll(os.Stdin)
+	} else {
+		body, err = os.ReadFile(keyFile)
+	}
+
+	if err != nil {
+		return fmt.Errorf("read the public key: %w", err)
+	}
+
+	// the same parser the agent uses: a key it cannot read must not be filed
+	parsed, err := agent.ParsePublicKey(body)
+	if err != nil {
+		return Usage(fmt.Errorf("this is not a public key the agent can read: %w", err))
+	}
+
+	sshPub, err := ssh.NewPublicKey(parsed)
+	if err != nil {
+		return err
+	}
+
+	line := fmt.Sprintf(`restrict,no-pty,command="/usr/local/bin/vpnctl-agent" %s vpnctl-agent:%s`,
+		strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))), operator)
+
+	c, err := remote.Dial(st, host)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.Close() }()
+
+	steps := []struct {
+		name   string
+		script string
+		stdin  []byte
+	}{
+		{"key dir", "install -d -m 0700 /etc/vpnctl/agents /var/lib/vpnctl/nonces", nil},
+		{"public key", "cat > /etc/vpnctl/agents/" + operator + ".pub", body},
+		// the same operator may be authorised twice; one line is enough
+		{"authorized_keys", "install -d -m 0700 /root/.ssh && touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys && grep -qF 'vpnctl-agent:" + operator + "' /root/.ssh/authorized_keys || printf '%s\\n' " + shellQuote(line) + " >> /root/.ssh/authorized_keys", nil},
+		{"read back", "cat /etc/vpnctl/agents/" + operator + ".pub", nil},
+	}
+
+	for _, s := range steps {
+		out, err := c.Run(s.script, s.stdin)
+		if err != nil {
+			return fmt.Errorf("%s: %s: %w", host, s.name, err)
+		}
+
+		if !out.OK() {
+			return fmt.Errorf("%s: %s: %s", host, s.name, strings.TrimSpace(string(out.Stderr)))
+		}
+
+		// the key that landed must be the key that was sent
+		if s.name == "read back" && strings.TrimSpace(string(out.Stdout)) != strings.TrimSpace(string(body)) {
+			return fmt.Errorf("%s: the key on the host is not the key that was sent", host)
+		}
+	}
+
+	return emit(struct {
+		Host     string `json:"host"`
+		Operator string `json:"operator"`
+		Finger   string `json:"fingerprint"`
+	}{host, operator, ssh.FingerprintSHA256(sshPub)}, func() {
+		fmt.Printf("✓ %s: %s authorised for the agent\n", host, operator)
+		fmt.Printf("  fingerprint %s\n", ssh.FingerprintSHA256(sshPub))
+	})
+}

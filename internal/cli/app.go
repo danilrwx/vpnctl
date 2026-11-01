@@ -303,6 +303,29 @@ func App() *ucli.Command {
 						},
 					},
 					{
+						Name:          "agent-authorize",
+						Usage:         "file a public key that already exists on a device",
+						ArgsUsage:     "<host>",
+						ShellComplete: completeHosts,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "operator", Usage: "name of the key in authorized_keys and /etc/vpnctl/agents"},
+							&ucli.StringFlag{Name: "key-file", Usage: "PEM file, - or empty for stdin"},
+							acceptHostKeyFlag(),
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							SetAcceptNewHostKey(c.Bool("accept-host-key"))
+
+							name := c.Args().First()
+							if name == "" {
+								return Usage(errors.New("the host name is required"))
+							}
+
+							return HostAgentAuthorize(c.String("dir"), name, c.String("operator"), c.String("key-file"))
+						},
+					},
+					{
 						Name:          "rm",
 						Usage:         "remove a host with its inbound and routing",
 						ArgsUsage:     "<name>",

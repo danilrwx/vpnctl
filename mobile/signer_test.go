@@ -105,6 +105,7 @@ func TestNoSigner(t *testing.T) {
 // exactly what is wrong without one.
 func TestSelfTest(t *testing.T) {
 	SetSigner(nil)
+
 	if got := SelfTest(); got != "no signer" {
 		t.Fatalf("%q", got)
 	}
