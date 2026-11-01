@@ -11,9 +11,9 @@ import (
 
 	ucli "github.com/urfave/cli/v3"
 
-	"github.com/danilrwx/vpnctl-go/cli"
-	"github.com/danilrwx/vpnctl-go/ops"
-	"github.com/danilrwx/vpnctl-go/state"
+	"github.com/danilrwx/vpnctl-go/internal/cli"
+	"github.com/danilrwx/vpnctl-go/internal/ops"
+	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
 func dirFlag() ucli.Flag {

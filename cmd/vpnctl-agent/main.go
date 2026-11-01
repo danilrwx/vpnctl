@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danilrwx/vpnctl-go/agent"
+	"github.com/danilrwx/vpnctl-go/internal/agent"
 )
 
 const (
