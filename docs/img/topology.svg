@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" font-family="Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8b949e"/></marker>
+    <marker id="v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#3fb950"/></marker>
+  </defs>
+  <rect width="960" height="540" rx="14" fill="#0e1116"/>
+
+  <!-- клиенты и подписка -->
+  <rect x="40" y="30" width="420" height="64" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="250" y="54" text-anchor="middle" fill="#e6edf3" font-weight="700">клиенты</text>
+  <text x="250" y="74" text-anchor="middle" fill="#8b949e" font-size="12">Karing · Hiddify · v2rayNG · роутеры AWG, WG, OpenVPN · Telegram</text>
+  <rect x="500" y="30" width="420" height="64" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="710" y="54" text-anchor="middle" fill="#e6edf3" font-weight="700" font-family="Roboto Mono, monospace">sub.example.ru</text>
+  <text x="710" y="74" text-anchor="middle" fill="#8b949e" font-size="12">адрес подписки · A-запись на живой вход · TTL 120</text>
+
+  <line x1="200" y1="94" x2="200" y2="128" stroke="#3fb950" stroke-width="2" marker-end="url(#v)"/>
+  <text x="210" y="116" fill="#56d364" font-size="11">профиль: оба входа, основной первым</text>
+  <line x1="300" y1="94" x2="640" y2="128" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#g)"/>
+  <line x1="600" y1="94" x2="420" y2="128" stroke="#3fb950" stroke-width="1.5" marker-end="url(#v)"/>
+  <text x="562" y="108" fill="#56d364" font-size="11">DNS</text>
+
+  <!-- вход 1 -->
+  <rect x="40" y="130" width="420" height="250" rx="10" fill="#161b22" stroke="#3fb950"/>
+  <text x="60" y="154" fill="#8b949e" font-size="12" letter-spacing="1">ВХОД 1 · ОСНОВНОЙ · ДЖАМП-ХОСТ</text>
+  <text x="60" y="174" fill="#e6edf3" font-family="Roboto Mono, monospace">ru-msk-1 · gw.example.ru</text>
+  <g font-size="12">
+    <text x="60" y="200" fill="#e6edf3">443 tcp</text><text x="150" y="200" fill="#c9d1d9">Reality (VLESS)</text>
+    <text x="60" y="218" fill="#e6edf3">443 tcp</text><text x="150" y="218" fill="#c9d1d9">→ caddy: сайт, ws, trojan, подписки</text>
+    <text x="60" y="236" fill="#e6edf3">443 udp</text><text x="150" y="236" fill="#c9d1d9">Hysteria2</text>
+    <text x="60" y="254" fill="#e6edf3">51820–51821</text><text x="150" y="254" fill="#c9d1d9">AWG, WG → tproxy</text>
+    <text x="60" y="272" fill="#e6edf3">1194 udp</text><text x="150" y="272" fill="#c9d1d9">OpenVPN → tproxy</text>
+    <text x="60" y="290" fill="#e6edf3">2053 tcp</text><text x="150" y="290" fill="#c9d1d9">mtg → probe socks</text>
+  </g>
+  <rect x="60" y="304" width="380" height="60" rx="8" fill="#0e1116" stroke="#30363d"/>
+  <text x="250" y="326" text-anchor="middle" fill="#e6edf3" font-weight="700">движок маршрутизации · sing-box (или xray)</text>
+  <text x="250" y="348" text-anchor="middle" fill="#8b949e" font-size="12">split: российское напрямую · full: всё через выход</text>
+
+  <!-- вход 2 -->
+  <rect x="500" y="130" width="420" height="250" rx="10" fill="#161b22" stroke="#30363d"/>
+  <text x="520" y="154" fill="#8b949e" font-size="12" letter-spacing="1">ВХОД 2</text>
+  <text x="520" y="174" fill="#e6edf3" font-family="Roboto Mono, monospace">ru-spb-2 · spb.example.ru</text>
+  <g font-size="12" fill="#c9d1d9">
+    <text x="520" y="200">свой домен, сертификат и ключи Reality</text>
+    <text x="520" y="218">свой routing/ru-spb-2.yaml и свои линки</text>
+    <text x="520" y="236">те же учётки: email, UUID, пароли</text>
+    <text x="520" y="254">те же L3-пиры: адрес и ключ</text>
+    <text x="520" y="272">файлы подписки лежат на каждом входе</text>
+    <text x="520" y="290">наборы sets/ общие для всех входов</text>
+  </g>
+  <rect x="520" y="304" width="380" height="60" rx="8" fill="#0e1116" stroke="#30363d"/>
+  <text x="710" y="326" text-anchor="middle" fill="#e6edf3" font-weight="700">вход заблокирован</text>
+  <text x="710" y="348" text-anchor="middle" fill="#8b949e" font-size="12">клиенты уходят на другой вход по уже скачанному профилю</text>
+
+  <!-- линки -->
+  <line x1="200" y1="380" x2="200" y2="430" stroke="#3fb950" stroke-width="2" marker-end="url(#v)"/>
+  <line x1="320" y1="380" x2="640" y2="430" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#g)"/>
+  <line x1="640" y1="380" x2="320" y2="430" stroke="#3fb950" stroke-width="2" marker-end="url(#v)"/>
+  <line x1="760" y1="380" x2="760" y2="430" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#g)"/>
+  <text x="212" y="410" fill="#8b949e" font-size="11">AWG в ядре · Reality запасной · urltest</text>
+  <text x="772" y="410" fill="#8b949e" font-size="11">запасной</text>
+
+  <!-- выходы -->
+  <rect x="40" y="432" width="420" height="78" rx="10" fill="#161b22" stroke="#3fb950"/>
+  <text x="60" y="456" fill="#8b949e" font-size="12" letter-spacing="1">ВЫХОД · АКТИВНЫЙ</text>
+  <text x="60" y="476" fill="#e6edf3" font-family="Roboto Mono, monospace">fi-hel-1</text>
+  <text x="60" y="496" fill="#8b949e" font-size="12">пир AWG + NAT · inbound Reality · общий для всех входов</text>
+  <rect x="500" y="432" width="420" height="78" rx="10" fill="#161b22" stroke="#30363d" stroke-dasharray="5 4"/>
+  <text x="520" y="456" fill="#8b949e" font-size="12" letter-spacing="1">ВЫХОД · ЗАПАСНОЙ</text>
+  <text x="520" y="476" fill="#e6edf3" font-family="Roboto Mono, monospace">nl-ams-1</text>
+  <text x="520" y="496" fill="#8b949e" font-size="12">urltest переключает сам · политика в routing/&lt;вход&gt;.yaml</text>
+</svg>

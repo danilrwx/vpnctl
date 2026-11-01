@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="230" viewBox="0 0 960 230" font-family="Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8b949e"/>
+    </marker>
+  </defs>
+  <rect width="960" height="230" rx="14" fill="#0e1116"/>
+  <text x="40" y="38" fill="#e6edf3" font-weight="700" font-size="15">One apply, one host</text>
+  <text x="40" y="58" fill="#8b949e" font-size="12">hosts go from leaves to the jump host; the series stops at the first failure</text>
+
+  <g fill="#161b22" stroke="#30363d">
+    <rect x="40" y="86" width="118" height="54" rx="8"/>
+    <rect x="178" y="86" width="118" height="54" rx="8"/>
+    <rect x="316" y="86" width="118" height="54" rx="8"/>
+    <rect x="454" y="86" width="118" height="54" rx="8"/>
+    <rect x="592" y="86" width="118" height="54" rx="8"/>
+    <rect x="730" y="86" width="118" height="54" rx="8" stroke="#3fb950"/>
+  </g>
+  <g fill="#e6edf3" text-anchor="middle" font-weight="700">
+    <text x="99" y="109">guards</text>
+    <text x="237" y="109">render</text>
+    <text x="375" y="109">copy</text>
+    <text x="513" y="109">check</text>
+    <text x="651" y="109">swap</text>
+    <text x="789" y="109">probe</text>
+  </g>
+  <g fill="#8b949e" text-anchor="middle" font-size="11">
+    <text x="99" y="128">main · clean tree</text>
+    <text x="237" y="128">deterministic</text>
+    <text x="375" y="128">signed tree</text>
+    <text x="513" y="128">sing-box check · nft -c</text>
+    <text x="651" y="128">backup · install · reload</text>
+    <text x="789" y="128">generate_204 via chain</text>
+  </g>
+  <g stroke="#8b949e" stroke-width="2" marker-end="url(#a)">
+    <line x1="158" y1="113" x2="176" y2="113"/>
+    <line x1="296" y1="113" x2="314" y2="113"/>
+    <line x1="434" y1="113" x2="452" y2="113"/>
+    <line x1="572" y1="113" x2="590" y2="113"/>
+    <line x1="710" y1="113" x2="728" y2="113"/>
+  </g>
+
+  <rect x="868" y="86" width="52" height="54" rx="8" fill="#161b22" stroke="#3fb950"/>
+  <text x="894" y="109" text-anchor="middle" fill="#3fb950" font-weight="700">tag</text>
+  <text x="894" y="128" text-anchor="middle" fill="#8b949e" font-size="11">marker</text>
+  <line x1="848" y1="113" x2="866" y2="113" stroke="#3fb950" stroke-width="2" marker-end="url(#a)"/>
+
+  <path d="M789 140 V176 H651 V142" fill="none" stroke="#f85149" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="720" y="194" text-anchor="middle" fill="#f85149" font-size="12">probe failed → restore backup, reload, stop the series</text>
+  <text x="40" y="194" fill="#8b949e" font-size="12">sshd is never touched · drift is shown by plan and can be adopted into the repo</text>
+</svg>
