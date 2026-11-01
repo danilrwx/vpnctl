@@ -522,7 +522,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		}
 		files := rendered[name]
 		if hp.Changes() == 0 {
-			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
+			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s && %s", markerValue(head, opts), plan.Marker, ManifestScript(files))); err != nil {
 				_ = c.Close()
 				return fail(name, 0, err)
 			}
@@ -624,7 +624,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 			via = "the chain"
 		}
 		fmt.Fprintf(out, "  ✓ probe: 204 via %s\n", via)
-		if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
+		if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s && %s", markerValue(head, opts), plan.Marker, ManifestScript(files))); err != nil {
 			_ = c.Close()
 			return fail(name, hp.Changes(), err)
 		}
@@ -652,4 +652,21 @@ func markerValue(head string, opts *Opts) string {
 		return head + " unpushed"
 	}
 	return head
+}
+
+// ManifestScript records what was just applied: drift later means "someone
+// edited this file", not "the renderer changed since then".
+func ManifestScript(files render.HostFiles) string {
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	var b strings.Builder
+	fmt.Fprintf(&b, "cat > %s <<'MANIFEST'\n", plan.Manifest)
+	for _, p := range paths {
+		fmt.Fprintf(&b, "%s %s\n", render.Sha256(files[p]), p)
+	}
+	b.WriteString("MANIFEST")
+	return b.String()
 }

@@ -31,7 +31,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestParseProbe(t *testing.T) {
-	out := "abc1234\nyes\n" +
+	out := "abc1234\nyes\n-\n" +
 		"deadbeef /etc/nftables.conf\n" +
 		"missing /etc/caddy/Caddyfile\n"
 	p := ParseProbe(out)
