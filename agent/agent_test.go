@@ -165,6 +165,13 @@ func TestPlanResponse(t *testing.T) {
 
 func TestParsePublicKey(t *testing.T) {
 	key := testKey(t)
+	pemBody, err := PublicPEM(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParsePublicKey(pemBody); err != nil {
+		t.Fatalf("the PEM written for the host is unreadable: %v", err)
+	}
 	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	if err != nil {
 		t.Fatal(err)

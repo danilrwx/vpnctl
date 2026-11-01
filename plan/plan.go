@@ -197,8 +197,17 @@ func hashMap(f render.HostFiles) map[string]string {
 	return out
 }
 
-// Plan queries the hosts in parallel and builds the plan, in host name order.
+// Prober answers the probe for one host: the shell script by default, the agent
+// when the CLI passes one.
+type Prober func(c *remote.Client, host string, paths []string) (Probe, error)
+
+// Plan queries the hosts in parallel with the shell probe.
 func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
+	return PlanWith(st, rendered, nil)
+}
+
+// PlanWith queries the hosts in parallel and builds the plan, in host name order.
+func PlanWith(st *state.State, rendered render.Rendered, prober Prober) ([]HostPlan, error) {
 	names := make([]string, 0, len(rendered))
 	for name := range rendered {
 		names = append(names, name)
@@ -238,12 +247,20 @@ func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
 				paths = append(paths, p)
 			}
 			sort.Strings(paths)
-			out, err := c.SH(ProbeScript(paths))
+			var p Probe
+			if prober != nil {
+				p, err = prober(c, name, paths)
+			} else {
+				var out string
+				out, err = c.SH(ProbeScript(paths))
+				if err == nil {
+					p = ParseProbe(out)
+				}
+			}
 			if err != nil {
 				a.err = err
 				return
 			}
-			p := ParseProbe(out)
 			// plus old paths when the marker is known: they need hashing too
 			if p.HasMarker {
 				if old, err := RenderAt(st, p.Marker, name); err == nil {
@@ -255,12 +272,20 @@ func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
 					}
 					if len(extra) > 0 {
 						sort.Strings(extra)
-						out2, err := c.SH(ProbeScript(extra))
+						var p2 Probe
+						if prober != nil {
+							p2, err = prober(c, name, extra)
+						} else {
+							var out2 string
+							out2, err = c.SH(ProbeScript(extra))
+							if err == nil {
+								p2 = ParseProbe(out2)
+							}
+						}
 						if err != nil {
 							a.err = err
 							return
 						}
-						p2 := ParseProbe(out2)
 						for k, v := range p2.Hashes {
 							p.Hashes[k] = v
 						}
