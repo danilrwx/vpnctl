@@ -11,9 +11,10 @@ import (
 
 // KeyInfo is one recipient of secrets.age.yaml with the local device marked.
 type KeyInfo struct {
-	Name string `json:"name"`
-	Key  string `json:"key"`
-	This bool   `json:"this"`
+	Name  string `json:"name"`
+	Key   string `json:"key"`
+	Added string `json:"added,omitempty"`
+	This  bool   `json:"this"`
 }
 
 // KeyInit writes age.yaml from the local identity: the state gets an explicit
@@ -95,7 +96,7 @@ func Keys(st *state.State) ([]KeyInfo, error) {
 	own, ownErr := ageio.OwnRecipient(state.KeyPath())
 	out := make([]KeyInfo, 0, len(recs.Recipients))
 	for _, r := range recs.Recipients {
-		out = append(out, KeyInfo{Name: r.Name, Key: r.Key, This: ownErr == nil && r.Key == own})
+		out = append(out, KeyInfo{Name: r.Name, Key: r.Key, Added: r.Added, This: ownErr == nil && r.Key == own})
 	}
 	return out, nil
 }
@@ -169,6 +170,11 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 		if err != nil {
 			return InitResult{}, err
 		}
+		// prove the blob opens before the user is told it is the only way back
+		back, err := ageio.OpenIdentity(blob, opt.BackupPassphrase)
+		if err != nil || back.String() != backup.String() {
+			return InitResult{}, fmt.Errorf("the backup identity does not round-trip: %w", err)
+		}
 		if err := recs.Add("backup", ageio.RecipientOf(backup)); err != nil {
 			return InitResult{}, err
 		}
@@ -215,4 +221,39 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 	}
 	res.Message = "init: empty state"
 	return res, nil
+}
+
+// KeyBackup issues a fresh offline backup identity: it replaces the `backup`
+// recipient, re-encrypts the secrets and returns the sealed blob, which the
+// caller must store outside the devices.
+func KeyBackup(st *state.State, passphrase string) (string, string, error) {
+	if passphrase == "" {
+		return "", "", fmt.Errorf("a passphrase is required: it is the only thing protecting the backup")
+	}
+	recs, err := loadRecipients(st)
+	if err != nil {
+		return "", "", err
+	}
+	backup, err := ageio.NewIdentity()
+	if err != nil {
+		return "", "", err
+	}
+	blob, err := ageio.SealIdentity(backup, passphrase)
+	if err != nil {
+		return "", "", err
+	}
+	back, err := ageio.OpenIdentity(blob, passphrase)
+	if err != nil || back.String() != backup.String() {
+		return "", "", fmt.Errorf("the backup identity does not round-trip: %w", err)
+	}
+	if err := recs.Replace("backup", ageio.RecipientOf(backup)); err != nil {
+		return "", "", err
+	}
+	if err := recs.Save(st.Dir); err != nil {
+		return "", "", err
+	}
+	if err := state.SaveSecrets(st.Dir, st.Secrets); err != nil {
+		return "", "", err
+	}
+	return blob, "keys: new backup identity", nil
 }

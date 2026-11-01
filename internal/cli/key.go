@@ -138,9 +138,24 @@ func KeyList(dir string) error {
 			if k.This {
 				mark = "*"
 			}
-			fmt.Printf("%s %-10s %s\n", mark, k.Name, k.Key)
+			added := ""
+			if k.Added != "" {
+				added = " · added " + k.Added
+				if days, err := addedDays(k.Added); err == nil && k.Name == "backup" && days > 180 {
+					added += fmt.Sprintf(" · %d days old, rotate with `vpnctl key backup`", days)
+				}
+			}
+			fmt.Printf("%s %-10s %s%s\n", mark, k.Name, k.Key, added)
 		}
 	})
+}
+
+func addedDays(day string) (int, error) {
+	t, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return 0, err
+	}
+	return int(time.Since(t).Hours() / 24), nil
 }
 
 func plural(n int, word string) string {
@@ -202,4 +217,33 @@ func pushNewState(repo *gitsync.Repo, url string, fresh bool) (string, error) {
 		return "", err
 	}
 	return url + " (old tip in " + backup + ")", nil
+}
+
+// KeyBackup issues a new offline backup identity and prints it once.
+func KeyBackup(dir, passphrase string, nocommit bool) error {
+	st, err := state.Load(dir)
+	if err != nil {
+		return err
+	}
+	blob, msg, err := ops.KeyBackup(st, passphrase)
+	if err != nil {
+		return err
+	}
+	if err := commit(dir, msg, nocommit); err != nil {
+		return err
+	}
+	if jsonOut {
+		return emit(struct {
+			Backup string `json:"backup"`
+			Msg    string `json:"message"`
+		}{blob, msg}, func() {})
+	}
+	fmt.Printf("✓ %s\n\n", msg)
+	fmt.Println("  backup identity — показать один раз, сохранить вне устройств:")
+	fmt.Println()
+	for _, line := range strings.Split(strings.TrimSpace(blob), "\n") {
+		fmt.Println("  " + line)
+	}
+	fmt.Println()
+	return nil
 }

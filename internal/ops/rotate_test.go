@@ -1,7 +1,10 @@
 package ops
 
 import (
+	"path/filepath"
 	"testing"
+
+	"github.com/danilrwx/vpnctl-go/internal/ageio"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -58,5 +61,63 @@ func TestHostRemove(t *testing.T) {
 	}
 	if _, err := HostRemove(st, "a"); err == nil {
 		t.Fatal("removing a missing host was accepted")
+	}
+}
+
+func TestKeyBackupRotates(t *testing.T) {
+	dir := t.TempDir()
+	useKey(t)
+	dir = filepath.Join(dir, "state")
+	res, err := Init(dir, InitOptions{Name: "laptop", BackupPassphrase: "first passphrase"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := ageio.OpenIdentity(res.BackupBlob, "first passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := state.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob, _, err := KeyBackup(st, "second passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := ageio.OpenIdentity(blob, "second passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.String() == after.String() {
+		t.Fatal("the backup identity did not change")
+	}
+	recs, err := ageio.LoadRecipients(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recs.Has(ageio.RecipientOf(before)) {
+		t.Fatal("the old backup is still a recipient")
+	}
+	if !recs.Has(ageio.RecipientOf(after)) {
+		t.Fatal("the new backup is not a recipient")
+	}
+	// the new backup can read the secrets, the old one cannot
+	secrets := filepath.Join(dir, "secrets.age.yaml")
+	keyFile := filepath.Join(t.TempDir(), "backup.key")
+	if err := ageio.WriteIdentity(keyFile, after); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ageio.Decrypt(secrets, keyFile); err != nil {
+		t.Fatalf("the new backup cannot read the secrets: %v", err)
+	}
+	old := filepath.Join(t.TempDir(), "old.key")
+	if err := ageio.WriteIdentity(old, before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ageio.Decrypt(secrets, old); err == nil {
+		t.Fatal("the old backup can still read the secrets")
+	}
+	if _, _, err := KeyBackup(st, ""); err == nil {
+		t.Fatal("an empty passphrase was accepted")
 	}
 }

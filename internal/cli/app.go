@@ -70,6 +70,19 @@ func App() *ucli.Command {
 						},
 					},
 					{
+						Name:  "backup",
+						Usage: "issue a new offline backup identity, shown once",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "pass", Usage: "passphrase that seals the blob"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return KeyBackup(c.String("dir"), c.String("pass"), c.Bool("nocommit"))
+						},
+					},
+					{
 						Name:      "add",
 						Usage:     "add a device: re-encrypts the secrets for everyone",
 						ArgsUsage: "<name> <age1…>",

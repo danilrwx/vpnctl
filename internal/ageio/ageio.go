@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"filippo.io/age"
 	"filippo.io/age/armor"
@@ -24,6 +25,8 @@ const RecipientsFile = "age.yaml"
 type Recipient struct {
 	Name string `yaml:"name"`
 	Key  string `yaml:"key"`
+	// Added is the day the recipient was created, for the rotation hint.
+	Added string `yaml:"added,omitempty"`
 }
 
 // Recipients is the whole age.yaml file.
@@ -223,7 +226,7 @@ func (r *Recipients) Add(name, key string) error {
 			return fmt.Errorf("recipient %q already exists with another key", name)
 		}
 	}
-	r.Recipients = append(r.Recipients, Recipient{Name: name, Key: key})
+	r.Recipients = append(r.Recipients, Recipient{Name: name, Key: key, Added: today()})
 	return nil
 }
 
@@ -240,6 +243,21 @@ func (r *Recipients) Remove(name string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// Replace adds a recipient or swaps its key, keeping the name.
+func (r *Recipients) Replace(name, key string) error {
+	if _, err := age.ParseX25519Recipient(key); err != nil {
+		return fmt.Errorf("recipient %q: %w", name, err)
+	}
+	for i := range r.Recipients {
+		if r.Recipients[i].Name == name {
+			r.Recipients[i].Key = key
+			r.Recipients[i].Added = today()
+			return nil
+		}
+	}
+	return r.Add(name, key)
 }
 
 // Has reports whether a key is already listed.
@@ -306,6 +324,8 @@ func OpenIdentity(blob, passphrase string) (*age.X25519Identity, error) {
 	}
 	return age.ParseX25519Identity(strings.TrimSpace(string(body)))
 }
+
+func today() string { return time.Now().UTC().Format("2006-01-02") }
 
 func identOK(s string) bool {
 	if s == "" {
