@@ -224,15 +224,18 @@ func testDay() time.Time {
 // while the service still served 1.12.4 for hours.
 func TestScriptRestartsAfterAnInstall(t *testing.T) {
 	st := fixtureState(t, state.Entry, "", false)
+
 	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !strings.Contains(s, "systemctl restart sing-box") {
 		t.Fatalf("an install does not restart the engine:\n%s", s)
 	}
 	// the restart must be inside the else, not after a skipped install
 	installAt := strings.Index(s, "install -m 0755 /var/lib/vpnctl/dl/sing-box")
+
 	restartAt := strings.Index(s, "systemctl restart sing-box")
 	if installAt < 0 || restartAt < installAt {
 		t.Fatalf("restart is not tied to the install: %d %d", installAt, restartAt)
