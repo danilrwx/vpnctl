@@ -35,7 +35,7 @@ func Metrics(dir, host string, last int) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	out, err := c.SH(fmt.Sprintf("cat /var/lib/vpnctl/metrics/*.jsonl 2>/dev/null | tail -n %d", last))
 	if err != nil {
 		return err

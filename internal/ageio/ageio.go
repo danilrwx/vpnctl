@@ -91,7 +91,7 @@ func Decrypt(path, keyPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	r, err := age.Decrypt(f, id)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt %s: %w", path, err)

@@ -132,11 +132,11 @@ func TestCheckPathRefusesSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := "/tmp/vpnctl-agent-test-link"
-	os.Remove(link)
+	_ = os.Remove(link)
 	if err := os.Symlink(real, link); err != nil {
 		t.Skip(err)
 	}
-	defer os.Remove(link)
+	defer func() { _ = os.Remove(link) }()
 	if err := CheckPath(link+"/x.conf", 0o644); err == nil {
 		t.Fatal("a symlink in the path was accepted")
 	}

@@ -135,7 +135,7 @@ func useNonce(nonce string) error {
 	for _, e := range entries {
 		info, err := e.Info()
 		if err == nil && time.Since(info.ModTime()) > nonceTTL {
-			os.Remove(filepath.Join(nonceDir, e.Name()))
+			_ = os.Remove(filepath.Join(nonceDir, e.Name()))
 		}
 	}
 	p := filepath.Join(nonceDir, nonce)
@@ -143,6 +143,6 @@ func useNonce(nonce string) error {
 	if err != nil {
 		return fmt.Errorf("nonce %s: %w", nonce, err)
 	}
-	f.Close()
+	_ = f.Close()
 	return nil
 }

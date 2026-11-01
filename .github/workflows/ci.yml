@@ -10,6 +10,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+
       - run: go vet ./...
       - run: go test ./...
       - run: gofmt -l . | tee /tmp/fmt && test ! -s /tmp/fmt

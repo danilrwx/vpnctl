@@ -3,7 +3,6 @@ package render
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"sort"
 	"strconv"
@@ -191,8 +190,3 @@ func Sha256(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
-
-// joinComma is the template `join(", ")` of a string list.
-func joinComma(v []string) string { return strings.Join(v, ", ") }
-
-func itoa(v int) string { return fmt.Sprint(v) }
