@@ -149,3 +149,38 @@ func TestPlanRejectsBrokenState(t *testing.T) {
 		t.Fatal("plan accepted an invalid state")
 	}
 }
+
+// TestRenewAndDisable: the two actions a phone is most likely to be opened for.
+// Both go through save, which validates and writes before anything is shown.
+func TestRenewAndDisable(t *testing.T) {
+	app := openFixture(t)
+
+	msg, err := app.Renew("olga", 30)
+	if err != nil {
+		t.Fatalf("renew: %v", err)
+	}
+
+	if !strings.Contains(msg, "renew") {
+		t.Fatalf("message %q", msg)
+	}
+
+	if app.st.Users["olga"].Expires == "" {
+		t.Fatal("no expiry was written")
+	}
+
+	if _, err := app.SetEnabled("olga", true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+
+	if !app.st.Users["olga"].IsEnabled() {
+		t.Fatal("the user is still off")
+	}
+
+	if _, err := app.SetEnabled("ghost", false); err == nil {
+		t.Fatal("an unknown user was accepted")
+	}
+
+	if _, err := app.Renew("ghost", 30); err == nil {
+		t.Fatal("renewing an unknown user was accepted")
+	}
+}

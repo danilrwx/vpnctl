@@ -192,6 +192,97 @@ func (a *App) AddUser(name, modes, protocols string, tg bool) (string, error) {
 	return msg, nil
 }
 
+// save is the one path a phone takes after changing the state: validate, write,
+// commit. Push is a separate step because it needs the forge to be reachable.
+func (a *App) save(msg string) error {
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if err := state.SaveUsers(a.dir, a.st.Users); err != nil {
+		return err
+	}
+
+	if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
+		return err
+	}
+
+	if a.repo != nil {
+		return a.repo.Commit(msg)
+	}
+
+	return nil
+}
+
+// SetEnabled turns a user on or off without touching its credentials.
+func (a *App) SetEnabled(name string, on bool) (string, error) {
+	u, ok := a.st.Users[name]
+	if !ok {
+		return "", fmt.Errorf("user %q is not described", name)
+	}
+
+	u.Enabled = &on
+	a.st.Users[name] = u
+
+	msg := "users: " + name + ": disable"
+	if on {
+		msg = "users: " + name + ": enable"
+	}
+
+	if err := a.save(msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+// Renew extends a term from the later of today and the current date.
+func (a *App) Renew(name string, days int) (string, error) {
+	msg, err := ops.UserRenew(a.st, name, days, "", time.Now().UTC())
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.save(msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+// Push sends what the phone committed to the repository. It uses the same
+// Keystore key the clone used: one identity, two jobs.
+func (a *App) Push() (string, error) {
+	if a.repo == nil {
+		return "", fmt.Errorf("no repository: this state was not cloned")
+	}
+
+	if signer == nil {
+		return "", fmt.Errorf("no signer: the device cannot authenticate to git")
+	}
+
+	sshSigner, err := gitsync.SSHSigner(vpnctlSigner{signer})
+	if err != nil {
+		return "", err
+	}
+
+	remotes, err := a.repo.Remotes()
+	if err != nil {
+		return "", err
+	}
+
+	if len(remotes) == 0 {
+		return "", fmt.Errorf("no remote to push to")
+	}
+
+	url := remotes[0].Config().URLs[0]
+	if err := a.repo.PushAuth(gitsync.GitAuth(gitUser(url), sshSigner)); err != nil {
+		return "", err
+	}
+
+	return a.repo.Head()
+}
+
 // Plan returns the plan as JSON: the same shape the CLI prints with --json.
 // An empty host plans every host of the state.
 func (a *App) Plan(host string) (string, error) {

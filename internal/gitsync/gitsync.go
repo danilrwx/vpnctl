@@ -337,3 +337,20 @@ func Clone(url, dir string, auth transport.AuthMethod) (*Repo, error) {
 
 	return &Repo{r: r, dir: dir}, nil
 }
+
+// Remotes lists what the repository knows, which is how a phone finds the URL
+// it cloned from without a settings screen.
+func (r *Repo) Remotes() ([]*git.Remote, error) {
+	return r.r.Remotes()
+}
+
+// PushAuth pushes the current branch with an explicit auth method: a device
+// has no key file, only a signer.
+func (r *Repo) PushAuth(auth transport.AuthMethod) error {
+	err := r.r.Push(&git.PushOptions{Auth: auth})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return fmt.Errorf("push: %w", err)
+	}
+
+	return nil
+}
