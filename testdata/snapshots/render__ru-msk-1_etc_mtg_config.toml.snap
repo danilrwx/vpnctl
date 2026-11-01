@@ -8,3 +8,9 @@ bind-to = "0.0.0.0:2053"
 
 [network]
 proxies = ["socks5://127.0.0.1:1080"]
+# the fronting name comes from the secret and is used for SNI only; the
+# address is given here, so mtg does not have to resolve it at all
+domain-fronting-ip = "5.6.7.8"
+# mtg resolves names through DNS-over-HTTPS, not through the system resolver:
+# its default does not answer from this host
+doh-ip = "1.1.1.1"

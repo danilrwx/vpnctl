@@ -4,3 +4,9 @@ bind-to = "0.0.0.0:{{ port }}"
 
 [network]
 proxies = ["socks5://127.0.0.1:{{ socks_port }}"]
+{% if fronting_ip %}# the fronting name comes from the secret and is used for SNI only; the
+# address is given here, so mtg does not have to resolve it at all
+domain-fronting-ip = "{{ fronting_ip }}"
+{% endif %}# mtg resolves names through DNS-over-HTTPS, not through the system resolver:
+# its default does not answer from this host
+doh-ip = "{{ doh_ip }}"

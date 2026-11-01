@@ -19,6 +19,9 @@ const (
 	CaddyPort = 8443
 	// ProbePort is the local socks inbound: chain probes and the mtg upstream.
 	ProbePort = 1080
+	// MTGDOH is the DNS-over-HTTPS resolver mtg uses: it ignores the system
+	// resolver, and its own default (9.9.9.9) does not answer from our entry.
+	MTGDOH = "1.1.1.1"
 	// StatsAPI is the clash_api controller of the engine.
 	StatsAPI = "127.0.0.1:9090"
 	// ProbeURL is the latency probe target.

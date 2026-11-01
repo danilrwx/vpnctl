@@ -238,6 +238,7 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 		if mtg, ok := inb["mtg"]; ok {
 			if err := emit("/etc/mtg/config.toml", "mtg.toml.j2", map[string]any{
 				"host": name, "secret": hs.MTG, "port": mtg.Port, "socks_port": ProbePort,
+				"fronting_ip": h.IP, "doh_ip": MTGDOH,
 			}); err != nil {
 				return nil, err
 			}
