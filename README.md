@@ -38,7 +38,7 @@ primary device that changes them.
 go build -o ~/.local/bin/vpnctl ./cmd/vpnctl
 go build -o ~/.local/bin/vpnctl-agent ./cmd/vpnctl-agent
 
-vpnctl init -dir ./state --name laptop --backup-pass '…'   # skeleton + age.yaml
+vpnctl init -dir ./state --name laptop --backup   # skeleton + age.yaml, asks for a passphrase
 vpnctl key add phone age1…                                  # a second device
 vpnctl host add edge --role exit --ssh root@203.0.113.10
 vpnctl host bootstrap edge                                  # packages and engines

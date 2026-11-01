@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 
 	"github.com/go-git/go-git/v5/config"
 
@@ -220,12 +223,16 @@ func pushNewState(repo *gitsync.Repo, url string, fresh bool) (string, error) {
 }
 
 // KeyBackup issues a new offline backup identity and prints it once.
-func KeyBackup(dir, passphrase string, nocommit bool) error {
+func KeyBackup(dir, flagPass string, nocommit bool) error {
+	pass, err := passphrase(flagPass, true)
+	if err != nil {
+		return err
+	}
 	st, err := state.Load(dir)
 	if err != nil {
 		return err
 	}
-	blob, msg, err := ops.KeyBackup(st, passphrase)
+	blob, msg, err := ops.KeyBackup(st, pass)
 	if err != nil {
 		return err
 	}
@@ -246,4 +253,38 @@ func KeyBackup(dir, passphrase string, nocommit bool) error {
 	}
 	fmt.Println()
 	return nil
+}
+
+// passphrase resolves the backup passphrase: the flag, then the environment,
+// then the terminal. It never echoes and it asks twice when confirming.
+func passphrase(flagValue string, confirm bool) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	if v := os.Getenv("VPNCTL_BACKUP_PASS"); v != "" {
+		return v, nil
+	}
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		return "", errors.New("no passphrase: pass --pass, set VPNCTL_BACKUP_PASS, or run in a terminal")
+	}
+	fmt.Fprint(os.Stderr, "passphrase: ")
+	first, err := term.ReadPassword(fd)
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", err
+	}
+	if !confirm {
+		return string(first), nil
+	}
+	fmt.Fprint(os.Stderr, "repeat passphrase: ")
+	second, err := term.ReadPassword(fd)
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", err
+	}
+	if string(first) != string(second) {
+		return "", errors.New("the passphrases differ")
+	}
+	return string(first), nil
 }
