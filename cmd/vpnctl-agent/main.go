@@ -32,6 +32,29 @@ func main() {
 		fmt.Println("vpnctl-agent", version.String())
 		return
 	}
+	// a person runs `vpnctl-agent probe` on the entry to see the matrix locally
+	if len(os.Args) > 1 && os.Args[1] == "probe" {
+		fs := flag.NewFlagSet("probe", flag.ContinueOnError)
+		plan := fs.String("plan", "/etc/vpnctl/probe.json", "the rendered plan")
+		timeout := fs.Int("timeout", 5, "seconds per handshake")
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		body, err := os.ReadFile(*plan)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		matrix, err := agent.RunProbePlan(body, time.Duration(*timeout)*time.Second)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		b, _ := json.Marshal(matrix)
+		fmt.Println(string(b))
+		return
+	}
 	// a timer runs `vpnctl-agent tick`: disable the accounts whose day has come
 	if len(os.Args) > 1 && os.Args[1] == "tick" {
 		fs := flag.NewFlagSet("tick", flag.ContinueOnError)
@@ -105,6 +128,18 @@ func main() {
 		res = agent.Plan(&req, "/etc/vpnctl/applied-commit", "/etc/vpnctl/bootstrap")
 	case "apply":
 		res = agent.Apply(&req, "/tmp", func(line string) { fmt.Fprintln(os.Stderr, line) })
+	case "probe":
+		body, err := os.ReadFile("/etc/vpnctl/probe.json")
+		if err != nil {
+			res = agent.Response{V: agent.Version, Code: "probe", Error: err.Error()}
+			break
+		}
+		matrix, err := agent.RunProbePlan(body, 0)
+		if err != nil {
+			res = agent.Response{V: agent.Version, Code: "probe", Error: err.Error()}
+			break
+		}
+		res = agent.Response{V: agent.Version, OK: true, Matrix: matrix}
 	default:
 		res = agent.Response{V: agent.Version, Code: "op", Error: "unknown op " + req.Op}
 	}

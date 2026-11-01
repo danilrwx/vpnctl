@@ -185,6 +185,8 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 		// the tick needs the plan and the engine path: both live on the entry
 		f["/etc/systemd/system/vpnctl-tick.service"] = tickUnit(st, name, h.Engine)
 		f["/etc/systemd/system/vpnctl-tick.timer"] = tickTimer(name)
+		// the topology matrix is measured from here, where the links start
+		f["/etc/vpnctl/probe.json"] = probePlanJSON(st, name)
 		// the chain probe runs on the entry: it is the only host that sees the
 		// whole path, and the only one that should alert
 		f["/etc/vpnctl/probe.sh"] = probeScript(st, name, EngineBin(h.Engine))

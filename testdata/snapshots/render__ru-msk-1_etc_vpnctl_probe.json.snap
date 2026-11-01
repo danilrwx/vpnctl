@@ -1,0 +1,30 @@
+---
+source: tests/render.rs
+expression: body
+---
+{
+  "host": "ru-msk-1",
+  "links": [
+    {
+      "from": "ru-msk-1",
+      "to": "fi-hel-1",
+      "addr": "1.2.3.4",
+      "probes": [
+        {
+          "protocol": "awg",
+          "port": 51820
+        },
+        {
+          "protocol": "reality",
+          "port": 443,
+          "sni": "www.microsoft.com"
+        },
+        {
+          "protocol": "hy2",
+          "port": 443,
+          "sni": "fi-hel-1"
+        }
+      ]
+    }
+  ]
+}

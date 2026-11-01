@@ -72,6 +72,7 @@ type Response struct {
 	Hashes       map[string]string `json:"hashes,omitempty"`
 	Changes      []Change          `json:"changes,omitempty"`
 	Probe        string            `json:"probe,omitempty"`
+	Matrix       []ProbeResult     `json:"matrix,omitempty"`
 	RolledBack   bool              `json:"rolled_back,omitempty"`
 	Log          []string          `json:"log,omitempty"`
 }

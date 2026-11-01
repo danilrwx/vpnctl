@@ -112,3 +112,49 @@ func TestNtfyLocal(t *testing.T) {
 		}
 	}
 }
+
+// TestProbePlanIsRenderedOnTheEntry: the matrix is measured where the links
+// start, and the plan carries no secrets.
+func TestProbePlanIsRenderedOnTheEntry(t *testing.T) {
+	st := ntfyFixture("")
+	st.Hosts["node"] = state.Host{Role: state.Entry, Engine: "sing-box", IP: "203.0.113.10", Domain: "vpn.example", SSH: "root@203.0.113.10"}
+	st.Hosts["exit"] = state.Host{Role: state.Exit, Engine: "sing-box", IP: "203.0.113.12", SSH: "root@203.0.113.12"}
+	st.Links = []state.Link{{From: "node", To: "exit", Protocols: []string{"reality", "hy2", "awg"}, Tunnel: "10.9.9.0/30"}}
+	inb := st.Inbounds["exit"]
+	inb["reality"] = state.Inbound{Port: 443}
+	inb["hy2"] = state.Inbound{Port: 8443}
+	inb["awg"] = state.Inbound{Port: 51820}
+	st.Inbounds["exit"] = inb
+	st.FillStubSecrets() // the link needs its own secrets once it exists
+
+	files, err := RenderHost(st, "node", testDay())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, ok := files["/etc/vpnctl/probe.json"]
+	if !ok {
+		t.Fatal("the entry has no probe plan")
+	}
+	for _, want := range []string{`"to": "exit"`, `"addr": "203.0.113.12"`, `"protocol": "reality"`, `"protocol": "hy2"`, `"protocol": "awg"`, `"port": 51820`} {
+		if !strings.Contains(plan, want) {
+			t.Errorf("the plan lacks %q:\n%s", want, plan)
+		}
+	}
+	for _, secret := range []string{"STUB-uuid", "STUB-hy2", "password", "uuid"} {
+		if strings.Contains(plan, secret) {
+			t.Errorf("the plan carries %q", secret)
+		}
+	}
+	if _, ok := mustRender(t, st, "exit")["/etc/vpnctl/probe.json"]; ok {
+		t.Error("an exit renders a probe plan it can never measure")
+	}
+}
+
+func mustRender(t *testing.T, st *state.State, host string) map[string]string {
+	t.Helper()
+	files, err := RenderHost(st, host, testDay())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}

@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
@@ -108,4 +109,48 @@ func alertsEnv(st *state.State, host string) string {
 	}
 	return fmt.Sprintf("VPNCTL_ALERTS_URL=%q\nVPNCTL_ALERTS_LOCAL=%q\nVPNCTL_ALERTS_TOKEN=%q\n",
 		st.Alerts.Ntfy, local, token)
+}
+
+// probePlanJSON is what the entry measures: one cell per protocol of every link
+// that starts here. It is rendered only on the entry, because only the entry
+// sits on the near side of those edges.
+func probePlanJSON(st *state.State, host string) string {
+	plan := state.ProbePlan{Host: host, Links: []state.ProbeLink{}}
+	for i := range st.Links {
+		l := &st.Links[i]
+		if l.From != host {
+			continue
+		}
+		to, ok := st.Hosts[l.To]
+		if !ok {
+			continue
+		}
+		pl := state.ProbeLink{From: l.From, To: l.To, Addr: to.IP, Probes: []state.ProbeCell{}}
+		for _, p := range l.Protocols {
+			c := state.ProbeCell{Protocol: p, Port: 443}
+			if inb, ok := st.Inbounds[l.To][p]; ok {
+				if inb.Port != 0 {
+					c.Port = inb.Port
+				}
+				if p == "ws" {
+					c.Path = pathOr(inb.Path)
+				}
+			}
+			switch p {
+			case "reality":
+				if inb, ok := st.Inbounds[l.To][p]; ok {
+					c.SNI, _, _ = RealityTarget(st, l.To, inb)
+				}
+			case "hy2", "ws":
+				c.SNI = l.To
+			}
+			pl.Probes = append(pl.Probes, c)
+		}
+		plan.Links = append(plan.Links, pl)
+	}
+	b, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		return "{}"
+	}
+	return string(b) + "\n"
 }

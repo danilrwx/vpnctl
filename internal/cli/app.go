@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	ucli "github.com/urfave/cli/v3"
 
@@ -333,6 +334,20 @@ func App() *ucli.Command {
 						return Usage(errors.New("the host name is required"))
 					}
 					return Metrics(c.String("dir"), name, c.Int("last"))
+				},
+			},
+			{
+				Name:  "probe",
+				Usage: "measure every link from the entry: a table of protocols",
+				Flags: []ucli.Flag{
+					dirFlag(), jsonFlag(),
+					&ucli.StringFlag{Name: "host", Usage: "only this entry"},
+					&ucli.BoolFlag{Name: "matrix", Value: true, Usage: "the topology matrix, every link and protocol"},
+					&ucli.IntFlag{Name: "timeout", Value: 5, Usage: "seconds per handshake"},
+				},
+				Action: func(_ context.Context, c *ucli.Command) error {
+					SetJSON(c.Bool("json"))
+					return ProbeMatrix(c.String("dir"), c.String("host"), time.Duration(c.Int("timeout"))*time.Second)
 				},
 			},
 			{
