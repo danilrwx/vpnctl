@@ -259,16 +259,22 @@ func (a *App) Protocols() string {
 	return mustJSON(names)
 }
 
-// EditUser replaces what a user gets: the modes, the protocols and the Telegram
-// flag. The screen shows the current values as toggles, so it sends the whole
-// choice back instead of the one field that changed.
-func (a *App) EditUser(name, modes, protocols string, tg bool) (string, error) {
+// EditUser replaces what a user gets: the modes, the protocols, the Telegram
+// flag and the day the term ends. The screen shows the current values, so it
+// sends the whole form back instead of the one field that changed; an empty
+// date means no deadline at all, which the tick respects.
+func (a *App) EditUser(name, modes, protocols string, tg bool, expires string) (string, error) {
 	if len(splitList(modes)) == 0 || len(splitList(protocols)) == 0 {
 		return "", fmt.Errorf("user %q: a mode and a protocol are required", name)
 	}
 
+	date, err := expiryDate(expires)
+	if err != nil {
+		return "", err
+	}
+
 	msg, err := ops.UserEdit(a.st, name, ops.UserPatch{
-		Modes: splitList(modes), Protocols: splitList(protocols), TG: &tg,
+		Modes: splitList(modes), Protocols: splitList(protocols), TG: &tg, Expires: &date,
 	})
 	if err != nil {
 		return "", err
@@ -294,6 +300,21 @@ func (a *App) RmUser(name string) (string, error) {
 	}
 
 	return msg, nil
+}
+
+// expiryDate is the one rule the form has for the date: empty means no deadline
+// at all, which the tick respects, and anything else has to be a day.
+func expiryDate(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+
+	if _, err := time.Parse("2006-01-02", s); err != nil {
+		return "", fmt.Errorf("%q is not a date: use YYYY-MM-DD", s)
+	}
+
+	return s, nil
 }
 
 // Renew extends a term from the later of today and the current date.

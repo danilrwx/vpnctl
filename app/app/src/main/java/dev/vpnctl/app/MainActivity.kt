@@ -243,6 +243,8 @@ fun UserScreen(
     var mode by remember { mutableStateOf(setOf("split")) }
     var protos by remember { mutableStateOf(emptySet<String>()) }
     var tg by remember { mutableStateOf(false) }
+    var expires by remember { mutableStateOf("") }
+    var lang by remember { mutableStateOf("ru") }
     // the second tap really deletes: the first one only says what it will do
     var confirming by remember { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
@@ -278,6 +280,7 @@ fun UserScreen(
             mode = row.modes.split("/").toSet()
             protos = row.protocols.toSet()
             tg = row.tg
+            expires = row.expires
         }
     }
 
@@ -285,7 +288,9 @@ fun UserScreen(
         Text(name, style = MaterialTheme.typography.headlineSmall)
         Button(onClick = onBack) { Text("назад") }
 
-        LazyColumn(modifier = Modifier.padding(top = 8.dp).weight(1f)) {
+        // The card holds the links, the form and the actions. It all scrolls as
+        // one list: a fixed column pushed the last buttons off the screen.
+        LazyColumn(modifier = Modifier.weight(1f)) {
             items(links) { link ->
                 Text(link.label, style = MaterialTheme.typography.labelSmall)
                 Text(link.url, style = MaterialTheme.typography.bodySmall)
@@ -296,68 +301,107 @@ fun UserScreen(
                     Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
                 }
             }
+
+            item {
+                SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
+            }
+
+            item {
+                SelectRow("протоколы", served, protos) {
+                    protos = if (it in protos) protos - it else protos + it
+                }
+            }
+
+            item {
+                Row {
+                    Checkbox(checked = tg, onCheckedChange = { tg = it })
+                    Text("телеграм", modifier = Modifier.padding(top = 12.dp))
+                }
+            }
+
+            item {
+                OutlinedTextField(
+                    value = expires,
+                    onValueChange = { expires = it },
+                    label = { Text("срок YYYY-MM-DD, пусто — без срока") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            item {
+                Button(
+                    onClick = {
+                        act {
+                            val out = saveUser(app, name, mode, protos, tg, expires)
+                            if (out.startsWith("ok")) {
+                                reload++
+                            }
+
+                            out
+                        }
+                    },
+                    enabled = !busy && protos.isNotEmpty(),
+                ) { Text("сохранить") }
+            }
+
+            item {
+                Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("продлить 30 дней") }
+            }
+
+            item {
+                Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("выключить") }
+            }
+
+            item {
+                SelectRow("язык сообщения", listOf("ru", "en"), setOf(lang)) { lang = it }
+            }
+
+            item {
+                Button(
+                    onClick = {
+                        act {
+                            val text = app?.message(name, lang, false) ?: return@act "нет состояния"
+                            message = text
+                            copyToClipboard(ctx, text)
+                            "сообщение в буфере"
+                        }
+                    },
+                    enabled = !busy,
+                ) { Text("сообщение") }
+            }
+
+            item {
+                Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("отправить в git") }
+            }
+
+            item {
+                Button(
+                    onClick = {
+                        if (!confirming) {
+                            confirming = true
+                            status = "нажмите ещё раз: пользователь и его ключи удаляются из состояния"
+
+                            return@Button
+                        }
+
+                        act {
+                            val out = removeUser(app, name)
+                            if (out.startsWith("ok")) {
+                                onDeleted()
+                            }
+
+                            out
+                        }
+                    },
+                    enabled = !busy,
+                ) { Text(if (confirming) "точно удалить" else "удалить") }
+            }
+
         }
 
-        SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
-        SelectRow("протоколы", served, protos) {
-            protos = if (it in protos) protos - it else protos + it
-        }
-
-        Row {
-            Checkbox(checked = tg, onCheckedChange = { tg = it })
-            Text("телеграм", modifier = Modifier.padding(top = 12.dp))
-        }
-
-        Button(
-            onClick = {
-                act {
-                    val out = saveUser(app, name, mode, protos, tg)
-                    if (out.startsWith("ok")) {
-                        reload++
-                    }
-
-                    out
-                }
-            },
-            enabled = !busy && protos.isNotEmpty(),
-        ) { Text("сохранить") }
-
-        Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("продлить 30 дней") }
-        Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("выключить") }
-        Button(
-            onClick = {
-                act {
-                    val text = app?.share(name) ?: return@act "нет состояния"
-                    message = text
-                    copyToClipboard(ctx, text)
-                    "сообщение в буфере"
-                }
-            },
-            enabled = !busy,
-        ) { Text("сообщение") }
-        Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("отправить в git") }
-
-        Button(
-            onClick = {
-                if (!confirming) {
-                    confirming = true
-                    status = "нажмите ещё раз: пользователь и его ключи удаляются из состояния"
-
-                    return@Button
-                }
-
-                act {
-                    val out = removeUser(app, name)
-                    if (out.startsWith("ok")) {
-                        onDeleted()
-                    }
-
-                    out
-                }
-            },
-            enabled = !busy,
-        ) { Text(if (confirming) "точно удалить" else "удалить") }
-
+        // The answer stays pinned: the action that produced it can be anywhere in
+        // the list, and an error the user has to scroll for reads as nothing.
         if (status.isNotEmpty()) {
             Text(status, style = MaterialTheme.typography.bodySmall)
         }
@@ -406,9 +450,18 @@ fun copyToClipboard(ctx: android.content.Context, text: String) {
     clip.setPrimaryClip(android.content.ClipData.newPlainText("vpnctl", text))
 }
 
-/** saveUser sends the whole choice back: the screen shows it as toggles. */
-fun saveUser(app: mobile.App?, name: String, modes: Set<String>, protocols: Set<String>, tg: Boolean): String {
-    val msg = app?.editUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "нет состояния"
+/** saveUser sends the whole form back: the screen shows the state it edits. */
+fun saveUser(
+    app: mobile.App?,
+    name: String,
+    modes: Set<String>,
+    protocols: Set<String>,
+    tg: Boolean,
+    expires: String,
+): String {
+    val msg = app?.editUser(name, modes.joinToString(","), protocols.joinToString(","), tg, expires.trim())
+        ?: return "нет состояния"
+
     return "ok: $msg"
 }
 
