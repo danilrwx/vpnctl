@@ -39,14 +39,20 @@ notify() {
 	// place that says so, so a warning in the last two minutes is a broken path
 	mtgCheck := ""
 	if _, ok := st.Inbounds[host]["mtg"]; ok {
-		mtgCheck = `mtg_warn=$(journalctl -u mtg --since "-2min" --no-pager 2>/dev/null | grep -c '"level":"warn"' || true)
+		mtgCheck = fmt.Sprintf(`# a restart of the engine closes the socks inbound for a second, and mtg
+# rightly complains: that window is a deploy, not a fault
+engine_age=$(( $(date +%%s) - $(date -d "$(systemctl show -p ActiveEnterTimestamp --value %s 2>/dev/null)" +%%s 2>/dev/null || echo 0) ))
+mtg_warn=0
+if [ "$engine_age" -gt 180 ]; then
+  mtg_warn=$(journalctl -u mtg --since "-2min" --no-pager 2>/dev/null | grep -c '"level":"warn"' || true)
+fi
 case ${mtg_warn:-0} in
   0) ;;
-  *) printf 'mtg warned %s times in two minutes\n' "$mtg_warn"
+  *) printf 'mtg warned %%s times in two minutes\n' "$mtg_warn"
      broken="$broken mtg"
      ;;
 esac
-`
+`, engine)
 	}
 
 	// the host's own fronting name and one Telegram endpoint: the two paths that
@@ -98,7 +104,7 @@ if [ "$code" = "204" ] && [ -z "$broken" ]; then
   mkdir -p /var/lib/vpnctl && printf '%%s ok\n' "$now" > "$STATE"
   exit 0
 fi
-printf 'chain probe: %%s instead of 204\n' "${code:-no answer}"
+if [ "$code" != "204" ]; then printf 'chain probe: %%s instead of 204\n' "${code:-no answer}"; fi
 if [ -n "$broken" ]; then printf 'broken paths:%%s\n' "$broken"; fi
 systemctl is-active --quiet %s || printf 'engine %s is not running\n' %s
 if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then

@@ -37,7 +37,13 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --socks5-hostname 1
 broken=""
 probe_socks own "https://gw.example.ru"
 probe_socks telegram "https://pluto.web.telegram.org"
-mtg_warn=$(journalctl -u mtg --since "-2min" --no-pager 2>/dev/null | grep -c '"level":"warn"' || true)
+# a restart of the engine closes the socks inbound for a second, and mtg
+# rightly complains: that window is a deploy, not a fault
+engine_age=$(( $(date +%s) - $(date -d "$(systemctl show -p ActiveEnterTimestamp --value sing-box 2>/dev/null)" +%s 2>/dev/null || echo 0) ))
+mtg_warn=0
+if [ "$engine_age" -gt 180 ]; then
+  mtg_warn=$(journalctl -u mtg --since "-2min" --no-pager 2>/dev/null | grep -c '"level":"warn"' || true)
+fi
 case ${mtg_warn:-0} in
   0) ;;
   *) printf 'mtg warned %s times in two minutes\n' "$mtg_warn"
@@ -51,7 +57,7 @@ if [ "$code" = "204" ] && [ -z "$broken" ]; then
   mkdir -p /var/lib/vpnctl && printf '%s ok\n' "$now" > "$STATE"
   exit 0
 fi
-printf 'chain probe: %s instead of 204\n' "${code:-no answer}"
+if [ "$code" != "204" ]; then printf 'chain probe: %s instead of 204\n' "${code:-no answer}"; fi
 if [ -n "$broken" ]; then printf 'broken paths:%s\n' "$broken"; fi
 systemctl is-active --quiet sing-box || printf 'engine sing-box is not running\n' sing-box
 if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then
