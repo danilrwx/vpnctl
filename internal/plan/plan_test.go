@@ -85,3 +85,14 @@ func TestUnifiedDiffEqual(t *testing.T) {
 		t.Fatalf("no hunks expected:\n%s", got)
 	}
 }
+
+// TestProbeScriptEndsTheManifestLine: base64 -w0 prints no trailing newline, so
+// without an explicit echo the first hash line sticks to the manifest and the
+// first file in the render always looks new. That is how /etc/caddy/Caddyfile
+// was rewritten on every apply for months.
+func TestProbeScriptEndsTheManifestLine(t *testing.T) {
+	s := ProbeScript([]string{"/etc/caddy/Caddyfile"})
+	if !strings.Contains(s, "base64 -w0 /etc/vpnctl/applied.sha256 && echo") {
+		t.Fatalf("the manifest line does not end:\n%s", s)
+	}
+}

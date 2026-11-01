@@ -112,7 +112,7 @@ func ProbeScript(paths []string) string {
 		quoted[i] = "'" + p + "'"
 	}
 	return fmt.Sprintf(
-		"cat %s 2>/dev/null || echo -; test -e %s && echo yes || echo no; if [ -s %s ]; then base64 -w0 %s; else echo -; fi; for f in %s; do if [ -e \"$f\" ]; then printf '%%s %%s\\n' \"$(sha256sum \"$f\" | cut -d' ' -f1)\" \"$f\"; else printf 'missing %%s\\n' \"$f\"; fi; done",
+		"cat %s 2>/dev/null || echo -; test -e %s && echo yes || echo no; if [ -s %s ]; then base64 -w0 %s && echo; else echo -; fi; for f in %s; do if [ -e \"$f\" ]; then printf '%%s %%s\\n' \"$(sha256sum \"$f\" | cut -d' ' -f1)\" \"$f\"; else printf 'missing %%s\\n' \"$f\"; fi; done",
 		Marker, Bootstrap, Manifest, Manifest, strings.Join(quoted, " "))
 }
 
