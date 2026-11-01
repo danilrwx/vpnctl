@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // jsonOut is set by the dispatcher for every command run with --json.
@@ -44,6 +45,20 @@ type guardError struct{ err error }
 func (e *guardError) Error() string { return e.err.Error() }
 func (e *guardError) Unwrap() error { return e.err }
 
+// usageError marks a bad invocation: section 16 gives it its own exit code.
+type usageError struct{ err error }
+
+func (e *usageError) Error() string { return e.err.Error() }
+func (e *usageError) Unwrap() error { return e.err }
+
+// Usage wraps an argument or flag error.
+func Usage(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &usageError{err}
+}
+
 // Guard wraps a refusal: not pushed, a host ahead of HEAD, drift, agent busy.
 func Guard(err error) error {
 	if err == nil {
@@ -56,6 +71,15 @@ func Guard(err error) error {
 func ExitCode(err error) int {
 	if err == nil {
 		return 0
+	}
+	var u *usageError
+	if errors.As(err, &u) {
+		return ExitUsage
+	}
+	// urfave reports flag and command mistakes as plain errors
+	if msg := err.Error(); strings.Contains(msg, "flag provided but not defined") ||
+		strings.Contains(msg, "unknown command") || strings.Contains(msg, "Incorrect Usage") {
+		return ExitUsage
 	}
 	var g *guardError
 	if errors.As(err, &g) {
@@ -82,6 +106,10 @@ func ReportError(err error) {
 	}
 	var body errorJSON
 	body.Error.Code = "error"
+	var u *usageError
+	if errors.As(err, &u) {
+		body.Error.Code = "usage"
+	}
 	var g *guardError
 	if errors.As(err, &g) {
 		body.Error.Code = "guard"

@@ -77,6 +77,7 @@ expression: body
   ],
   "route": {
     "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct-1",
     "final": "direct",
     "rule_set": [],
     "rules": [
