@@ -36,6 +36,7 @@ type UserInfo struct {
 	Protocols []string `json:"protocols"`
 	TG        bool     `json:"tg"`
 	Enabled   bool     `json:"enabled"`
+	Expires   string   `json:"expires,omitempty"`
 }
 
 // App holds the opened state; the UI keeps one instance.
@@ -88,6 +89,7 @@ func (a *App) Users() string {
 			Protocols: u.Protocols,
 			TG:        u.TG,
 			Enabled:   u.Enabled == nil || *u.Enabled,
+			Expires:   u.Expires,
 		})
 	}
 
