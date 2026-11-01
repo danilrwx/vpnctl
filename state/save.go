@@ -82,3 +82,24 @@ func SaveVersions(dir string, versions map[string]Pin) error {
 	}
 	return os.WriteFile(filepath.Join(dir, "versions.yaml"), b, 0o644)
 }
+
+// SaveInbounds writes protocols.yaml.
+func SaveInbounds(dir string, inbounds map[string]map[string]Inbound) error {
+	b, err := marshal(map[string]any{"inbounds": inbounds})
+	if err != nil {
+		return fmt.Errorf("marshal inbounds: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "protocols.yaml"), b, 0o644)
+}
+
+// SaveRouting writes routing/<host>.yaml.
+func SaveRouting(dir, host string, r Routing) error {
+	if err := os.MkdirAll(filepath.Join(dir, "routing"), 0o755); err != nil {
+		return err
+	}
+	b, err := marshal(r)
+	if err != nil {
+		return fmt.Errorf("marshal routing: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "routing", host+".yaml"), b, 0o644)
+}
