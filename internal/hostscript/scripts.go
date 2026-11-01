@@ -68,6 +68,16 @@ func CheckCmd(engine, path string) (string, bool) {
 	return "", false
 }
 
+// hasString reports whether list contains v.
+func hasString(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
 // ModeFor is the file mode on the host: secrets are 0600.
 func ModeFor(path string) int64 {
 	if strings.HasPrefix(path, "/etc/amnezia/") ||
@@ -89,6 +99,7 @@ func InstallScript(hp plan.HostPlan, backup string) string {
 	s.WriteString("set -e\n")
 	fmt.Fprintf(&s, "mkdir -p %s\n", backup)
 	var services []string
+	var ensure []string
 	add := func(svc string) {
 		for _, x := range services {
 			if x == svc {
@@ -97,8 +108,26 @@ func InstallScript(hp plan.HostPlan, backup string) string {
 		}
 		services = append(services, svc)
 	}
+	// A unit that is already on the host unchanged still has to run: bootstrap
+	// installs and enables units but never starts them, and a service whose only
+	// file is its unit would otherwise wait for the next config change.
+	need := func(svc string) {
+		for _, x := range ensure {
+			if x == svc {
+				return
+			}
+		}
+		ensure = append(ensure, svc)
+	}
 	for _, f := range hp.Files {
 		path := f.Path
+		if u, ok := strings.CutPrefix(path, "/etc/systemd/system/"); ok {
+			if name, ok := strings.CutSuffix(u, ".service"); ok {
+				need(name)
+			} else if strings.HasSuffix(u, ".timer") {
+				need(u)
+			}
+		}
 		switch f.Status {
 		case plan.Unchanged:
 			continue
@@ -150,6 +179,13 @@ func InstallScript(hp plan.HostPlan, backup string) string {
 	for _, svc := range services {
 		s.WriteString(reloadCmd(svc))
 		s.WriteString("\n")
+	}
+	sort.Strings(ensure)
+	for _, svc := range ensure {
+		if hasString(services, svc) {
+			continue
+		}
+		fmt.Fprintf(&s, "systemctl enable -q %s; systemctl is-active --quiet %s || systemctl start %s\n", svc, svc, svc)
 	}
 	s.WriteString("rm -rf /tmp/.vpnctl\necho ok\n")
 	return s.String()

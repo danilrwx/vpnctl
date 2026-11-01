@@ -178,3 +178,20 @@ func TestInstallScriptEnablesTheProbeTimer(t *testing.T) {
 		t.Errorf("the probe script must be 0600:\n%s", s)
 	}
 }
+
+// TestInstallScriptStartsAnUnchangedUnit: bootstrap installs and enables units
+// but never starts them, so a service whose only file is its unit — the
+// notification server is one — would stay dead until its config changed.
+func TestInstallScriptStartsAnUnchangedUnit(t *testing.T) {
+	hp := plan.HostPlan{Files: []plan.FileStatus{
+		{Path: "/etc/systemd/system/ntfy.service", Status: plan.Unchanged},
+		{Path: "/etc/ntfy/server.yml", Status: plan.New},
+	}}
+	s := hostscript.InstallScript(hp, "/var/lib/vpnctl/backup/abc")
+	if !strings.Contains(s, "systemctl is-active --quiet ntfy || systemctl start ntfy") {
+		t.Errorf("an unchanged unit is not started:\n%s", s)
+	}
+	if strings.Contains(s, "systemctl restart ntfy") {
+		t.Errorf("an unchanged unit is restarted:\n%s", s)
+	}
+}
