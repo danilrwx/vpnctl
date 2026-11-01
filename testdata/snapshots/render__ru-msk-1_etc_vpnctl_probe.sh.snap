@@ -6,14 +6,32 @@ expression: body
 # vpnctl · chain probe on ru-msk-1 · every minute by vpnctl-probe.timer
 set -u
 PROBE_URL="https://www.gstatic.com/generate_204"
+STATE=/var/lib/vpnctl/probe.state
+REMIND=1800
+now=$(date +%s)
+last=0
+was=ok
+if [ -r "$STATE" ]; then
+  read -r last was < "$STATE" || true
+fi
+case ${last:-} in ''|*[!0-9]*) last=0 ;; esac
+was=${was:-ok}
+# notifications are off: alerts.yaml has no topic
+notify() { return 0; }
+
 code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --socks5-hostname 127.0.0.1:1080 "$PROBE_URL" 2>/dev/null || true)
 if [ "$code" = "204" ]; then
   printf 'ok 204\n'
+  if [ "$was" = "fail" ]; then notify default "chain probe: recovered"; fi
+  mkdir -p /var/lib/vpnctl && printf '%s ok\n' "$now" > "$STATE"
   exit 0
 fi
 printf 'chain probe: %s instead of 204\n' "${code:-no answer}"
 engine=sing-box
 [ -x /usr/local/bin/xray ] && engine=xray
 systemctl is-active --quiet "$engine" || printf 'engine %s is not running\n' "$engine"
-
+if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then
+  notify high "chain probe returned ${code:-no answer}"
+  mkdir -p /var/lib/vpnctl && printf '%s fail\n' "$now" > "$STATE"
+fi
 exit 1
