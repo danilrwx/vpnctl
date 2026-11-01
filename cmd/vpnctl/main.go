@@ -183,9 +183,10 @@ func main() {
 				Usage: "hosts: setup and maintenance",
 				Commands: []*ucli.Command{
 					{
-						Name:      "add",
-						Usage:     "create a host with its inbound, keys and routing",
-						ArgsUsage: "<name>",
+						Name:          "add",
+						Usage:         "create a host with its inbound, keys and routing",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeNewHost,
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "role", Value: "exit", Usage: "entry or exit"},
@@ -212,9 +213,10 @@ func main() {
 						},
 					},
 					{
-						Name:      "agent-install",
-						Usage:     "put the agent on a host and restrict the key to it",
-						ArgsUsage: "<name>",
+						Name:          "agent-install",
+						Usage:         "put the agent on a host and restrict the key to it",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeHosts,
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "binary", Usage: "path to vpnctl-agent, default: next to this binary"},
@@ -226,9 +228,10 @@ func main() {
 						},
 					},
 					{
-						Name:      "bootstrap",
-						Usage:     "install packages, engines and units on a host, idempotent",
-						ArgsUsage: "<name>",
+						Name:          "bootstrap",
+						Usage:         "install packages, engines and units on a host, idempotent",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeHosts,
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "ssh", Usage: "user@host to record when the state has none"},
@@ -242,9 +245,10 @@ func main() {
 				},
 			},
 			{
-				Name:      "metrics",
-				Usage:     "host metrics collected by the timer on the entry",
-				ArgsUsage: "<host>",
+				Name:          "metrics",
+				Usage:         "host metrics collected by the timer on the entry",
+				ArgsUsage:     "<host>",
+				ShellComplete: completeHosts,
 				Flags: []ucli.Flag{
 					dirFlag(), jsonFlag(),
 					&ucli.IntFlag{Name: "last", Value: 24, Usage: "how many samples to show"},
@@ -419,6 +423,9 @@ func completeUsers(_ context.Context, c *ucli.Command) {
 		fmt.Fprintln(c.Root().Writer, n)
 	}
 }
+
+// completeNewHost has nothing to suggest: a new host has no name yet.
+func completeNewHost(_ context.Context, _ *ucli.Command) {}
 
 // completeHosts suggests the host names of the state.
 func completeHosts(_ context.Context, c *ucli.Command) {
