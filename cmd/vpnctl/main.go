@@ -281,6 +281,25 @@ func main() {
 				},
 			},
 			{
+				Name:  "versions",
+				Usage: "pinned component versions",
+				Commands: []*ucli.Command{
+					{
+						Name:      "pin",
+						Usage:     "download the pinned releases and record their sha256",
+						ArgsUsage: "[component]",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
+							return cli.VersionsPin(c.String("dir"), c.Args().First(), c.Bool("nocommit"))
+						},
+					},
+				},
+			},
+			{
 				Name:  "user",
 				Usage: "create, remove, list and hand out users",
 				Commands: []*ucli.Command{

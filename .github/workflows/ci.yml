@@ -19,6 +19,12 @@ jobs:
       - name: state is valid
         run: go run ./cmd/vpnctl check -dir testdata/basic --stub
 
+      - name: sing-box accepts the rendered configs
+        run: ./scripts/ci-singbox-check.sh testdata/basic
+
+      - name: sing-box accepts the rendered configs
+        run: ./scripts/ci-singbox-check.sh testdata/basic
+
       - name: render is reproducible
         run: |
           go run ./cmd/vpnctl render -dir testdata/basic --stub --out /tmp/r1

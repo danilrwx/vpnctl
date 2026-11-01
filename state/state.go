@@ -402,6 +402,17 @@ func Load(dir string) (*State, error) {
 			return nil, fmt.Errorf("parse secrets: %w", err)
 		}
 		st.Encrypted = true
+	} else if b, rerr := os.ReadFile(filepath.Join(dir, "secrets.sops.yaml")); rerr == nil {
+		// fixtures and CI keep the secrets in plain text; a real sops file has
+		// metadata and is left to the one-way migration
+		var probe map[string]any
+		if yaml.Unmarshal(b, &probe) == nil {
+			if _, sopsed := probe["sops"]; !sopsed {
+				if err := yaml.Unmarshal(b, &st.Secrets); err != nil {
+					return nil, fmt.Errorf("parse plain-text secrets: %w", err)
+				}
+			}
+		}
 	}
 	st.normalize()
 
