@@ -37,6 +37,14 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --socks5-hostname 1
 broken=""
 probe_socks own "https://gw.example.ru"
 probe_socks telegram "https://pluto.web.telegram.org"
+mtg_warn=$(journalctl -u mtg --since "-2min" --no-pager 2>/dev/null | grep -c '"level":"warn"' || true)
+case ${mtg_warn:-0} in
+  0) ;;
+  *) printf 'mtg warned %s times in two minutes\n' "$mtg_warn"
+     broken="$broken mtg"
+     ;;
+esac
+
 if [ "$code" = "204" ] && [ -z "$broken" ]; then
   printf 'ok 204\n'
   if [ "$was" = "fail" ]; then notify default "chain probe: recovered"; fi

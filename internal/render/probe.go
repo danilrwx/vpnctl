@@ -35,6 +35,20 @@ notify() {
 `
 	}
 
+	// mtg accepts a client and can still fail to carry it; its log is the only
+	// place that says so, so a warning in the last two minutes is a broken path
+	mtgCheck := ""
+	if _, ok := st.Inbounds[host]["mtg"]; ok {
+		mtgCheck = `mtg_warn=$(journalctl -u mtg --since "-2min" --no-pager 2>/dev/null | grep -c '"level":"warn"' || true)
+case ${mtg_warn:-0} in
+  0) ;;
+  *) printf 'mtg warned %s times in two minutes\n' "$mtg_warn"
+     broken="$broken mtg"
+     ;;
+esac
+`
+	}
+
 	// the host's own fronting name and one Telegram endpoint: the two paths that
 	// broke while the chain itself was fine
 	ownURL := "https://" + st.Hosts[host].Domain
@@ -77,6 +91,7 @@ code=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 --socks5-hostname 
 broken=""
 probe_socks own "%s"
 probe_socks telegram "%s"
+%s
 if [ "$code" = "204" ] && [ -z "$broken" ]; then
   printf 'ok 204\n'
   if [ "$was" = "fail" ]; then notify default "chain probe: recovered"; fi
@@ -91,7 +106,7 @@ if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then
   mkdir -p /var/lib/vpnctl && printf '%%s fail\n' "$now" > "$STATE"
 fi
 exit 1
-`, host, ProbeURL, notify, ProbePort, ProbePort, ownURL, telegramURL, engine, engine, engine)
+`, host, ProbeURL, notify, ProbePort, ProbePort, ownURL, telegramURL, mtgCheck, engine, engine, engine)
 }
 
 // probeUnit is the oneshot service the timer starts.

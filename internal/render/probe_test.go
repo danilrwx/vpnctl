@@ -124,3 +124,23 @@ func TestProbeChecksTheSilentPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestProbeWatchesTheProxyLog: the proxy can accept a client and still fail to
+// carry it, and only its log says so. The chain probe stayed green through
+// hours of exactly that.
+func TestProbeWatchesTheProxyLog(t *testing.T) {
+	st := probeFixture(state.Entry, "https://ntfy.sh/vpn")
+	inb := st.Inbounds["node"]
+	inb["mtg"] = state.Inbound{Port: 2053}
+	st.Inbounds["node"] = inb
+
+	files, err := RenderHost(st, "node", testDay())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	probe := files["/etc/vpnctl/probe.sh"]
+	if !strings.Contains(probe, `journalctl -u mtg --since "-2min"`) {
+		t.Error("the probe does not read the proxy log")
+	}
+}
