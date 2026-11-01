@@ -86,6 +86,10 @@ fun Users(modifier: Modifier = Modifier) {
         // the key is only useful if the host would accept a signature made with
         // it: this runs the same verifier the host runs
         Text(Core.signSelfTest(), style = MaterialTheme.typography.bodySmall)
+        // the recipient the operator adds to age.yaml
+        SelectionContainer {
+            Text(Core.identity(ctx), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
         LazyColumn {
             items(users) { user ->
                 val state = if (user.enabled) "" else " · off"

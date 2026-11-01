@@ -47,6 +47,17 @@ object Core {
         }
     }
 
+    /**
+     * identityPEM is the whole public key, also written to filesDir/identity.pub:
+     * the phone has to hand it to the host, and copying from a screen is the
+     * worst way to do that.
+     */
+    fun identityPEM(ctx: Context): String {
+        val key = signedBy()
+        File(ctx.filesDir, "identity.pub").writeText(key)
+        return key
+    }
+
     /** signedBy is what the host would receive: the device's public key. */
     fun signedBy(): String = try {
         val signer = KeystoreSigner().ensure()
@@ -56,24 +67,37 @@ object Core {
         "no signer: ${e.message}"
     }
 
-    /**
-     * identityPEM is the whole public key, and it is also written to
-     * filesDir/identity.pub: the phone has to hand it to the host, and copying
-     * from a screen is the worst way to do that.
-     */
-    fun identityPEM(ctx: Context): String = try {
-        val key = signedBy()
-        File(ctx.filesDir, "identity.pub").writeText(key)
-        key
-    } catch (e: Exception) {
-        "no key: ${e.message}"
-    }
-
     /** signSelfTest signs a request with the Keystore key and verifies it. */
     fun signSelfTest(): String = try {
         Mobile.selfTest()
     } catch (e: Exception) {
         "self-test: ${e.message}"
+    }
+
+    /**
+     * identity returns the device's age recipient, minting the pair on first
+     * launch. The secret is stored under the Keystore vault; the recipient is
+     * public and goes into age.yaml with `vpnctl key add phone <age1…>`.
+     */
+    fun identity(ctx: Context): String = try {
+        val recipient = File(ctx.filesDir, "age.recipient")
+
+        if (recipient.exists()) {
+            recipient.readText().trim()
+        } else {
+            val fresh = Mobile.newIdentity()
+            val check = Mobile.roundTrip(fresh.recipient, fresh.secret)
+
+            if (check != "identity works") {
+                "identity: $check"
+            } else {
+                Vault(ctx.filesDir).put("age.key", fresh.secret)
+                recipient.writeText(fresh.recipient)
+                fresh.recipient
+            }
+        }
+    } catch (e: Exception) {
+        "identity: ${e.message}"
     }
 
     fun current(): App? = app
