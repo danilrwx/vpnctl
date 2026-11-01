@@ -1,0 +1,148 @@
+// vpnctl-agent is the narrow privileged executor: one signed request in, one
+// answer out. It is installed as a forced command in authorized_keys, so a
+// key can do nothing else on the host.
+package main
+
+import (
+	"crypto/ecdsa"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/danilrwx/vpnctl-go/agent"
+)
+
+const (
+	maxRequest = 8 << 20 // 8 MiB
+	keysDir    = "/etc/vpnctl/agents"
+	hostFile   = "/etc/vpnctl/host"
+	nonceDir   = "/var/lib/vpnctl/nonces"
+	nonceTTL   = 15 * time.Minute
+)
+
+func main() {
+	body, err := io.ReadAll(io.LimitReader(os.Stdin, maxRequest))
+	if err != nil {
+		write(agent.Response{V: agent.Version, Code: "io", Error: err.Error()})
+		os.Exit(1)
+	}
+	var req agent.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		write(agent.Response{V: agent.Version, Code: "request", Error: err.Error()})
+		os.Exit(1)
+	}
+	host := hostName()
+	keys, err := publicKeys(keysDir)
+	if err != nil {
+		write(agent.Response{V: agent.Version, Code: "keys", Error: err.Error()})
+		os.Exit(1)
+	}
+	var lastErr error
+	verified := false
+	for _, k := range keys {
+		if err := agent.Verify(&req, host, k, time.Now()); err != nil {
+			lastErr = err
+			continue
+		}
+		verified = true
+		break
+	}
+	if !verified {
+		code := "signature"
+		if lastErr != nil {
+			var ae *agent.Error
+			if errors.As(lastErr, &ae) {
+				code = ae.Code
+			}
+			write(agent.Response{V: agent.Version, Code: code, Error: lastErr.Error()})
+		} else {
+			write(agent.Response{V: agent.Version, Code: "keys", Error: "no public keys in " + keysDir})
+		}
+		os.Exit(1)
+	}
+	if err := useNonce(req.Nonce); err != nil {
+		write(agent.Response{V: agent.Version, Code: "replay", Error: err.Error()})
+		os.Exit(1)
+	}
+
+	var res agent.Response
+	switch req.Op {
+	case "plan":
+		res = agent.Plan(&req, "/etc/vpnctl/applied-commit", "/etc/vpnctl/bootstrap")
+	case "apply":
+		res = agent.Apply(&req, "/tmp", func(line string) { fmt.Fprintln(os.Stderr, line) })
+	default:
+		res = agent.Response{V: agent.Version, Code: "op", Error: "unknown op " + req.Op}
+	}
+	write(res)
+	if !res.OK {
+		os.Exit(1)
+	}
+}
+
+func write(res agent.Response) {
+	b, _ := json.Marshal(res)
+	fmt.Println(string(b))
+}
+
+func hostName() string {
+	if b, err := os.ReadFile(hostFile); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	h, _ := os.Hostname()
+	return h
+}
+
+func publicKeys(dir string) ([]*ecdsa.PublicKey, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", dir, err)
+	}
+	var out []*ecdsa.PublicKey
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".pub") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		k, err := agent.ParsePublicKey(b)
+		if err != nil {
+			continue
+		}
+		out = append(out, k)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no usable key in %s", dir)
+	}
+	return out, nil
+}
+
+// useNonce writes the nonce once: a replayed request fails here.
+func useNonce(nonce string) error {
+	if err := os.MkdirAll(nonceDir, 0o700); err != nil {
+		return err
+	}
+	entries, _ := os.ReadDir(nonceDir)
+	for _, e := range entries {
+		info, err := e.Info()
+		if err == nil && time.Since(info.ModTime()) > nonceTTL {
+			os.Remove(filepath.Join(nonceDir, e.Name()))
+		}
+	}
+	p := filepath.Join(nonceDir, nonce)
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("nonce %s: %w", nonce, err)
+	}
+	f.Close()
+	return nil
+}

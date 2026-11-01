@@ -169,10 +169,12 @@ func main() {
 					&ucli.StringFlag{Name: "branch", Usage: "apply from a branch other than main"},
 					&ucli.BoolFlag{Name: "force", Usage: "do not stop on a dead link or a missing certificate"},
 					&ucli.BoolFlag{Name: "unpushed", Usage: "apply a commit that is not on origin/main: only when the remote is unavailable"},
+					&ucli.BoolFlag{Name: "agent", Usage: "one signed request to the host agent instead of shell steps"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					cli.SetJSON(c.Bool("json"))
-					return cli.Apply(c.String("dir"), c.String("host"), c.String("branch"), c.Bool("force"), c.Bool("unpushed"))
+					return cli.Apply(c.String("dir"), c.String("host"), c.String("branch"),
+						c.Bool("force"), c.Bool("unpushed"), c.Bool("agent"))
 				},
 			},
 			{
