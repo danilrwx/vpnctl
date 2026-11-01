@@ -1,0 +1,24 @@
+version: 2
+
+# Dependabot watches what the Go build pulls in: an advisory in a dependency of
+# sops or go-git reaches us as a pull request, not as a surprise.
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      golang:
+        patterns: ["golang.org/x/*"]
+      crypto:
+        patterns: ["filippo.io/*", "github.com/getsops/*"]
+      git:
+        patterns: ["github.com/go-git/*", "github.com/ProtonMail/*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday

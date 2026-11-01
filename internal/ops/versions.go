@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -83,3 +86,117 @@ func fetchSum(url string) (string, error) {
 }
 
 var _ = os.Stat
+
+// repoOf maps a component to the GitHub repository its releases come from.
+// A component that is not here (awg, geodata) has no release to compare with.
+var repoOf = map[string]string{
+	"sing-box": "SagerNet/sing-box",
+	"xray":     "XTLS/Xray-core",
+	"caddy":    "caddyserver/caddy",
+	"mtg":      "9seconds/mtg",
+	"ntfy":     "binwiederhier/ntfy",
+}
+
+// LatestTag asks GitHub for the newest release tag without the API: a HEAD to
+// /releases/latest answers with a redirect, and that costs no token and no rate
+// limit. Not every host can reach github.com, so the caller decides what a
+// failure means.
+func LatestTag(repo string) (string, error) {
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Head("https://github.com/" + repo + "/releases/latest")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	loc := resp.Header.Get("Location")
+	i := strings.LastIndex(loc, "/tag/")
+	if i < 0 {
+		return "", fmt.Errorf("%s: no redirect to a tag (status %s)", repo, resp.Status)
+	}
+	return strings.TrimPrefix(loc[i+len("/tag/"):], "v"), nil
+}
+
+// Update is one component the upstream has moved ahead of the pin.
+type Update struct {
+	Name   string `json:"name"`
+	Pinned string `json:"pinned"`
+	Latest string `json:"latest"`
+	Kind   string `json:"kind"`
+}
+
+// VersionKind says how big a jump is: patch, minor or major. Anything that does
+// not parse is a major, because a version we cannot read is not a safe upgrade.
+func VersionKind(pinned, latest string) string {
+	p, ok1 := parseVersion(pinned)
+	l, ok2 := parseVersion(latest)
+	if !ok1 || !ok2 {
+		return "major"
+	}
+	switch {
+	case l[0] != p[0]:
+		return "major"
+	case l[1] != p[1]:
+		return "minor"
+	default:
+		return "patch"
+	}
+}
+
+func parseVersion(v string) ([3]int, bool) {
+	var out [3]int
+	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(v), "v"), ".")
+	if len(parts) != 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// Check compares the pins with the newest release the upstream has. A component
+// that cannot be reached is reported, not skipped: silence would look like
+// "up to date".
+func Check(st *state.State) ([]Update, error) {
+	names := make([]string, 0, len(st.Versions))
+	for n := range st.Versions {
+		if _, ok := repoOf[n]; ok {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	var out []Update
+	for _, n := range names {
+		latest, err := LatestTag(repoOf[n])
+		if err != nil {
+			return out, fmt.Errorf("%s: %w", n, err)
+		}
+		pinned := st.Versions[n].Version
+		if latest == pinned {
+			continue
+		}
+		out = append(out, Update{Name: n, Pinned: pinned, Latest: latest, Kind: VersionKind(pinned, latest)})
+	}
+	return out, nil
+}
+
+// Patches is the subset that may be pulled in without a human: the same major
+// and minor, so the config language is the one we already render.
+func Patches(updates []Update) []Update {
+	var out []Update
+	for _, u := range updates {
+		if u.Kind == "patch" {
+			out = append(out, u)
+		}
+	}
+	return out
+}

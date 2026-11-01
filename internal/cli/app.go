@@ -396,6 +396,31 @@ func App() *ucli.Command {
 				Usage: "pinned component versions",
 				Commands: []*ucli.Command{
 					{
+						Name:  "check",
+						Usage: "compare the pins with the newest upstream releases",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "breaking", Usage: "exit 1 when a minor or a major is out"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return VersionsCheck(c.String("dir"), c.Bool("breaking"))
+						},
+					},
+					{
+						Name:  "auto",
+						Usage: "pull in patch updates: bump the pin, record sha256, commit, push",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "apply", Usage: "also plan and apply on the hosts"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return VersionsAuto(c.String("dir"), c.Bool("apply"), c.Bool("nocommit"))
+						},
+					},
+					{
 						Name:      "pin",
 						Usage:     "download the pinned releases and record their sha256",
 						ArgsUsage: "[component]",
