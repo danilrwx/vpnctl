@@ -167,6 +167,12 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 				}
 			}
 		}
+		// the chain probe runs on the entry: it is the only host that sees the
+		// whole path, and the only one that should alert
+		f["/etc/vpnctl/probe.sh"] = probeScript(st, name)
+		f["/etc/systemd/system/vpnctl-probe.service"] = probeUnit(name)
+		f["/etc/systemd/system/vpnctl-probe.timer"] = probeTimer(name)
+		f["/etc/vpnctl/alerts.env"] = alertsEnv(st)
 		if mtg, ok := inb["mtg"]; ok {
 			if err := emit("/etc/mtg/config.toml", "mtg.toml.j2", map[string]any{
 				"host": name, "secret": hs.MTG, "port": mtg.Port, "socks_port": ProbePort,

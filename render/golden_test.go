@@ -54,8 +54,14 @@ func checkSnapshot(t *testing.T, name, body string) {
 	t.Helper()
 	path := filepath.Join(snapshotDir, name+".snap")
 	if *update {
-		out := "---\nsource: tests/render.rs\nexpression: body\n---\n" + body
-		if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		// keep the header of an existing snapshot: they came from the Rust core
+		header := "---\nsource: tests/render.rs\nexpression: body\n---\n"
+		if raw, err := os.ReadFile(path); err == nil {
+			if i := strings.Index(string(raw)[4:], "\n---\n"); i >= 0 {
+				header = string(raw)[:4+i+5]
+			}
+		}
+		if err := os.WriteFile(path, []byte(header+body), 0o644); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 		return

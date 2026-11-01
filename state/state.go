@@ -266,10 +266,23 @@ type LinkSecrets struct {
 	Hy2Pass string       `yaml:"hy2_password,omitempty"`
 }
 
+// Alerts is where the host sends notifications.
+type Alerts struct {
+	// Ntfy is the topic URL, e.g. https://ntfy.sh/vpnctl-xxxx. Empty disables alerts.
+	Ntfy string `yaml:"ntfy,omitempty"`
+}
+
 type Secrets struct {
 	Hosts map[string]HostSecrets `yaml:"hosts"`
 	Users map[string]UserSecrets `yaml:"users"`
 	Links map[string]LinkSecrets `yaml:"links"`
+	// Alerts holds the bearer token of the notification topic.
+	Alerts AlertsSecret `yaml:"alerts,omitempty"`
+}
+
+// AlertsSecret is the secret half of alerts.yaml.
+type AlertsSecret struct {
+	Token string `yaml:"token,omitempty"`
 }
 
 // Pin is a pinned component version from versions.yaml.
@@ -287,6 +300,7 @@ type State struct {
 	Routing   map[string]Routing
 	Sets      map[string]Set
 	Versions  map[string]Pin
+	Alerts    Alerts
 	Secrets   Secrets
 	Encrypted bool
 }
@@ -354,6 +368,12 @@ func Load(dir string) (*State, error) {
 			return nil, err
 		}
 		st.Routing[name] = r
+	}
+
+	if b, err := os.ReadFile(filepath.Join(dir, "alerts.yaml")); err == nil {
+		if err := yaml.Unmarshal(b, &st.Alerts); err != nil {
+			return nil, fmt.Errorf("parse alerts.yaml: %w", err)
+		}
 	}
 
 	if b, err := os.ReadFile(filepath.Join(dir, "versions.yaml")); err == nil {
