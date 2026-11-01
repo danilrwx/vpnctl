@@ -4,12 +4,17 @@ package gitsync
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/go-git/go-git/v5/storage/memory"
 )
 
 // Repo wraps an opened state repository.
@@ -214,4 +219,52 @@ func (r *Repo) commitOf(rev string) (*object.Commit, error) {
 		return nil, fmt.Errorf("commit %s: %w", rev, err)
 	}
 	return c, nil
+}
+
+// SSHAuth is the credential for an ssh remote: the agent first, then ~/.ssh keys.
+func SSHAuth() (transport.AuthMethod, error) {
+	if os.Getenv("SSH_AUTH_SOCK") != "" {
+		if a, err := gitssh.NewSSHAgentAuth("git"); err == nil {
+			return a, nil
+		}
+	}
+	home, _ := os.UserHomeDir()
+	for _, name := range []string{"id_ed25519", "id_ecdsa", "id_rsa"} {
+		p := filepath.Join(home, ".ssh", name)
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if a, err := gitssh.NewPublicKeysFromFile("git", p, ""); err == nil {
+			return a, nil
+		}
+	}
+	return nil, fmt.Errorf("no ssh key for the remote: no agent and no key in ~/.ssh")
+}
+
+// ListRemote lists the refs of a remote without cloning it.
+func ListRemote(url string, auth transport.AuthMethod) ([]*plumbing.Reference, error) {
+	rem := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{Name: "origin", URLs: []string{url}})
+	refs, err := rem.List(&git.ListOptions{Auth: auth})
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", url, err)
+	}
+	return refs, nil
+}
+
+// FetchAuth fetches with an explicit credential.
+func (r *Repo) FetchAuth(auth transport.AuthMethod) error {
+	if err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin", Auth: auth}); err != nil && err != git.NoErrAlreadyUpToDate {
+		return fmt.Errorf("fetch: %w", err)
+	}
+	return nil
+}
+
+// PushRefs pushes the given refspecs, optionally forcing.
+func (r *Repo) PushRefs(auth transport.AuthMethod, force bool, refs ...config.RefSpec) error {
+	opts := &git.PushOptions{RemoteName: "origin", Auth: auth, Force: force}
+	opts.RefSpecs = refs
+	if err := r.r.Push(opts); err != nil && err != git.NoErrAlreadyUpToDate {
+		return fmt.Errorf("push: %w", err)
+	}
+	return nil
 }

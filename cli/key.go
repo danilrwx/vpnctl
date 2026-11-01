@@ -4,14 +4,19 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/go-git/go-git/v5/config"
 
 	"github.com/danilrwx/vpnctl-go/gitsync"
 	"github.com/danilrwx/vpnctl-go/ops"
 	"github.com/danilrwx/vpnctl-go/state"
 )
 
-// Init creates a state directory: skeleton, age.yaml, first commit.
-func Init(dir, name, backupPass string, nocommit bool) error {
+// Init creates a state directory: skeleton, age.yaml, first commit, and
+// optionally pushes it. A remote with history needs --fresh: the old tip goes
+// to a backup branch before main is overwritten.
+func Init(dir, name, backupPass, remote string, fresh, nocommit bool) error {
 	if _, err := os.Stat(dir); err == nil {
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
@@ -33,6 +38,14 @@ func Init(dir, name, backupPass string, nocommit bool) error {
 			return err
 		}
 	}
+	var pushed string
+	if remote != "" {
+		p, err := pushNewState(repo, remote, fresh)
+		if err != nil {
+			return err
+		}
+		pushed = p
+	}
 	if jsonOut {
 		_ = emit(struct {
 			Dir       string `json:"dir"`
@@ -40,6 +53,9 @@ func Init(dir, name, backupPass string, nocommit bool) error {
 			Backup    string `json:"backup,omitempty"`
 		}{dir, res.Recipient, res.BackupBlob}, func() {})
 		return nil
+	}
+	if pushed != "" {
+		fmt.Printf("  pushed     %s\n", pushed)
 	}
 	fmt.Printf("✓ state in %s\n", dir)
 	fmt.Printf("  recipient  %s\n", res.Recipient)
@@ -149,4 +165,41 @@ func commit(dir, msg string, nocommit bool) error {
 		return err
 	}
 	return repo.Commit(msg)
+}
+
+// pushNewState publishes a freshly initialised state. A remote that already has
+// refs is only overwritten on request, and its old tip is kept as a branch.
+func pushNewState(repo *gitsync.Repo, url string, fresh bool) (string, error) {
+	auth, err := gitsync.SSHAuth()
+	if err != nil && !strings.HasPrefix(url, "/") {
+		return "", err
+	}
+	refs, err := gitsync.ListRemote(url, auth)
+	if err != nil {
+		return "", err
+	}
+	if err := repo.AddRemote(url); err != nil {
+		return "", err
+	}
+	if len(refs) == 0 {
+		if err := repo.PushRefs(auth, false); err != nil {
+			return "", err
+		}
+		return url, nil
+	}
+	if !fresh {
+		return "", fmt.Errorf("the remote already has %d refs: clone it, or pass --fresh to overwrite (the old tip is kept as a backup branch)", len(refs))
+	}
+	if err := repo.FetchAuth(auth); err != nil {
+		return "", err
+	}
+	backup := "backup/pre-init-" + time.Now().UTC().Format("20060102-150405")
+	src := config.RefSpec("refs/remotes/origin/main:refs/heads/" + backup)
+	if err := repo.PushRefs(auth, false, src); err != nil {
+		return "", fmt.Errorf("backup branch %s: %w", backup, err)
+	}
+	if err := repo.PushRefs(auth, true, config.RefSpec("+refs/heads/main:refs/heads/main")); err != nil {
+		return "", err
+	}
+	return url + " (old tip in " + backup + ")", nil
 }

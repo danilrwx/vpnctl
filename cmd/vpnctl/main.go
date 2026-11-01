@@ -39,11 +39,14 @@ func main() {
 					dirFlag(), jsonFlag(),
 					&ucli.StringFlag{Name: "name", Usage: "device name in age.yaml, default: hostname"},
 					&ucli.StringFlag{Name: "backup-pass", Usage: "create the offline backup identity sealed with this passphrase"},
+					&ucli.StringFlag{Name: "remote", Usage: "push the new state here"},
+					&ucli.BoolFlag{Name: "fresh", Usage: "overwrite a remote that already has history, keeping its tip as a backup branch"},
 					&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					cli.SetJSON(c.Bool("json"))
-					return cli.Init(c.String("dir"), c.String("name"), c.String("backup-pass"), c.Bool("nocommit"))
+					return cli.Init(c.String("dir"), c.String("name"), c.String("backup-pass"),
+						c.String("remote"), c.Bool("fresh"), c.Bool("nocommit"))
 				},
 			},
 			{
