@@ -19,6 +19,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
+import java.io.File
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 
 /** One row of the list screen. */
 data class UserRow(val name: String, val modes: String, val enabled: Boolean)
@@ -30,7 +37,6 @@ data class UserRow(val name: String, val modes: String, val enabled: Boolean)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // the fixture ships inside the APK until the sync screen exists
         Core.openBundled(applicationContext)
         setContent {
             MaterialTheme {
@@ -63,13 +69,26 @@ fun parseUsers(json: String): List<UserRow> = try {
 @Composable
 fun Users(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
-    val app = Core.current()
+    var app by remember { mutableStateOf(Core.current()) }
+    var status by remember { mutableStateOf("") }
+
+    // the state repository is cloned with the device key; the first launch waits
+    LaunchedEffect(Unit) {
+        if (app == null || !File(ctx.filesDir, "state/.git").exists()) {
+            status = withContext(Dispatchers.IO) { Core.sync(ctx, "git@github.com:danilrwx/vpn.git") }
+            app = Core.current()
+        }
+    }
+
     val users = remember(app) { app?.let { parseUsers(it.users()) } ?: emptyList() }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (app == null) {
             Text("state is not open yet")
             return@Column
+        }
+        if (status.isNotEmpty()) {
+            Text(status, style = MaterialTheme.typography.bodySmall)
         }
         Text("users: ${users.size}", style = MaterialTheme.typography.titleMedium)
         // the key has to reach the host, so it is shown whole and selectable

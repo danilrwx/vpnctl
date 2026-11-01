@@ -19,6 +19,8 @@ import mobile.Signer
  */
 class KeystoreSigner(private val alias: String = DEFAULT_ALIAS) : Signer {
 
+    override fun publicKeyDER(): ByteArray = publicKey().encoded
+
     override fun publicKeyPEM(): String {
         val der = publicKey().encoded
         val body = android.util.Base64.encodeToString(der, android.util.Base64.NO_WRAP)

@@ -41,14 +41,23 @@ object Core {
         return file.absolutePath
     }
 
-    /** openBundled copies the fixture out of assets and opens it. */
+    /**
+     * openBundled opens the cloned state when there is one and the fixture that
+     * ships in the APK otherwise. The fixture is the only way to see anything on
+     * a fresh install; a cloned repository always wins.
+     */
     fun openBundled(ctx: Context): App? {
         val dir = File(ctx.filesDir, "state")
+
+        if (File(dir, ".git").exists()) {
+            return open(dir.absolutePath, ageKeyFile(ctx) ?: "")
+        }
+
         if (!dir.exists()) {
             copyAssets(ctx, "state", dir)
         }
 
-        return open(dir.absolutePath, ageKeyFile(ctx) ?: "")
+        return open(dir.absolutePath, "")
     }
 
     private fun copyAssets(ctx: Context, from: String, to: File) {
@@ -116,6 +125,24 @@ object Core {
         }
     } catch (e: Exception) {
         "identity: ${e.message}"
+    }
+
+    /**
+     * sync clones the state repository with the device key. The first call takes
+     * a while and must not run on the UI thread; the caller does that part.
+     */
+    fun sync(ctx: Context, url: String): String = try {
+        val dir = File(ctx.filesDir, "state")
+        if (File(dir, ".git").exists()) {
+            "already cloned"
+        } else {
+            val head = Mobile.syncState(url, dir.absolutePath)
+            app = null
+            open(dir.absolutePath, ageKeyFile(ctx) ?: "")
+            "synced at $head"
+        }
+    } catch (e: Exception) {
+        "sync: ${e.message}"
     }
 
     fun current(): App? = app
