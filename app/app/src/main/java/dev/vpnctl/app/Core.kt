@@ -85,6 +85,20 @@ object Core {
         return key
     }
 
+    /**
+     * installSigner wires the Keystore key into the core. Everything that signs
+     * depends on it: agent requests and git alike, so it happens once at startup
+     * and not on the first screen that happens to need it.
+     */
+    fun installSigner() {
+        try {
+            Mobile.setSigner(KeystoreSigner().ensure())
+        } catch (e: Exception) {
+            // a device without a Keystore key can still read the state; it just
+            // cannot sign, and the screens that need a signature say so
+        }
+    }
+
     /** signedBy is what the host would receive: the device's public key. */
     fun signedBy(): String = try {
         val signer = KeystoreSigner().ensure()

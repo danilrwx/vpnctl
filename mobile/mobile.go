@@ -320,7 +320,13 @@ func (a *App) Plan(host string) (string, error) {
 
 // Apply installs the state on the hosts and returns the result as JSON.
 func (a *App) Apply(host string) (string, error) {
-	res, err := apply.Apply(a.st, &apply.Opts{Host: host}, io.Discard)
+	opts := &apply.Opts{Host: host}
+	if signer != nil {
+		// a phone has no ssh key on the hosts, only the agent's
+		opts.AgentApply = agentApply
+	}
+
+	res, err := apply.Apply(a.st, opts, io.Discard)
 	if err != nil {
 		var ge *apply.GuardError
 		if errors.As(err, &ge) {

@@ -33,6 +33,24 @@ data class UserRow(val name: String, val modes: String, val enabled: Boolean, va
 /** One copyable line of a user card. */
 data class UserLink(val label: String, val url: String)
 
+/** One host of the plan. */
+data class PlanHost(val name: String, val changes: Int, val unreachable: String)
+
+/** parsePlan reads what plan.JSONOf writes: a host, a change count, files. */
+fun parsePlan(json: String): List<PlanHost> = try {
+    val arr = JSONArray(json)
+    (0 until arr.length()).map { i ->
+        val o = arr.getJSONObject(i)
+        PlanHost(
+            name = o.getString("name"),
+            changes = o.getInt("changes"),
+            unreachable = o.optString("unreachable"),
+        )
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
 /** Users parses the JSON the core returns: a struct with a slice field cannot
  * cross the gomobile boundary, so every list arrives as text. */
 fun parseUsers(json: String): List<UserRow> = try {
@@ -65,6 +83,7 @@ fun parseLinks(json: String): List<UserLink> = try {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Core.installSigner()
         setContent {
             MaterialTheme {
                 Scaffold { padding ->
@@ -80,10 +99,10 @@ fun App(modifier: Modifier = Modifier) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var selected by remember { mutableStateOf<String?>(null) }
 
-    if (selected == null) {
-        UsersScreen(ctx, modifier, onPick = { selected = it })
-    } else {
-        UserScreen(ctx, modifier, name = selected!!, onBack = { selected = null })
+    when (selected) {
+        null -> UsersScreen(ctx, modifier, onPick = { selected = it })
+        PLAN -> PlanScreen(ctx, modifier, onBack = { selected = null })
+        else -> UserScreen(ctx, modifier, name = selected!!, onBack = { selected = null })
     }
 }
 
@@ -111,6 +130,7 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, onPick: (Strin
         }
 
         Text("users: ${users.size}", style = MaterialTheme.typography.titleMedium)
+        Button(onClick = { onPick(PLAN) }) { Text("план") }
 
         LazyColumn {
             items(users) { user ->
@@ -185,4 +205,34 @@ fun pushState(app: mobile.App?): String {
     return "pushed $head"
 }
 
+/** PlanScreen shows what apply would change on every host. */
+@Composable
+fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+    val app = remember { Core.current() }
+    var status by remember { mutableStateOf("") }
+    var hosts by remember { mutableStateOf(emptyList<PlanHost>()) }
+
+    LaunchedEffect(Unit) {
+        status = onIo {
+            val json = app?.plan("") ?: return@onIo "нет состояния"
+            hosts = parsePlan(json)
+            "hosts: ${hosts.size}"
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        Text("план", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("назад") }
+        Text(status, style = MaterialTheme.typography.bodySmall)
+
+        LazyColumn {
+            items(hosts) { h ->
+                val note = if (h.unreachable.isNotEmpty()) " недоступен" else ""
+                Text("${h.name}: ${h.changes} изменений$note", modifier = Modifier.padding(vertical = 4.dp))
+            }
+        }
+    }
+}
+
+const val PLAN = "план"
 const val REPO = "git@github.com:danilrwx/vpn.git"
