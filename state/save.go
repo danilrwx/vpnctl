@@ -64,3 +64,21 @@ func SaveLinks(dir string, links []Link) error {
 	}
 	return os.WriteFile(filepath.Join(dir, "links.yaml"), b, 0o644)
 }
+
+// SaveHosts writes hosts.yaml.
+func SaveHosts(dir string, hosts map[string]Host) error {
+	b, err := marshal(map[string]any{"hosts": hosts})
+	if err != nil {
+		return fmt.Errorf("marshal hosts: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "hosts.yaml"), b, 0o644)
+}
+
+// SaveVersions writes versions.yaml: the pins bootstrap installs.
+func SaveVersions(dir string, versions map[string]Pin) error {
+	b, err := marshal(versions)
+	if err != nil {
+		return fmt.Errorf("marshal versions: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "versions.yaml"), b, 0o644)
+}

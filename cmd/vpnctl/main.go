@@ -160,6 +160,25 @@ func main() {
 				},
 			},
 			{
+				Name:  "host",
+				Usage: "hosts: setup and maintenance",
+				Commands: []*ucli.Command{
+					{
+						Name:      "bootstrap",
+						Usage:     "install packages, engines and units on a host, idempotent",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(),
+							&ucli.StringFlag{Name: "ssh", Usage: "user@host to record when the state has none"},
+							&ucli.BoolFlag{Name: "print", Usage: "print the script instead of running it"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							return cli.HostBootstrap(c.String("dir"), c.Args().First(), c.String("ssh"), c.Bool("print"), os.Stdout)
+						},
+					},
+				},
+			},
+			{
 				Name:  "user",
 				Usage: "create, remove, list and hand out users",
 				Commands: []*ucli.Command{
