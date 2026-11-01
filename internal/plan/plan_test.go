@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -96,3 +97,31 @@ func TestProbeScriptEndsTheManifestLine(t *testing.T) {
 		t.Fatalf("the manifest line does not end:\n%s", s)
 	}
 }
+
+// TestParseProbeManifest: the manifest travels base64-encoded and its lines are
+// "hash path". A glued blob used to swallow the first hash line, which made the
+// first file of every render look new.
+func TestParseProbeManifest(t *testing.T) {
+	manifest := base64Of("aaaa /etc/caddy/Caddyfile\nbbbb /etc/sing-box/config.json\n")
+	p := ParseProbe("abc1234\nyes\n" + manifest + "\n1111 /etc/caddy/Caddyfile\n")
+	if got := p.Manifest["/etc/caddy/Caddyfile"]; got != "aaaa" {
+		t.Fatalf("manifest %v", p.Manifest)
+	}
+	if got := p.Manifest["/etc/sing-box/config.json"]; got != "bbbb" {
+		t.Fatalf("manifest %v", p.Manifest)
+	}
+	if got := p.Hashes["/etc/caddy/Caddyfile"]; got != "1111" {
+		t.Fatalf("a manifest line swallowed a hash: %v", p.Hashes)
+	}
+}
+
+// TestParseProbeUnpushed: the marker may carry a second word and plan reads it
+// as "applied from a commit origin does not have".
+func TestParseProbeUnpushed(t *testing.T) {
+	p := ParseProbe("abc1234 unpushed\nno\n-\n")
+	if p.Marker != "abc1234" || !p.Unpushed {
+		t.Fatalf("%+v", p)
+	}
+}
+
+func base64Of(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }

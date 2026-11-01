@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danilrwx/vpnctl-go/internal/render"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
@@ -180,9 +181,13 @@ func Tick(opts TickOptions) (TickReport, error) {
 	}
 
 	if rep.Changed || len(rep.Subs) > 0 || len(rep.Peers) > 0 {
+		// the record is an audit trail, not part of the change: a host whose
+		// disk refused it still had its accounts taken off, so say so and go on
 		if record, err := json.Marshal(rep); err == nil {
-			if err := os.MkdirAll(opts.ExpiredDir, 0o700); err == nil {
-				_ = os.WriteFile(filepath.Join(opts.ExpiredDir, "last-tick.json"), record, 0o600)
+			if err := os.MkdirAll(opts.ExpiredDir, 0o700); err != nil {
+				fmt.Fprintf(os.Stderr, "tick: record: %v\n", err)
+			} else if err := os.WriteFile(filepath.Join(opts.ExpiredDir, "last-tick.json"), record, 0o600); err != nil {
+				fmt.Fprintf(os.Stderr, "tick: record: %v\n", err)
 			}
 		}
 	}
@@ -253,14 +258,11 @@ func StripUsers(body []byte, emails map[string]bool) ([]byte, bool, error) {
 	if !changed {
 		return body, false, nil
 	}
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
+	b, err := render.JSON(out)
+	if err != nil {
 		return nil, false, err
 	}
-	return b.Bytes(), true, nil
+	return b, true, nil
 }
 
 // matchKeys are the fields that make a rule match something. A rule left with

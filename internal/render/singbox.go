@@ -11,7 +11,22 @@ import (
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
-// toJSON is serde_json::to_string_pretty: 2 spaces, sorted keys, no HTML escaping, trailing newline.
+// JSON is the one way this tree writes JSON: 2 spaces, sorted keys, no HTML
+// escaping, trailing newline. The agent's tick edits a config this package
+// rendered, and a second encoder with different settings would turn that edit
+// into drift.
+func JSON(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+// toJSON is JSON as a string, for the renderers that build text.
 func toJSON(v any) (string, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)

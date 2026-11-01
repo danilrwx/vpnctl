@@ -117,7 +117,7 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	if err := useNonce(req.Nonce); err != nil {
+	if err := (agent.NonceCache{Dir: nonceDir, TTL: nonceTTL}).Use(req.Nonce); err != nil {
 		write(agent.Response{V: agent.Version, Code: "replay", Error: err.Error()})
 		os.Exit(1)
 	}
@@ -188,25 +188,4 @@ func publicKeys(dir string) ([]*ecdsa.PublicKey, error) {
 		return nil, fmt.Errorf("no usable key in %s", dir)
 	}
 	return out, nil
-}
-
-// useNonce writes the nonce once: a replayed request fails here.
-func useNonce(nonce string) error {
-	if err := os.MkdirAll(nonceDir, 0o700); err != nil {
-		return err
-	}
-	entries, _ := os.ReadDir(nonceDir)
-	for _, e := range entries {
-		info, err := e.Info()
-		if err == nil && time.Since(info.ModTime()) > nonceTTL {
-			_ = os.Remove(filepath.Join(nonceDir, e.Name()))
-		}
-	}
-	p := filepath.Join(nonceDir, nonce)
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("nonce %s: %w", nonce, err)
-	}
-	_ = f.Close()
-	return nil
 }
