@@ -1,0 +1,33 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1 · do not edit by hand: overwritten by apply
+{
+	admin off
+}
+
+https://gw.example.ru:8443 {
+	bind 127.0.0.1
+	root * /var/www/site
+	file_server
+
+	@ws path /ws
+	reverse_proxy @ws 127.0.0.1:8444
+
+	handle_path /s/* {
+		root * /var/www/sub
+		header profile-title "gw.example.ru"
+		header profile-update-interval "12"
+		header Cache-Control "no-store"
+		@singbox header User-Agent *sing-box*
+		@clash header User-Agent *lash*
+		rewrite @singbox {path}.json
+		rewrite @clash {path}.yaml
+		file_server
+	}
+}
+
+http://gw.example.ru {
+	redir https://gw.example.ru{uri} permanent
+}

@@ -1,0 +1,285 @@
+---
+source: tests/render.rs
+expression: "files[\"/etc/xray/config.json\"]"
+---
+{
+  "api": {
+    "services": [
+      "StatsService"
+    ],
+    "tag": "api"
+  },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      },
+      "tag": "api"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "brat-split-reality",
+            "flow": "xtls-rprx-vision",
+            "id": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+          },
+          {
+            "email": "brat-full-reality",
+            "flow": "xtls-rprx-vision",
+            "id": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+          }
+        ],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "dest": "127.0.0.1:8443",
+          "privateKey": "6r0MzdOBbjwiXdKMr81z6DhFmywLhzQsH5p7w9yI3HA",
+          "serverNames": [
+            "gw.example.ru"
+          ],
+          "shortIds": [
+            "c1dcf5a1833630e3"
+          ]
+        },
+        "security": "reality"
+      },
+      "tag": "reality"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 8444,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "email": "brat-split-ws",
+            "id": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+          },
+          {
+            "email": "brat-full-ws",
+            "id": "f86ee924-94e4-40a7-9b57-93d14ddf9c5f"
+          }
+        ],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls"
+        ],
+        "enabled": true
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/ws"
+        }
+      },
+      "tag": "ws"
+    },
+    {
+      "listen": "127.0.0.1",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "udp": true
+      },
+      "sniffing": {
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "enabled": true
+      },
+      "tag": "probe"
+    }
+  ],
+  "log": {
+    "loglevel": "warning"
+  },
+  "observatory": {
+    "probeInterval": "60s",
+    "probeUrl": "https://www.gstatic.com/generate_204",
+    "subjectSelector": [
+      "fi-hel-1-"
+    ]
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    },
+    {
+      "protocol": "freedom",
+      "streamSettings": {
+        "sockopt": {
+          "interface": "awg1"
+        }
+      },
+      "tag": "fi-hel-1-awg"
+    },
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "1.2.3.4",
+            "port": 443,
+            "users": [
+              {
+                "encryption": "none",
+                "flow": "xtls-rprx-vision",
+                "id": "3eca216e-ec5d-4a87-84a9-7469b95cba46"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "fingerprint": "chrome",
+          "publicKey": "88LUPmvt4mevpz21Ivl-x-KV_jm2bF8LzaFJF5zLuFU",
+          "serverName": "www.microsoft.com",
+          "shortId": "b7c3d96efeeb6166"
+        },
+        "security": "reality"
+      },
+      "tag": "fi-hel-1-reality"
+    }
+  ],
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsOutboundDownlink": true,
+      "statsOutboundUplink": true
+    }
+  },
+  "routing": {
+    "balancers": [
+      {
+        "selector": [
+          "fi-hel-1-awg"
+        ],
+        "strategy": {
+          "type": "leastPing"
+        },
+        "tag": "link-fi-hel-1"
+      },
+      {
+        "selector": [
+          "fi-hel-1-"
+        ],
+        "strategy": {
+          "type": "leastPing"
+        },
+        "tag": "exit-auto"
+      }
+    ],
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "inboundTag": [
+          "api"
+        ],
+        "outboundTag": "api",
+        "type": "field"
+      },
+      {
+        "balancerTag": "exit-auto",
+        "inboundTag": [
+          "probe"
+        ],
+        "type": "field"
+      },
+      {
+        "domain": [
+          "geosite:category-ads-all"
+        ],
+        "outboundTag": "block",
+        "type": "field"
+      },
+      {
+        "domain": [
+          "domain:gosuslugi.ru",
+          "geosite:category-ru",
+          "geosite:yandex",
+          "geosite:vk"
+        ],
+        "outboundTag": "direct",
+        "type": "field",
+        "user": [
+          "brat-split-reality",
+          "brat-split-ws"
+        ]
+      },
+      {
+        "ip": [
+          "geoip:ru",
+          "geoip:private"
+        ],
+        "outboundTag": "direct",
+        "type": "field",
+        "user": [
+          "brat-split-reality",
+          "brat-split-ws"
+        ]
+      },
+      {
+        "balancerTag": "link-fi-hel-1",
+        "domain": [
+          "geosite:youtube"
+        ],
+        "type": "field",
+        "user": [
+          "brat-split-reality",
+          "brat-split-ws"
+        ]
+      },
+      {
+        "balancerTag": "exit-auto",
+        "type": "field",
+        "user": [
+          "brat-split-reality",
+          "brat-split-ws"
+        ]
+      },
+      {
+        "balancerTag": "exit-auto",
+        "type": "field",
+        "user": [
+          "brat-full-reality",
+          "brat-full-ws"
+        ]
+      }
+    ]
+  },
+  "stats": {}
+}

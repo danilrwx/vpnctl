@@ -1,0 +1,30 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1 · interface awg1 · link to fi-hel-1
+[Interface]
+Address = 10.9.1.1/30
+PrivateKey = IUa2Kg8VkUkLCKV+2KpVsvUSWfXnttTmowaTCuAbe1s=
+Table = off
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 0
+S2 = 0
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+PostUp = ip route add 0.0.0.0/0 dev %i table 101
+PostUp = ip rule add oif %i lookup 101
+PostDown = ip rule del oif %i lookup 101
+
+
+# fi-hel-1
+[Peer]
+PublicKey = 2lQEWK/OFG1wMoep/3zKVkcHPP3Yf03T0I3oQWJSO0g=
+PresharedKey = B6EeBz/Cz01DvQKgE98bmDZqXrOfrnYmC+MsP/WIMT0=
+AllowedIPs = 0.0.0.0/0
+Endpoint = 1.2.3.4:51820
+PersistentKeepalive = 25
