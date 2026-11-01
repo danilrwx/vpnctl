@@ -39,6 +39,7 @@ notify() {
 	// broke while the chain itself was fine
 	ownURL := "https://" + st.Hosts[host].Domain
 	telegramURL := "https://pluto.web.telegram.org"
+
 	if st.Hosts[host].Domain == "" {
 		ownURL = ""
 	}

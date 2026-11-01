@@ -107,6 +107,7 @@ func TestProbeWithoutAlerts(t *testing.T) {
 // while the chain probe stayed green.
 func TestProbeChecksTheSilentPaths(t *testing.T) {
 	st := probeFixture(state.Entry, "https://ntfy.sh/vpn")
+
 	files, err := RenderHost(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
