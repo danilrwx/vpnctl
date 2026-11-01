@@ -378,6 +378,71 @@ func Apply(r *Request, root string, out func(string)) Response {
 	return res
 }
 
+// Mark writes the files it is given and touches nothing else: it is how a host
+// with no changes records the commit it runs and the hashes it already has. A
+// device that reaches the hosts only through the agent has no shell, so this is
+// the only way it can move the marker at all.
+func Mark(r *Request) Response {
+	res := Response{V: Version, OK: true}
+
+	for _, f := range r.Files {
+		if err := CheckPath(f.Path, f.Mode); err != nil {
+			return fail(res, "path", err)
+		}
+
+		body, err := base64.StdEncoding.DecodeString(f.Body)
+		if err != nil {
+			return fail(res, "tree", err)
+		}
+
+		sum := sha256.Sum256(body)
+		if hex.EncodeToString(sum[:]) != f.SHA256 {
+			return fail(res, "tree", fmt.Errorf("%s: content does not match its hash", f.Path))
+		}
+
+		if err := writeAtomic(f.Path, body, os.FileMode(f.Mode)); err != nil {
+			return fail(res, "io", err)
+		}
+
+		res.Changes = append(res.Changes, Change{Path: f.Path, Status: plan.Changed.Mark()})
+	}
+
+	return res
+}
+
+// writeAtomic writes beside the target and renames: a reader never sees half a
+// file, and a failure leaves the previous one in place.
+func writeAtomic(path string, body []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	f, err := os.CreateTemp(filepath.Dir(path), ".vpnctl-*")
+	if err != nil {
+		return err
+	}
+
+	tmp := f.Name()
+
+	defer func() { _ = os.Remove(tmp) }()
+
+	if _, err := f.Write(body); err != nil {
+		_ = f.Close()
+		return err
+	}
+
+	if err := f.Chmod(mode); err != nil {
+		_ = f.Close()
+		return err
+	}
+
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmp, path)
+}
+
 func roleOf(role string) state.Role {
 	if role == "entry" {
 		return state.Entry

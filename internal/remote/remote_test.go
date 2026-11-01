@@ -81,3 +81,24 @@ func TestHostKeyAlgorithms(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// TestFailureText is the message a silently failing command leaves behind. The
+// agent is a forced command: it answers on stdout, and an empty error once cost
+// an evening on the phone, where the only trace was "host: ".
+func TestFailureText(t *testing.T) {
+	cases := []struct {
+		name string
+		res  Result
+		want string
+	}{
+		{"stderr wins", Result{Stderr: []byte("boom\n"), Stdout: []byte("ignored")}, "boom"},
+		{"stdout is the agent's answer", Result{Stdout: []byte(`{"error":"bad request"}`), Code: 1}, `{"error":"bad request"}`},
+		{"silence still says something", Result{Code: 1}, "exit 1 with no output"},
+	}
+
+	for _, c := range cases {
+		if got := failure(c.res); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}

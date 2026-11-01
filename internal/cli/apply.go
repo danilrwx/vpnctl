@@ -29,6 +29,7 @@ func Apply(dir, host, branch string, force, unpushed, viaAgent bool, at time.Tim
 	opts := &apply.Opts{Host: host, Branch: branch, Force: force, Unpushed: unpushed, At: at}
 	if viaAgent {
 		opts.AgentApply = agentApply
+		opts.AgentMark = agentMark
 	}
 
 	res, err := apply.Apply(st, opts, out)
@@ -71,4 +72,27 @@ func agentApply(c *remote.Client, host, commit string, files render.HostFiles) (
 	}
 
 	return apply.HostResult{Status: "applied", Probe: resp.Probe, Marker: commit}, nil
+}
+
+// agentMark writes the marker and the manifest as one signed request: the same
+// shape as an apply, but the agent installs nothing and restarts nothing.
+func agentMark(c *remote.Client, host, commit string, files render.HostFiles) error {
+	key, err := agent.LoadKey(agent.KeyPath())
+	if err != nil {
+		return err
+	}
+
+	list, err := agent.FilesFromTree(files, hostscript.ModeForInt)
+	if err != nil {
+		return err
+	}
+
+	req, err := agent.NewRequest(key, "mark", host, commit, list)
+	if err != nil {
+		return err
+	}
+
+	_, err = agent.Call(c, req)
+
+	return err
 }

@@ -31,20 +31,10 @@ func agentApply(c *remote.Client, host, commit string, files render.HostFiles) (
 		return apply.HostResult{}, err
 	}
 
-	// the same payload the command line signs, but the signature comes from the
-	// Keystore: the host verifies it with the public key it was given
-	req := &agent.Request{
-		V: agent.Version, Op: "apply", Host: host, Commit: commit, Files: list,
-		TS: time.Now().Unix(), Nonce: nonce(),
-	}
-	req.TreeHash = agent.TreeHash(list)
-
-	sig, err := SignMessage([]byte(agent.Message(req)))
+	req, err := signedRequest("apply", host, commit, list)
 	if err != nil {
 		return apply.HostResult{}, err
 	}
-
-	req.Sig = base64.StdEncoding.EncodeToString(sig)
 
 	resp, err := agent.Call(c, req)
 	if err != nil {
@@ -52,6 +42,48 @@ func agentApply(c *remote.Client, host, commit string, files render.HostFiles) (
 	}
 
 	return apply.HostResult{Status: "applied", Probe: resp.Probe, Marker: commit}, nil
+}
+
+// agentMark records the commit and the manifest on a host that needs no other
+// change. Without it a phone could never move the marker: it has no shell, and
+// the shell is where the command line writes it.
+func agentMark(c *remote.Client, host, commit string, files render.HostFiles) error {
+	if signer == nil {
+		return fmt.Errorf("no signer: the device cannot authorise a mark")
+	}
+
+	list, err := agent.FilesFromTree(files, hostscript.ModeForInt)
+	if err != nil {
+		return err
+	}
+
+	req, err := signedRequest("mark", host, commit, list)
+	if err != nil {
+		return err
+	}
+
+	_, err = agent.Call(c, req)
+
+	return err
+}
+
+// signedRequest is the one place a request is built and signed with the
+// Keystore key, so every operation hashes and signs the same payload.
+func signedRequest(op, host, commit string, files []agent.File) (*agent.Request, error) {
+	req := &agent.Request{
+		V: agent.Version, Op: op, Host: host, Commit: commit, Files: files,
+		TS: time.Now().Unix(), Nonce: nonce(),
+	}
+	req.TreeHash = agent.TreeHash(files)
+
+	sig, err := SignMessage([]byte(agent.Message(req)))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Sig = base64.StdEncoding.EncodeToString(sig)
+
+	return req, nil
 }
 
 // nonce is 16 random bytes in hex, the same shape the command line uses: the

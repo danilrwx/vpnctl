@@ -262,9 +262,10 @@ func ProbeScript(role state.Role) string {
 		render.ProbeURL)
 }
 
-// ManifestScript records what was just applied: drift later means "someone
-// edited this file", not "the renderer changed since then".
-func ManifestScript(files render.HostFiles) string {
+// ManifestBody records what was just applied: drift later means "someone edited
+// this file", not "the renderer changed since then". It is the file body, so the
+// shell and the signed agent path write the same bytes.
+func ManifestBody(files render.HostFiles) string {
 	paths := make([]string, 0, len(files))
 	for p := range files {
 		paths = append(paths, p)
@@ -273,13 +274,16 @@ func ManifestScript(files render.HostFiles) string {
 	sort.Strings(paths)
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "cat > %s <<'MANIFEST'\n", plan.Manifest)
 
 	for _, p := range paths {
 		fmt.Fprintf(&b, "%s %s\n", render.Sha256(files[p]), p)
 	}
 
-	b.WriteString("MANIFEST")
-
 	return b.String()
+}
+
+// ManifestScript writes the same body over a shell: the command line has no
+// agent, so the marker and the manifest go out as one heredoc.
+func ManifestScript(files render.HostFiles) string {
+	return fmt.Sprintf("cat > %s <<'MANIFEST'\n%sMANIFEST", plan.Manifest, ManifestBody(files))
 }

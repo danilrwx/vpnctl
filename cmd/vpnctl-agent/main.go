@@ -151,6 +151,8 @@ func main() {
 		res = agent.Plan(&req, "/etc/vpnctl/applied-commit", "/etc/vpnctl/bootstrap")
 	case "apply":
 		res = agent.Apply(&req, "/tmp", func(line string) { fmt.Fprintln(os.Stderr, line) })
+	case "mark":
+		res = agent.Mark(&req)
 	case "probe":
 		body, err := os.ReadFile("/etc/vpnctl/probe.json")
 		if err != nil {

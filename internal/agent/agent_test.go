@@ -210,3 +210,78 @@ func TestParsePublicKey(t *testing.T) {
 		t.Fatal("the key changed")
 	}
 }
+
+// TestMarkWritesTheRecords swaps the write whitelist for a temp root: the paths
+// the agent may touch are the only thing that changes, not the code under test.
+func TestMarkWritesTheRecords(t *testing.T) {
+	root := t.TempDir()
+
+	old := AllowedPrefixes
+	AllowedPrefixes = []string{root + "/"}
+
+	t.Cleanup(func() { AllowedPrefixes = old })
+
+	marker := filepath.Join(root, "vpnctl", "applied-commit")
+	manifest := filepath.Join(root, "vpnctl", "applied.sha256")
+
+	res := Mark(&Request{Files: []File{
+		file(marker, "abc1234\n", 0o644),
+		file(manifest, "deadbeef /etc/sing-box/config.json\n", 0o644),
+	}})
+	if !res.OK {
+		t.Fatalf("mark refused: %s: %s", res.Code, res.Error)
+	}
+
+	for path, want := range map[string]string{
+		marker:   "abc1234\n",
+		manifest: "deadbeef /etc/sing-box/config.json\n",
+	} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(body) != want {
+			t.Errorf("%s: %q, want %q", path, body, want)
+		}
+	}
+}
+
+// TestMarkRefusesAPathOutsideTheWhitelist: the op writes two known files, so a
+// request that names anything else is a bug or an attack, and both must stop.
+func TestMarkRefusesAPathOutsideTheWhitelist(t *testing.T) {
+	root := t.TempDir()
+
+	old := AllowedPrefixes
+	AllowedPrefixes = []string{root + "/"}
+
+	t.Cleanup(func() { AllowedPrefixes = old })
+
+	res := Mark(&Request{Files: []File{file("/root/.ssh/authorized_keys", "x\n", 0o644)}})
+	if res.OK {
+		t.Fatal("a path outside the whitelist was written")
+	}
+
+	if res.Code != "path" {
+		t.Errorf("code %q, want path", res.Code)
+	}
+}
+
+// TestMarkRefusesABodyThatDoesNotMatchItsHash keeps the manifest honest: the
+// hash in the request is what the host records about itself.
+func TestMarkRefusesABodyThatDoesNotMatchItsHash(t *testing.T) {
+	root := t.TempDir()
+
+	old := AllowedPrefixes
+	AllowedPrefixes = []string{root + "/"}
+
+	t.Cleanup(func() { AllowedPrefixes = old })
+
+	f := file(filepath.Join(root, "applied-commit"), "abc\n", 0o644)
+	f.Body = base64.StdEncoding.EncodeToString([]byte("something else\n"))
+
+	res := Mark(&Request{Files: []File{f}})
+	if res.OK || res.Code != "tree" {
+		t.Fatalf("a mismatched body was written: %+v", res)
+	}
+}

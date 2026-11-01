@@ -343,6 +343,7 @@ func (a *App) Apply(host string) (string, error) {
 
 		// a phone has no ssh key on the hosts, only the agent's
 		opts.AgentApply = agentApply
+		opts.AgentMark = agentMark
 	}
 
 	res, err := apply.Apply(a.st, opts, io.Discard)

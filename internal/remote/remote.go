@@ -259,6 +259,19 @@ func (c *Client) Stream(script string, stdin []byte, out io.Writer) error {
 	return sess.Run(script)
 }
 
+// failure is the text of a non-zero result. A forced command answers on stdout,
+// and a shell that fails without a word would otherwise leave an error with
+// nothing in it: the exit status is the least an operator needs.
+func failure(res Result) string {
+	for _, b := range [][]byte{res.Stderr, res.Stdout} {
+		if msg := strings.TrimSpace(string(b)); msg != "" {
+			return msg
+		}
+	}
+
+	return fmt.Sprintf("exit %d with no output", res.Code)
+}
+
 // SH runs the script and treats a non-zero status as an error.
 func (c *Client) SH(script string) (string, error) {
 	res, err := c.Run(script, nil)
@@ -267,7 +280,7 @@ func (c *Client) SH(script string) (string, error) {
 	}
 
 	if !res.OK() {
-		return "", fmt.Errorf("%s: %s", c.Name, strings.TrimSpace(string(res.Stderr)))
+		return "", fmt.Errorf("%s: %s", c.Name, failure(res))
 	}
 
 	return string(res.Stdout), nil

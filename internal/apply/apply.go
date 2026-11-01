@@ -34,6 +34,10 @@ type Opts struct {
 	// AgentApply replaces the shell steps with one signed request to the host
 	// agent. It is injected by the CLI so this package stays free of the agent.
 	AgentApply func(c *remote.Client, host, commit string, files render.HostFiles) (HostResult, error)
+	// AgentMark writes the marker and the manifest through the agent: a host
+	// with no changes still has to record the commit it runs, and a device that
+	// reaches the hosts only through the agent has no shell to do it with.
+	AgentMark func(c *remote.Client, host, commit string, files render.HostFiles) error
 	// At is the day expiry is measured against; the zero value means today.
 	At time.Time
 	// FetchAuth is the credential the guard uses to fetch origin. A device has
@@ -391,6 +395,12 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 	order := Order(st, names)
 	fmt.Fprintf(out, "plan for %s @ %s · order: %s\n", branch, head, strings.Join(order, " → "))
 
+	// an agent that can apply but not mark would fall back to the shell on the
+	// marker step, and a device with a forced command would fail there silently
+	if opts.AgentApply != nil && opts.AgentMark == nil {
+		return result, fmt.Errorf("the agent path needs a marker writer as well")
+	}
+
 	done := 0
 
 	fail := func(name string, changes int, err error) (Result, error) {
@@ -428,7 +438,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 
 		files := rendered[name]
 		if hp.Changes() == 0 {
-			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s && %s", markerValue(head, opts), plan.Marker, hostscript.ManifestScript(files))); err != nil {
+			if err := markHost(c, opts, name, head, files); err != nil {
 				_ = c.Close()
 				return fail(name, 0, err)
 			}
@@ -445,6 +455,10 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 
 		if opts.AgentApply != nil {
 			hr, err := opts.AgentApply(c, name, head, files)
+			if err == nil {
+				err = markHost(c, opts, name, head, files)
+			}
+
 			_ = c.Close()
 
 			if err != nil {
@@ -453,7 +467,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 
 			hr.Name = name
 			hr.Changes = hp.Changes()
-			fmt.Fprintf(out, "  ✓ agent: %d files applied, probe %s\n", len(files), hr.Probe)
+			fmt.Fprintf(out, "  ✓ agent: %d files applied, probe %s, marker %s\n", len(files), hr.Probe, head)
 			result.Hosts = append(result.Hosts, hr)
 			done++
 
@@ -593,6 +607,27 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 	}
 
 	return result, nil
+}
+
+// markHost records the commit the host now runs. The command line does it in one
+// shell command; a device without a shell sends the same two files to the agent.
+func markHost(c *remote.Client, opts *Opts, host, commit string, files render.HostFiles) error {
+	if opts.AgentMark != nil {
+		return opts.AgentMark(c, host, commit, recordFiles(markerValue(commit, opts), files))
+	}
+
+	_, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s && %s", markerValue(commit, opts), plan.Marker, hostscript.ManifestScript(files)))
+
+	return err
+}
+
+// recordFiles is the marker and the manifest as files: what a host keeps about
+// the tree it runs, in the same bytes both paths write.
+func recordFiles(marker string, files render.HostFiles) render.HostFiles {
+	return render.HostFiles{
+		plan.Marker:   marker + "\n",
+		plan.Manifest: hostscript.ManifestBody(files),
+	}
 }
 
 // markerValue is the applied commit, with a note when it is not on the remote.

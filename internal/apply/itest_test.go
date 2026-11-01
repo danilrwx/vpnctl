@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,11 +13,16 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
+	"github.com/danilrwx/vpnctl-go/internal/hostscript"
+	"github.com/danilrwx/vpnctl-go/internal/plan"
+	"github.com/danilrwx/vpnctl-go/internal/remote"
+	"github.com/danilrwx/vpnctl-go/internal/render"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
@@ -300,5 +306,102 @@ func TestApplyRollsBackWhenProbeFails(t *testing.T) {
 
 	if strings.Contains(cmds, "applied-commit") && strings.Contains(out.String(), "marker") {
 		t.Error("the marker was written after a failed probe")
+	}
+}
+
+// TestApplyAgentMarksWithoutAShell is the phone's path: every host is reached
+// with a forced command, so a host with nothing to change must be marked over
+// the agent. One shell command here means the marker step fails on a device.
+func TestApplyAgentMarksWithoutAShell(t *testing.T) {
+	host := newFakeHost(t, "-\nyes\n-\n")
+	dir := itestState(t, host.addr, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(host.pub))))
+
+	st, err := state.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st.FillStubSecrets()
+
+	at := time.Now().UTC()
+
+	rendered, err := render.Check(st, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the host already runs exactly what the state renders: no changes at all
+	prober := func(name string, _ []string) (plan.Probe, error) {
+		p := plan.Probe{Hashes: map[string]string{}, Bootstrapped: true}
+		for path, body := range rendered[name] {
+			p.Hashes[path] = render.Sha256(body)
+		}
+
+		return p, nil
+	}
+
+	marks := 0
+
+	opts := &Opts{
+		At:     at,
+		Prober: prober,
+		AgentApply: func(*remote.Client, string, string, render.HostFiles) (HostResult, error) {
+			return HostResult{}, errors.New("an apply was sent to a host with no changes")
+		},
+		AgentMark: func(_ *remote.Client, name, commit string, files render.HostFiles) error {
+			marks++
+
+			if got := files[plan.Marker]; got != commit+"\n" {
+				t.Errorf("marker %q, want %q", got, commit+"\n")
+			}
+
+			if got, want := files[plan.Manifest], hostscript.ManifestBody(rendered[name]); got != want {
+				t.Errorf("manifest:\n%s\nwant:\n%s", got, want)
+			}
+
+			return nil
+		},
+	}
+
+	res, err := Apply(st, opts, io.Discard)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+
+	if marks != 1 {
+		t.Fatalf("%d mark requests, want one", marks)
+	}
+
+	if len(res.Hosts) != 1 || res.Hosts[0].Status != "unchanged" {
+		t.Fatalf("result: %+v", res.Hosts)
+	}
+
+	if cmds := host.commands(); len(cmds) != 0 {
+		t.Fatalf("a host reached through the agent got shell commands: %q", cmds)
+	}
+}
+
+// TestApplyAgentWithoutMarkerRefuses: half an agent path is worse than none. The
+// marker step would fall back to the shell and fail silently on a forced command.
+func TestApplyAgentWithoutMarkerRefuses(t *testing.T) {
+	host := newFakeHost(t, "-\nyes\n-\n")
+	dir := itestState(t, host.addr, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(host.pub))))
+
+	st, err := state.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	st.FillStubSecrets()
+
+	opts := &Opts{
+		Prober: func(string, []string) (plan.Probe, error) { return plan.Probe{Bootstrapped: true}, nil },
+		AgentApply: func(*remote.Client, string, string, render.HostFiles) (HostResult, error) {
+			return HostResult{Status: "applied"}, nil
+		},
+	}
+
+	_, err = Apply(st, opts, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "marker writer") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
