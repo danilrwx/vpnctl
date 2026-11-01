@@ -10,13 +10,13 @@ import (
 	"os"
 	"sort"
 
-	"github.com/danilrwx/vpnctl-go/apply"
-	"github.com/danilrwx/vpnctl-go/gitsync"
-	"github.com/danilrwx/vpnctl-go/ops"
-	"github.com/danilrwx/vpnctl-go/plan"
-	"github.com/danilrwx/vpnctl-go/render"
-	"github.com/danilrwx/vpnctl-go/state"
-	"github.com/danilrwx/vpnctl-go/validate"
+	"github.com/danilrwx/vpnctl-go/internal/apply"
+	"github.com/danilrwx/vpnctl-go/internal/gitsync"
+	"github.com/danilrwx/vpnctl-go/internal/ops"
+	"github.com/danilrwx/vpnctl-go/internal/plan"
+	"github.com/danilrwx/vpnctl-go/internal/render"
+	"github.com/danilrwx/vpnctl-go/internal/state"
+	"github.com/danilrwx/vpnctl-go/internal/validate"
 )
 
 // Link is one copyable entry of a user card.
