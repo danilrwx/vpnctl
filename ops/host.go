@@ -157,3 +157,22 @@ func HostFiles(st *state.State, name string) error {
 	}
 	return state.SaveSecrets(st.Dir, st.Secrets)
 }
+
+// HostRemove drops a host, its inbound, routing and secrets. Refuses while a
+// link still mentions it: removing the far side of a link is a state the
+// validator rejects, and a silent half-removal is worse than an error.
+func HostRemove(st *state.State, name string) (string, error) {
+	if _, ok := st.Hosts[name]; !ok {
+		return "", fmt.Errorf("host %q is not described", name)
+	}
+	for _, l := range st.Links {
+		if l.From == name || l.To == name {
+			return "", fmt.Errorf("host %q is used by the link %s: remove the link first", name, l.Key())
+		}
+	}
+	delete(st.Hosts, name)
+	delete(st.Inbounds, name)
+	delete(st.Routing, name)
+	delete(st.Secrets.Hosts, name)
+	return fmt.Sprintf("hosts: - %s", name), nil
+}

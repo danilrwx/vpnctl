@@ -102,3 +102,27 @@ func UserEdit(st *state.State, name string, p UserPatch) (string, error) {
 	st.Users[name] = u
 	return fmt.Sprintf("users: %s: %s", name, strings.Join(what, ", ")), nil
 }
+
+// UserRotate gives a user fresh credentials: a leaked link stops working after
+// the next apply. Modes and protocols stay as they are.
+func UserRotate(st *state.State, name string) (string, error) {
+	u, ok := st.Users[name]
+	if !ok {
+		return "", fmt.Errorf("user %q is not described", name)
+	}
+	sec := st.Secrets.Users[name]
+	sec.UUID = secrets.UUID()
+	sec.Hy2Pass = secrets.Password()
+	sec.SubID = secrets.SubID()
+	st.Secrets.Users[name] = sec
+	if u.AWG != nil {
+		priv, pub, err := secrets.AWGKeys()
+		if err != nil {
+			return "", err
+		}
+		sec.AWG = &state.KeyPair{Private: priv, Public: pub}
+		sec.AWGPreshared = secrets.Preshared()
+		st.Secrets.Users[name] = sec
+	}
+	return fmt.Sprintf("users: %s: rotate credentials", name), nil
+}

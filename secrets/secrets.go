@@ -54,3 +54,6 @@ func RealityKeys() (priv, pub, sid string, err error) {
 func AWGKeys() (priv, pub string, err error) {
 	return x25519Keys(base64.StdEncoding)
 }
+
+// Preshared is a 32-byte WireGuard-style pre-shared key in standard base64.
+func Preshared() string { return base64.StdEncoding.EncodeToString(bytes(32)) }
