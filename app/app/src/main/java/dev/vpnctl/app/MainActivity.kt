@@ -68,6 +68,9 @@ fun Users(modifier: Modifier = Modifier) {
             return@Column
         }
         Text("users: ${users.size}", style = MaterialTheme.typography.titleMedium)
+        // the first proof that the Keystore key crosses into Go the way the
+        // agent expects: a PKIX PEM inside the signature envelope
+        Text(Core.signedBy().lineSequence().firstOrNull { it.isNotBlank() } ?: "", style = MaterialTheme.typography.bodySmall)
         LazyColumn {
             items(users) { user ->
                 val state = if (user.enabled) "" else " · off"

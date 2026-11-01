@@ -47,5 +47,14 @@ object Core {
         }
     }
 
+    /** signedBy is what the host would receive: the device's public key. */
+    fun signedBy(): String = try {
+        val signer = KeystoreSigner().ensure()
+        Mobile.setSigner(signer)
+        Mobile.signedBy()
+    } catch (e: Exception) {
+        "no signer: ${e.message}"
+    }
+
     fun current(): App? = app
 }
