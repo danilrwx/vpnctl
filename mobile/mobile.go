@@ -330,6 +330,12 @@ func (a *App) Plan(host string) (string, error) {
 func (a *App) Apply(host string) (string, error) {
 	opts := &apply.Opts{Host: host}
 	if signer != nil {
+		// the guards fetch before they touch a host, and that fetch needs the
+		// same credential the clone used
+		if sshSigner, err := gitsync.SSHSigner(vpnctlSigner{signer}); err == nil {
+			gitsync.SetDeviceAuth(gitsync.GitAuth("git", sshSigner))
+		}
+
 		// a phone has no ssh key on the hosts, only the agent's
 		opts.AgentApply = agentApply
 	}

@@ -200,6 +200,12 @@ fun disableUser(app: mobile.App?, name: String): String {
     return "ok: $msg"
 }
 
+fun applyAll(app: mobile.App?): String {
+    // an empty host means every host, leaves first: the same order apply uses
+    val result = app?.apply("") ?: return "нет состояния"
+    return if (result.contains("\"failed\"")) "ошибка: $result" else "применено"
+}
+
 fun pushState(app: mobile.App?): String {
     val head = app?.push() ?: return "нет репозитория"
     return "pushed $head"
@@ -223,8 +229,8 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text("план", style = MaterialTheme.typography.headlineSmall)
         Button(onClick = onBack) { Text("назад") }
+        Button(onClick = { status = onIo { applyAll(app) } }) { Text("применить") }
         Text(status, style = MaterialTheme.typography.bodySmall)
-        Text(Core.signSelfTest(), style = MaterialTheme.typography.bodySmall)
 
         LazyColumn {
             items(hosts) { h ->

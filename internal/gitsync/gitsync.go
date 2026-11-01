@@ -210,8 +210,19 @@ func (r *Repo) FilesAt(rev string) (map[string][]byte, error) {
 // Fetch updates the remote-tracking refs from origin. The system git is the
 // fallback: go-git cannot always authenticate, for example against GitHub with
 // an RSA key held by the agent, while git itself can.
+// deviceAuth is what a phone supplies for git: no key file, no ssh agent.
+var deviceAuth transport.AuthMethod
+
+// SetDeviceAuth installs the auth used by Fetch, which the apply guards call.
+func SetDeviceAuth(auth transport.AuthMethod) { deviceAuth = auth }
+
 func (r *Repo) Fetch() error {
-	err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin"})
+	opts := &git.FetchOptions{RemoteName: "origin"}
+	if deviceAuth != nil {
+		opts.Auth = deviceAuth
+	}
+
+	err := r.r.Fetch(opts)
 	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil
 	}

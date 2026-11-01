@@ -38,11 +38,15 @@ func SetSigner(s Signer) {
 
 	if s == nil {
 		remote.SetDeviceAuth(nil)
+		gitsync.SetDeviceAuth(nil)
+
 		return
 	}
 
 	if sshSigner, err := gitsync.SSHSigner(vpnctlSigner{s}); err == nil {
 		remote.SetDeviceAuth(ssh.PublicKeys(sshSigner))
+		// the apply guards fetch before they touch a host
+		gitsync.SetDeviceAuth(gitsync.GitAuth("git", sshSigner))
 	}
 }
 
