@@ -1,0 +1,49 @@
+---
+source: tests/render.rs
+expression: body
+---
+proxies:
+- client-fingerprint: chrome
+  flow: xtls-rprx-vision
+  name: brat-split-reality
+  network: tcp
+  port: 443
+  reality-opts:
+    public-key: g7VdAo_0hqv9BZNFpOQsDVyPDkZ8fAIAOYpyrqry3jA
+    short-id: c1dcf5a1833630e3
+  server: gw.example.ru
+  servername: gw.example.ru
+  tls: true
+  type: vless
+  udp: true
+  uuid: f86ee924-94e4-40a7-9b57-93d14ddf9c5f
+- name: brat-split-ws
+  network: ws
+  port: 443
+  server: gw.example.ru
+  servername: gw.example.ru
+  tls: true
+  type: vless
+  udp: true
+  uuid: f86ee924-94e4-40a7-9b57-93d14ddf9c5f
+  ws-opts:
+    headers:
+      Host: gw.example.ru
+    path: /ws
+- name: brat-split-hy2
+  password: Gc9eg6fvRC-aoxNJ-pkV3XocTj8yBZuD
+  port: 443
+  server: gw.example.ru
+  sni: gw.example.ru
+  type: hysteria2
+proxy-groups:
+- interval: 60
+  name: brat-split
+  proxies:
+  - brat-split-reality
+  - brat-split-ws
+  - brat-split-hy2
+  type: url-test
+  url: https://www.gstatic.com/generate_204
+rules:
+- MATCH,brat-split

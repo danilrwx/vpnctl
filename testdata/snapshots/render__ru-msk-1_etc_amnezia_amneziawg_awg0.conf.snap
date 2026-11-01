@@ -1,0 +1,29 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1 · interface awg0 · clients and incoming links
+[Interface]
+Address = 10.8.1.1/24, 10.8.2.1/24
+PrivateKey = cU4uhvz965piDQx5vuOflOLjiOpow+NBAKrD5qVbVJk=
+ListenPort = 51820
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 0
+S2 = 0
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+PostUp = ip rule add fwmark 1 lookup 100
+PostUp = ip route add local 0.0.0.0/0 dev lo table 100
+PostDown = ip rule del fwmark 1 lookup 100
+PostDown = ip route del local 0.0.0.0/0 dev lo table 100
+
+
+# brat
+[Peer]
+PublicKey = SFLSsNHTtnuxtBOkcdYHH/lsehYiXpj4ObgxXMvGjSc=
+PresharedKey = 8lAIjAUjygP5PypEAqIT7yWfvzolsO6oArRIJ7frbgY=
+AllowedIPs = 10.8.1.2/32

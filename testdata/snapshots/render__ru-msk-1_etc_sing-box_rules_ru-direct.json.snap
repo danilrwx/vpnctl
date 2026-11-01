@@ -1,0 +1,14 @@
+---
+source: tests/render.rs
+expression: body
+---
+{
+  "rules": [
+    {
+      "domain_suffix": [
+        "gosuslugi.ru"
+      ]
+    }
+  ],
+  "version": 3
+}

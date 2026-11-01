@@ -1,0 +1,25 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · fi-hel-1 · interface awg0 · clients and incoming links
+[Interface]
+Address = 10.9.1.2/30
+PrivateKey = Ez8yibsBmTho6LSWb9+HjlnnfSatIEWE9F50LCWbESg=
+ListenPort = 51820
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 0
+S2 = 0
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+
+
+# link from ru-msk-1
+[Peer]
+PublicKey = aq8EtqJLFGDguxMTl9k7T+dG5KTEwNeZqmIdnIiGels=
+PresharedKey = B6EeBz/Cz01DvQKgE98bmDZqXrOfrnYmC+MsP/WIMT0=
+AllowedIPs = 10.9.1.1/32

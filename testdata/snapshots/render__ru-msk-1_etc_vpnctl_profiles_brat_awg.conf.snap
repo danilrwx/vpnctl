@@ -1,0 +1,25 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · brat · mode split · entry gw.example.ru
+[Interface]
+Address = 10.8.1.2/32
+PrivateKey = L8VYEl7s39tpNE8ba/Z8S5cH0VD0dN8UYN7oeIfQm5U=
+DNS = 10.8.1.1
+Jc = 4
+Jmin = 40
+Jmax = 70
+S1 = 0
+S2 = 0
+H1 = 1
+H2 = 2
+H3 = 3
+H4 = 4
+
+[Peer]
+PublicKey = WuiKFTvY4Y1xZL2K3WbIC4lxmTOClC0bqd/KibL07RU=
+PresharedKey = 8lAIjAUjygP5PypEAqIT7yWfvzolsO6oArRIJ7frbgY=
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = gw.example.ru:51820
+PersistentKeepalive = 25
