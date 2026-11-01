@@ -19,10 +19,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.io.File
@@ -149,7 +151,26 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, onPick: (Strin
 fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, onBack: () -> Unit) {
     val app = remember { Core.current() }
     var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
     var links by remember { mutableStateOf(emptyList<UserLink>()) }
+
+    val scope = rememberCoroutineScope()
+
+    // One action at a time: two applies over the same hosts would race, and a
+    // disabled button is the only feedback a call this long has.
+    fun act(block: suspend () -> String) {
+        if (busy) {
+            return
+        }
+
+        busy = true
+        status = "…"
+
+        scope.launch {
+            status = onIo(block)
+            busy = false
+        }
+    }
 
     LaunchedEffect(name) {
         links = withContext(Dispatchers.IO) {
@@ -168,9 +189,9 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
             }
         }
 
-        Button(onClick = { status = onIo { renewUser(app, name) } }) { Text("продлить 30 дней") }
-        Button(onClick = { status = onIo { disableUser(app, name) } }) { Text("выключить") }
-        Button(onClick = { status = onIo { pushState(app) } }) { Text("отправить в git") }
+        Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("продлить 30 дней") }
+        Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("выключить") }
+        Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("отправить в git") }
 
         if (status.isNotEmpty()) {
             Text(status, style = MaterialTheme.typography.bodySmall)
@@ -179,10 +200,12 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
 }
 
 /**
- * onIo runs a call that talks to git or the disk. Compose buttons run on the UI
- * thread, and Android kills the process on a network call there.
+ * onIo runs a call that talks to git or a host. Compose buttons run on the UI
+ * thread, and Android kills the process on a network call there. Suspending is
+ * the point: runBlocking would keep the frame blocked for the whole call, which
+ * is what put "Application Not Responding" on top of a twenty second apply.
  */
-fun onIo(block: () -> String): String = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+suspend fun onIo(block: suspend () -> String): String = withContext(Dispatchers.IO) {
     try {
         block()
     } catch (e: Exception) {
@@ -216,20 +239,57 @@ fun pushState(app: mobile.App?): String {
 fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
     val app = remember { Core.current() }
     var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
     var hosts by remember { mutableStateOf(emptyList<PlanHost>()) }
 
-    LaunchedEffect(Unit) {
+    val scope = rememberCoroutineScope()
+
+    suspend fun load() {
+        busy = true
+        status = "…"
         status = onIo {
             val json = app?.plan("") ?: return@onIo "нет состояния"
             hosts = parsePlan(json)
             "hosts: ${hosts.size}"
         }
+        busy = false
     }
+
+    // One action at a time, for the same reason as the user card: the agent and
+    // the hosts see a series of requests and a second apply would interleave.
+    fun act(block: suspend () -> String) {
+        if (busy) {
+            return
+        }
+
+        busy = true
+        status = "…"
+
+        scope.launch {
+            status = onIo(block)
+            busy = false
+        }
+    }
+
+    LaunchedEffect(Unit) { load() }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text("план", style = MaterialTheme.typography.headlineSmall)
         Button(onClick = onBack) { Text("назад") }
-        Button(onClick = { status = onIo { applyAll(app) } }) { Text("применить") }
+        Button(
+            onClick = {
+                act {
+                    val out = applyAll(app)
+                    // the hosts just changed: show what is left, not what was
+                    if (out == "применено") {
+                        load()
+                    }
+
+                    out
+                }
+            },
+            enabled = !busy,
+        ) { Text("применить") }
         Text(status, style = MaterialTheme.typography.bodySmall)
 
         LazyColumn {
