@@ -2,6 +2,7 @@
 package plan
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +22,9 @@ const (
 	Marker = "/etc/vpnctl/applied-commit"
 	// Bootstrap is the marker of a finished bootstrap.
 	Bootstrap = "/etc/vpnctl/bootstrap"
+	// Manifest holds the hash of every file the last apply wrote: drift is a
+	// difference against it, not against a re-render of an old commit.
+	Manifest = "/etc/vpnctl/applied.sha256"
 )
 
 // Status is the file state against the applied commit and the host.
@@ -107,8 +111,8 @@ func ProbeScript(paths []string) string {
 		quoted[i] = "'" + p + "'"
 	}
 	return fmt.Sprintf(
-		"cat %s 2>/dev/null || echo -; test -e %s && echo yes || echo no; for f in %s; do if [ -e \"$f\" ]; then printf '%%s %%s\\n' \"$(sha256sum \"$f\" | cut -d' ' -f1)\" \"$f\"; else printf 'missing %%s\\n' \"$f\"; fi; done",
-		Marker, Bootstrap, strings.Join(quoted, " "))
+		"cat %s 2>/dev/null || echo -; test -e %s && echo yes || echo no; if [ -s %s ]; then base64 -w0 %s; else echo -; fi; for f in %s; do if [ -e \"$f\" ]; then printf '%%s %%s\\n' \"$(sha256sum \"$f\" | cut -d' ' -f1)\" \"$f\"; else printf 'missing %%s\\n' \"$f\"; fi; done",
+		Marker, Bootstrap, Manifest, Manifest, strings.Join(quoted, " "))
 }
 
 // Probe is the parsed answer of one host.
@@ -117,8 +121,10 @@ type Probe struct {
 	HasMarker    bool
 	Unpushed     bool
 	Bootstrapped bool
-	Hashes       map[string]string
-	Missing      map[string]bool
+	// Manifest is what the last apply wrote: path to hash.
+	Manifest map[string]string
+	Hashes   map[string]string
+	Missing  map[string]bool
 }
 
 // ParseProbe reads the marker line, the bootstrap flag and the hashes.
@@ -135,7 +141,17 @@ func ParseProbe(out string) Probe {
 	if len(lines) > 1 && lines[1] == "yes" {
 		p.Bootstrapped = true
 	}
-	for _, l := range lines[2:] {
+	if len(lines) > 2 && lines[2] != "-" && lines[2] != "" {
+		if raw, err := base64.StdEncoding.DecodeString(lines[2]); err == nil {
+			p.Manifest = map[string]string{}
+			for _, l := range strings.Split(string(raw), "\n") {
+				if i := strings.IndexByte(l, ' '); i > 0 {
+					p.Manifest[l[i+1:]] = l[:i]
+				}
+			}
+		}
+	}
+	for _, l := range lines[3:] {
 		i := strings.IndexByte(l, ' ')
 		if i < 0 {
 			continue
@@ -322,7 +338,9 @@ func PlanWith(st *state.State, rendered render.Rendered, prober Prober) ([]HostP
 		hp.Marker = a.probe.Marker
 		hp.Unpushed = a.probe.Unpushed
 		var old map[string]string
-		if a.probe.HasMarker {
+		if len(a.probe.Manifest) > 0 {
+			old = a.probe.Manifest
+		} else if a.probe.HasMarker {
 			if f, err := RenderAt(st, a.probe.Marker, name); err == nil {
 				old = hashMap(f)
 			} else if errors.Is(err, ErrPreMigration) {
