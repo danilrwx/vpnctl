@@ -74,6 +74,48 @@ func UserRotate(dir, name string, nocommit bool) error {
 	return nil
 }
 
+// UserSetEnabled turns a user on or off without touching its credentials.
+func UserSetEnabled(dir, name string, on bool, nocommit bool) error {
+	st, err := state.Load(dir)
+	if err != nil {
+		return err
+	}
+	u, ok := st.Users[name]
+	if !ok {
+		return fmt.Errorf("user %q is not described", name)
+	}
+	u.Enabled = &on
+	st.Users[name] = u
+	msg := fmt.Sprintf("users: %s: disable", name)
+	if on {
+		msg = fmt.Sprintf("users: %s: enable", name)
+	}
+	if err := save(st, dir, msg, nocommit); err != nil {
+		return err
+	}
+	fmt.Printf("✓ %s\n", msg)
+	return nil
+}
+
+// UserEdit changes modes, protocols, the Telegram flag, the expiry date or the note.
+func UserEdit(dir, name string, modes, protocols []string, tg *bool, expires, note *string, nocommit bool) error {
+	st, err := state.Load(dir)
+	if err != nil {
+		return err
+	}
+	msg, err := ops.UserEdit(st, name, ops.UserPatch{
+		Modes: modes, Protocols: protocols, TG: tg, Expires: expires, Note: note,
+	})
+	if err != nil {
+		return err
+	}
+	if err := save(st, dir, msg, nocommit); err != nil {
+		return err
+	}
+	fmt.Printf("✓ %s\n", msg)
+	return nil
+}
+
 // UserList prints every user with its modes, protocols and flags.
 func UserList(dir string) error {
 	st, err := state.Load(dir)

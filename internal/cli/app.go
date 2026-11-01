@@ -398,6 +398,93 @@ func App() *ucli.Command {
 						},
 					},
 					{
+						Name:          "disable",
+						Usage:         "turn a user off without touching the credentials",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the user name is required")
+							}
+							return UserSetEnabled(c.String("dir"), name, false, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:          "enable",
+						Usage:         "turn a user back on",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the user name is required")
+							}
+							return UserSetEnabled(c.String("dir"), name, true, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:          "edit",
+						Usage:         "change modes, protocols, expiry or a note",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "modes", Usage: "split,full"},
+							&ucli.StringFlag{Name: "protos", Usage: "reality,ws,hy2"},
+							&ucli.StringFlag{Name: "expires", Usage: "YYYY-MM-DD, empty clears it"},
+							&ucli.StringFlag{Name: "note", Usage: "free text"},
+							&ucli.BoolFlag{Name: "tg", Usage: "the user gets the Telegram proxy"},
+							&ucli.BoolFlag{Name: "no-tg", Usage: "the user does not get it"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the user name is required")
+							}
+							var modes, protos []string
+							if c.IsSet("modes") {
+								modes = splitList(c.String("modes"))
+							}
+							if c.IsSet("protos") {
+								protos = splitList(c.String("protos"))
+							}
+							var tg *bool
+							switch {
+							case c.Bool("tg") && c.Bool("no-tg"):
+								return errors.New("either --tg or --no-tg, not both")
+							case c.Bool("tg"):
+								v := true
+								tg = &v
+							case c.Bool("no-tg"):
+								v := false
+								tg = &v
+							}
+							var expires, note *string
+							if c.IsSet("expires") {
+								v := c.String("expires")
+								expires = &v
+							}
+							if c.IsSet("note") {
+								v := c.String("note")
+								note = &v
+							}
+							return UserEdit(c.String("dir"), name, modes, protos, tg, expires, note, c.Bool("nocommit"))
+						},
+					},
+					{
 						Name:  "list",
 						Usage: "list users",
 						Flags: []ucli.Flag{dirFlag(), jsonFlag()},

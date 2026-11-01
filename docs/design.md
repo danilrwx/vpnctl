@@ -144,7 +144,12 @@ vpnctl apply [--host <h>] [--branch <b>] [--force]
 vpnctl user add <name> [--modes split,full] [--protos reality,ws,hy2,awg] [--tg] [--entry <host>] [--nocommit]
 vpnctl user rm <name> [--nocommit]
 vpnctl user list
-vpnctl user link <name>                      # ссылки и подписки
+vpnctl user edit <name> [--modes split,full] [--protos reality,ws] [--tg|--no-tg] [--expires YYYY-MM-DD] [--note <text>]
+vpnctl user disable|enable <name>             # выключить и включить, не трогая доступы
+vpnctl user rotate <name>                     # новые uuid, subId, пароли и пир
+vpnctl key backup --out <file>                # зашифрованная резервная идентичность
+vpnctl key restore <file>
+vpnctl user link <name>                       # ссылки и подписки
 vpnctl user message <name> [--format text|markdown] [--mode] [--lang ru|en] [--ip] [--no-links] [--no-tg]
 vpnctl user config <name> [--mode] [--format links|sub|singbox|clash] [--out <path>]
 vpnctl completion <shell>
@@ -157,7 +162,6 @@ vpnctl init [--remote <url>] [--fresh]     # скелет + age.yaml; --fresh п
 vpnctl key init|add|rm|list [name] [age1…]  # получатели secrets.age.yaml, перешифровка
 vpnctl host add|bootstrap|rm <name> [--ssh root@ip] [--via <host>]
 vpnctl user add … [--entries a,b] [--awg] [--wg] [--ovpn]   # --entries заменяет --entry
-vpnctl user edit|disable|rotate <name>
 vpnctl user link <name> [--qr] [--awg] [--wg] [--ovpn]
 vpnctl link add|set <from> <to> [--active awg] [--policy auto|fixed|rr]
 vpnctl exit set <host> [--prefer <link>] [--policy auto|fixed]
@@ -197,7 +201,7 @@ Rust-ядро больше не нужно: bootstrap перенесён, сна
 
 1. Агент на хостах: `plan`/`apply` по узкому протоколу, белый список путей, `host agent-install` ставит бинарь и запирает ключ на forced command. Сделано; остался режим `tick` для сроков и ротации.
 2. Приложение и CLI: экраны обзора, плана, применения, пользователей, устройств; ключи в Keystore, репозиторий через deploy key. Паритет операций приложения и CLI, `--json` у всех команд (раздел 16).
-3. Метрики и обслуживание: таймеры пробы и метрик хоста сделаны, история на входе (раздел 18). Осталось: трафик по пользователям, матрица топологии, `user rotate`, истечение срока.
+3. Метрики и обслуживание: таймеры пробы и метрик хоста сделаны, история на входе (раздел 18). Осталось: трафик по пользователям, матрица топологии, истечение срока.
 4. Остальной цикл: учёт трафика, обновление движков, вывод хоста (раздел 15).
 5. Несколько входов (раздел 2): `entries` у пользователя, профиль и подписка со всеми входами, общий домен подписки.
 6. Протоколы для роутеров и старых клиентов (раздел 2): `wg`, OpenVPN, trojan; конфиги, QR и `.ovpn` для пользователя.
