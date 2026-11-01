@@ -56,6 +56,19 @@ object Core {
         "no signer: ${e.message}"
     }
 
+    /**
+     * identityPEM is the whole public key, and it is also written to
+     * filesDir/identity.pub: the phone has to hand it to the host, and copying
+     * from a screen is the worst way to do that.
+     */
+    fun identityPEM(ctx: Context): String = try {
+        val key = signedBy()
+        File(ctx.filesDir, "identity.pub").writeText(key)
+        key
+    } catch (e: Exception) {
+        "no key: ${e.message}"
+    }
+
     /** signSelfTest signs a request with the Keystore key and verifies it. */
     fun signSelfTest(): String = try {
         Mobile.selfTest()

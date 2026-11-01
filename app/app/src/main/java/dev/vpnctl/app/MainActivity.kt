@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 
@@ -59,6 +62,7 @@ fun parseUsers(json: String): List<UserRow> = try {
 
 @Composable
 fun Users(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
     val app = Core.current()
     val users = remember(app) { app?.let { parseUsers(it.users()) } ?: emptyList() }
 
@@ -68,6 +72,14 @@ fun Users(modifier: Modifier = Modifier) {
             return@Column
         }
         Text("users: ${users.size}", style = MaterialTheme.typography.titleMedium)
+        // the key has to reach the host, so it is shown whole and selectable
+        SelectionContainer {
+            Text(
+                Core.identityPEM(ctx),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
         // the first proof that the Keystore key crosses into Go the way the
         // agent expects: a PKIX PEM inside the signature envelope
         Text(Core.signedBy().lineSequence().firstOrNull { it.isNotBlank() } ?: "", style = MaterialTheme.typography.bodySmall)
