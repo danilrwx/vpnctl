@@ -56,8 +56,10 @@ type HostPlan struct {
 	Unreachable  string
 	Bootstrapped bool
 	Marker       string
-	Files        []FileStatus
-	Notes        []string
+	// Unpushed marks a host applied from a commit that is not on the remote.
+	Unpushed bool
+	Files    []FileStatus
+	Notes    []string
 }
 
 // FileStatus is one path with its status.
@@ -113,6 +115,7 @@ func ProbeScript(paths []string) string {
 type Probe struct {
 	Marker       string
 	HasMarker    bool
+	Unpushed     bool
 	Bootstrapped bool
 	Hashes       map[string]string
 	Missing      map[string]bool
@@ -122,8 +125,12 @@ type Probe struct {
 func ParseProbe(out string) Probe {
 	p := Probe{Hashes: map[string]string{}, Missing: map[string]bool{}}
 	lines := strings.Split(out, "\n")
-	if len(lines) > 0 && lines[0] != "-" && lines[0] != "" {
-		p.Marker, p.HasMarker = lines[0], true
+	if len(lines) > 0 {
+		fields := strings.Fields(lines[0])
+		if len(fields) > 0 && fields[0] != "-" {
+			p.Marker, p.HasMarker = fields[0], true
+			p.Unpushed = len(fields) > 1 && fields[1] == "unpushed"
+		}
 	}
 	if len(lines) > 1 && lines[1] == "yes" {
 		p.Bootstrapped = true
@@ -288,6 +295,7 @@ func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
 		}
 		hp.Bootstrapped = a.probe.Bootstrapped
 		hp.Marker = a.probe.Marker
+		hp.Unpushed = a.probe.Unpushed
 		var old map[string]string
 		if a.probe.HasMarker {
 			if f, err := RenderAt(st, a.probe.Marker, name); err == nil {
@@ -316,6 +324,9 @@ func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
 			n, hasN := next[path]
 			h, hasH := a.probe.Hashes[path]
 			hp.Files = append(hp.Files, FileStatus{Path: path, Status: Classify(o, n, h, hasO, hasN, hasH)})
+		}
+		if a.probe.Unpushed {
+			hp.Notes = append(hp.Notes, "applied from an unpushed commit: push it so the other devices can render this marker")
 		}
 		if !a.probe.Bootstrapped {
 			hp.Notes = append(hp.Notes, "bootstrap not done: the host will be skipped")

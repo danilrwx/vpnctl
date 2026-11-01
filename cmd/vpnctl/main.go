@@ -153,9 +153,10 @@ func main() {
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
 					&ucli.StringFlag{Name: "branch", Usage: "apply from a branch other than main"},
 					&ucli.BoolFlag{Name: "force", Usage: "do not stop on a dead link or a missing certificate"},
+					&ucli.BoolFlag{Name: "unpushed", Usage: "apply a commit that is not on origin/main: only when the remote is unavailable"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
-					return cli.Apply(c.String("dir"), c.String("host"), c.String("branch"), c.Bool("force"))
+					return cli.Apply(c.String("dir"), c.String("host"), c.String("branch"), c.Bool("force"), c.Bool("unpushed"))
 				},
 			},
 			{

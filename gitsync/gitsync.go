@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -30,11 +31,27 @@ func Init(dir string) (*Repo, error) {
 	if r, err := git.PlainOpen(dir); err == nil {
 		return &Repo{r: r}, nil
 	}
-	r, err := git.PlainInit(dir, false)
+	// main, not the go-git default master: apply refuses anything else
+	r, err := git.PlainInitWithOptions(dir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("init repo: %w", err)
 	}
 	return &Repo{r: r}, nil
+}
+
+// AddRemote registers origin, replacing an existing one.
+func (r *Repo) AddRemote(url string) error {
+	if _, err := r.r.Remote("origin"); err == nil {
+		if err := r.r.DeleteRemote("origin"); err != nil {
+			return fmt.Errorf("delete remote: %w", err)
+		}
+	}
+	if _, err := r.r.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{url}}); err != nil {
+		return fmt.Errorf("add remote: %w", err)
+	}
+	return nil
 }
 
 // Commit stages every change and commits it with msg.
@@ -154,4 +171,47 @@ func (r *Repo) FilesAt(rev string) (map[string][]byte, error) {
 		return nil, fmt.Errorf("walk %s: %w", rev, err)
 	}
 	return files, nil
+}
+
+// Fetch updates the remote-tracking refs from origin.
+func (r *Repo) Fetch() error {
+	if err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin"}); err != nil && err != git.NoErrAlreadyUpToDate {
+		return fmt.Errorf("fetch: %w", err)
+	}
+	return nil
+}
+
+// OriginMain is the short hash of origin/main.
+func (r *Repo) OriginMain() (string, error) {
+	h, err := r.r.Reference(plumbing.NewRemoteReferenceName("origin", "main"), true)
+	if err != nil {
+		return "", fmt.Errorf("origin/main: %w", err)
+	}
+	return h.Hash().String()[:7], nil
+}
+
+// IsAncestor reports whether anc is reachable from desc: the host applied a
+// state that this device still has in its history.
+func (r *Repo) IsAncestor(anc, desc string) (bool, error) {
+	a, err := r.commitOf(anc)
+	if err != nil {
+		return false, err
+	}
+	d, err := r.commitOf(desc)
+	if err != nil {
+		return false, err
+	}
+	return a.IsAncestor(d)
+}
+
+func (r *Repo) commitOf(rev string) (*object.Commit, error) {
+	hash, err := r.r.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", rev, err)
+	}
+	c, err := r.r.CommitObject(*hash)
+	if err != nil {
+		return nil, fmt.Errorf("commit %s: %w", rev, err)
+	}
+	return c, nil
 }
