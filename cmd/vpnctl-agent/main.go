@@ -26,6 +26,14 @@ const (
 )
 
 func main() {
+	// a timer runs `vpnctl-agent tick`: report the accounts that expired today
+	if len(os.Args) > 1 && os.Args[1] == "tick" {
+		if err := agent.RunTick("/etc/vpnctl/expiry", time.Now()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(os.Stdin, maxRequest))
 	if err != nil {
 		write(agent.Response{V: agent.Version, Code: "io", Error: err.Error()})

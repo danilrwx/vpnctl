@@ -167,6 +167,7 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 				}
 			}
 		}
+		f["/etc/vpnctl/expiry"] = expiryFile(st, name)
 		// the chain probe runs on the entry: it is the only host that sees the
 		// whole path, and the only one that should alert
 		f["/etc/vpnctl/probe.sh"] = probeScript(st, name)

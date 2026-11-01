@@ -1,0 +1,5 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · account expiry, read by vpnctl-agent tick
