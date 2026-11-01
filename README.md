@@ -1,0 +1,85 @@
+# vpnctl
+
+[![ci](https://github.com/danilrwx/vpnctl/actions/workflows/ci.yml/badge.svg)](https://github.com/danilrwx/vpnctl/actions/workflows/ci.yml)
+[![go](https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+Personal VPN infrastructure as a git repository. Hosts, links, users and routing
+are files; the hosts run exactly what the repository says; a phone can be the
+primary device that changes them.
+
+```
+   phone / laptop                entry (RU)                     exits (abroad)
+   ──────────────                ──────────                     ──────────────
+   edit state ──► git ──► plan ──► apply ──► agent ──► files ──► reload
+                                   │                               ▲
+                                   └──── hysteria2 / reality ──────┘
+```
+
+## What it does
+
+- **State is the truth.** `hosts.yaml`, `links.yaml`, `users.yaml`, routing and
+  sets describe everything. Secrets live in one `secrets.age.yaml`, encrypted for
+  every device you own plus an offline backup identity.
+- **Render is deterministic.** Two runs produce identical bytes, and golden files
+  from the original Rust core keep the renderer honest.
+- **Apply is guarded.** Only a clean, pushed state is applied, only forward, with
+  config checks before the swap, a chain probe after it, and a rollback when the
+  probe fails.
+- **The host is narrow.** `vpnctl-agent` takes one signed request, writes only
+  under `/etc/` and `/var/www/sub/`, and can do nothing else.
+- **Handing out access is one command.** `vpnctl user message olga -lang ru`
+  prints a ready-to-forward text; `user config` gives the same bytes the
+  subscription endpoint serves.
+
+## Quick start
+
+```bash
+go build -o ~/.local/bin/vpnctl ./cmd/vpnctl
+go build -o ~/.local/bin/vpnctl-agent ./cmd/vpnctl-agent
+
+vpnctl init -dir ./state --name laptop --backup-pass '…'   # skeleton + age.yaml
+vpnctl key add phone age1…                                  # a second device
+vpnctl host add edge --role exit --ssh root@203.0.113.10
+vpnctl host bootstrap edge                                  # packages and engines
+vpnctl plan  -dir ./state                                   # what differs
+vpnctl apply -dir ./state                                   # install it
+```
+
+## Commands
+
+| command | what it does |
+|---|---|
+`init` | a state from zero: skeleton, `age.yaml`, the first commit |
+`key add\|rm\|list` | who can read the secrets, re-encrypted on every change |
+`check` | static validation, the same rules `apply` enforces |
+`render` | the config tree, byte for byte |
+`plan` | diff, drift, unreachable hosts, with `--diff` and `--adopt` |
+`apply` | install, leaves first, with probe and rollback |
+`host add\|bootstrap\|rm` | the node lifecycle |
+`host agent-install` | put the agent on a host, restrict the key to it |
+`user add\|rm\|rotate\|list` | accounts and credentials |
+`user link\|message\|config` | what the person actually receives |
+`metrics` | the host history the entry collects |
+`versions pin` | sha256 of every pinned release |
+
+Every command accepts `--json`; a guard refusal exits `3`, a bad flag exits `2`.
+
+## Layout
+
+```
+cmd/vpnctl          the CLI
+cmd/vpnctl-agent    the narrow executor installed on a host
+internal/           state, render, validate, plan, apply, agent, bootstrap,
+                    ops, cli, gitsync, remote, ageio
+mobile/             gomobile API for the Android app
+testdata/           the fixture and the golden snapshots
+docs/design.md      the design, the decisions and the trade-offs
+```
+
+Nothing outside the module can import `internal/`; `mobile` stays public because
+`gomobile bind` generates code that imports it.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
