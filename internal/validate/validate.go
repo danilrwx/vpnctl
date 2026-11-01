@@ -302,6 +302,11 @@ func State(st *state.State) []string {
 		if len(u.Modes) == 0 {
 			err("user «%s»: no modes", name)
 		}
+		for _, m := range u.Modes {
+			if m != "split" && m != "full" {
+				err("user «%s»: mode «%s» is neither split nor full", name, m)
+			}
+		}
 		if len(u.Protocols) == 0 {
 			err("user «%s»: no protocols", name)
 		}

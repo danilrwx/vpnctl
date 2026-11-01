@@ -129,6 +129,15 @@ func TestCases(t *testing.T) {
 			want: "an awg peer is described but the awg protocol is not set",
 		},
 		{
+			name: "a mode nobody renders",
+			mutate: func(st *state.State) {
+				u := st.Users["olga"]
+				u.Modes = append(u.Modes, "weird")
+				st.Users["olga"] = u
+			},
+			want: "mode «weird» is neither split nor full",
+		},
+		{
 			name: "a user without secrets",
 			mutate: func(st *state.State) {
 				delete(st.Secrets.Users, "olga")
