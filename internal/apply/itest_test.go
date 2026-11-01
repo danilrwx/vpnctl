@@ -99,7 +99,7 @@ func (h *fakeHost) serve(conn net.Conn, cfg *ssh.ServerConfig) {
 			continue
 		}
 		go func() {
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 			for r := range creqs {
 				if r.Type != "exec" {
 					_ = r.Reply(false, nil)
