@@ -20,6 +20,10 @@ func dirFlag() ucli.Flag {
 	return &ucli.StringFlag{Name: "dir", Aliases: []string{"C"}, Value: ".", Usage: "state directory"}
 }
 
+func jsonFlag() ucli.Flag {
+	return &ucli.BoolFlag{Name: "json", Usage: "machine-readable output"}
+}
+
 func main() {
 	app := &ucli.Command{
 		Name:                  "vpnctl",
@@ -32,12 +36,13 @@ func main() {
 				Name:  "init",
 				Usage: "create a state: skeleton, age.yaml and the first commit",
 				Flags: []ucli.Flag{
-					dirFlag(),
+					dirFlag(), jsonFlag(),
 					&ucli.StringFlag{Name: "name", Usage: "device name in age.yaml, default: hostname"},
 					&ucli.StringFlag{Name: "backup-pass", Usage: "create the offline backup identity sealed with this passphrase"},
 					&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
+					cli.SetJSON(c.Bool("json"))
 					return cli.Init(c.String("dir"), c.String("name"), c.String("backup-pass"), c.Bool("nocommit"))
 				},
 			},
@@ -50,10 +55,11 @@ func main() {
 						Usage:     "write age.yaml from the local identity",
 						ArgsUsage: "<name>",
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the device name is required")
@@ -66,10 +72,11 @@ func main() {
 						Usage:     "add a device: re-encrypts the secrets for everyone",
 						ArgsUsage: "<name> <age1…>",
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().Get(0)
 							key := c.Args().Get(1)
 							if name == "" || key == "" {
@@ -83,10 +90,11 @@ func main() {
 						Usage:     "drop a device: re-encrypts the secrets for the rest",
 						ArgsUsage: "<name>",
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the device name is required")
@@ -97,8 +105,9 @@ func main() {
 					{
 						Name:  "list",
 						Usage: "list recipients, * marks this device",
-						Flags: []ucli.Flag{dirFlag()},
+						Flags: []ucli.Flag{dirFlag(), jsonFlag()},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							return cli.KeyList(c.String("dir"))
 						},
 					},
@@ -109,11 +118,12 @@ func main() {
 				Aliases: []string{"validate"},
 				Usage:   "validate the state statically",
 				Flags: []ucli.Flag{
-					dirFlag(),
+					dirFlag(), jsonFlag(),
 					&ucli.BoolFlag{Name: "stub", Usage: "secret stubs instead of the age key"},
 					&ucli.BoolFlag{Name: "warnings", Usage: "print warnings too"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
+					cli.SetJSON(c.Bool("json"))
 					return cli.Check(c.String("dir"), c.Bool("stub"), c.Bool("warnings"))
 				},
 			},
@@ -121,12 +131,13 @@ func main() {
 				Name:  "render",
 				Usage: "write the config tree of the state",
 				Flags: []ucli.Flag{
-					dirFlag(),
+					dirFlag(), jsonFlag(),
 					&ucli.StringFlag{Name: "out", Usage: "output directory"},
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
 					&ucli.BoolFlag{Name: "stub", Usage: "secret stubs instead of the age key"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
+					cli.SetJSON(c.Bool("json"))
 					return cli.Render(c.String("dir"), c.String("out"), c.String("host"), c.Bool("stub"))
 				},
 			},
@@ -135,12 +146,13 @@ func main() {
 				Usage:         "what will change on the hosts: diff, drift, unreachable",
 				ShellComplete: completeHosts,
 				Flags: []ucli.Flag{
-					dirFlag(),
+					dirFlag(), jsonFlag(),
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
 					&ucli.StringFlag{Name: "diff", Usage: "show a file diff: host:/path"},
 					&ucli.StringFlag{Name: "adopt", Usage: "take a file from a host into overrides/: host:/path"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
+					cli.SetJSON(c.Bool("json"))
 					return cli.Plan(c.String("dir"), c.String("host"), c.String("diff"), c.String("adopt"))
 				},
 			},
@@ -149,13 +161,14 @@ func main() {
 				Usage:         "apply the state on the hosts, leaves first",
 				ShellComplete: completeHosts,
 				Flags: []ucli.Flag{
-					dirFlag(),
+					dirFlag(), jsonFlag(),
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
 					&ucli.StringFlag{Name: "branch", Usage: "apply from a branch other than main"},
 					&ucli.BoolFlag{Name: "force", Usage: "do not stop on a dead link or a missing certificate"},
 					&ucli.BoolFlag{Name: "unpushed", Usage: "apply a commit that is not on origin/main: only when the remote is unavailable"},
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
+					cli.SetJSON(c.Bool("json"))
 					return cli.Apply(c.String("dir"), c.String("host"), c.String("branch"), c.Bool("force"), c.Bool("unpushed"))
 				},
 			},
@@ -168,7 +181,7 @@ func main() {
 						Usage:     "create a host with its inbound, keys and routing",
 						ArgsUsage: "<name>",
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "role", Value: "exit", Usage: "entry or exit"},
 							&ucli.StringFlag{Name: "ssh", Usage: "root@ip"},
 							&ucli.StringFlag{Name: "ip", Usage: "address, inferred from --ssh when omitted"},
@@ -179,6 +192,7 @@ func main() {
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							return cli.HostAdd(c.String("dir"), ops.HostOptions{
 								Name:   c.Args().First(),
 								Role:   c.String("role"),
@@ -196,11 +210,12 @@ func main() {
 						Usage:     "install packages, engines and units on a host, idempotent",
 						ArgsUsage: "<name>",
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "ssh", Usage: "user@host to record when the state has none"},
 							&ucli.BoolFlag{Name: "print", Usage: "print the script instead of running it"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							return cli.HostBootstrap(c.String("dir"), c.Args().First(), c.String("ssh"), c.Bool("print"), os.Stdout)
 						},
 					},
@@ -215,7 +230,7 @@ func main() {
 						Usage:     "create a user with fresh secrets",
 						ArgsUsage: "<name>",
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "modes", Value: "split", Usage: "split,full"},
 							&ucli.StringFlag{Name: "protos", Value: "reality,ws", Usage: "reality,ws,hy2,awg"},
 							&ucli.BoolFlag{Name: "tg", Usage: "the user gets the Telegram proxy"},
@@ -223,6 +238,7 @@ func main() {
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the user name is required")
@@ -238,10 +254,11 @@ func main() {
 						ArgsUsage:     "<name>",
 						ShellComplete: completeUsers,
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the user name is required")
@@ -252,8 +269,9 @@ func main() {
 					{
 						Name:  "list",
 						Usage: "list users",
-						Flags: []ucli.Flag{dirFlag()},
+						Flags: []ucli.Flag{dirFlag(), jsonFlag()},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							return cli.UserList(c.String("dir"))
 						},
 					},
@@ -264,6 +282,7 @@ func main() {
 						ShellComplete: completeUsers,
 						Flags:         []ucli.Flag{dirFlag()},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the user name is required")
@@ -278,7 +297,7 @@ func main() {
 						ArgsUsage:     "<name>",
 						ShellComplete: completeUsers,
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "format", Value: "text", Usage: "text or markdown"},
 							&ucli.StringFlag{Name: "mode", Usage: "split or full, default: every mode"},
 							&ucli.StringFlag{Name: "lang", Usage: "ru or en, default: the system locale"},
@@ -287,6 +306,7 @@ func main() {
 							&ucli.BoolFlag{Name: "no-tg", Usage: "omit the Telegram proxy block"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the user name is required")
@@ -309,12 +329,13 @@ func main() {
 						ArgsUsage:     "<name>",
 						ShellComplete: completeUsers,
 						Flags: []ucli.Flag{
-							dirFlag(),
+							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "mode", Usage: "split or full, default: all user modes"},
 							&ucli.StringFlag{Name: "format", Value: "links", Usage: "links, sub, singbox or clash"},
 							&ucli.StringFlag{Name: "out", Aliases: []string{"o"}, Usage: "write to a file or a directory instead of stdout"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
 								return errors.New("the user name is required")
@@ -327,10 +348,13 @@ func main() {
 		},
 	}
 	if err := app.Run(context.Background(), os.Args); err != nil {
+		cli.ReportError(err)
 		if !errors.Is(err, cli.ErrSilent) {
-			fmt.Fprintln(os.Stderr, "Error:", err)
+			if !cli.JSON() {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+			}
 		}
-		os.Exit(1)
+		os.Exit(cli.ExitCode(err))
 	}
 }
 

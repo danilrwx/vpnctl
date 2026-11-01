@@ -63,16 +63,29 @@ func UserList(dir string) error {
 	if err != nil {
 		return err
 	}
+	type row struct {
+		Name      string   `json:"name"`
+		Enabled   bool     `json:"enabled"`
+		Modes     []string `json:"modes"`
+		Protocols []string `json:"protocols"`
+		TG        bool     `json:"tg"`
+		AWG       bool     `json:"awg"`
+	}
+	rows := []row{}
 	for _, n := range ops.SortedUsers(st) {
 		u := st.Users[n]
-		status := "on"
-		if !u.IsEnabled() {
-			status = "off"
-		}
-		fmt.Printf("%-14s %-4s modes=%-12s protos=%-22s tg=%v awg=%v\n",
-			n, status, strings.Join(u.Modes, ","), strings.Join(u.Protocols, ","), u.TG, u.AWG != nil)
+		rows = append(rows, row{Name: n, Enabled: u.IsEnabled(), Modes: u.Modes, Protocols: u.Protocols, TG: u.TG, AWG: u.AWG != nil})
 	}
-	return nil
+	return emit(rows, func() {
+		for _, r := range rows {
+			status := "on"
+			if !r.Enabled {
+				status = "off"
+			}
+			fmt.Printf("%-14s %-4s modes=%-12s protos=%-22s tg=%v awg=%v\n",
+				r.Name, status, strings.Join(r.Modes, ","), strings.Join(r.Protocols, ","), r.TG, r.AWG)
+		}
+	})
 }
 
 // UserLink prints the subscription URL, the direct links and the Telegram proxy.

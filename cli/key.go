@@ -33,6 +33,14 @@ func Init(dir, name, backupPass string, nocommit bool) error {
 			return err
 		}
 	}
+	if jsonOut {
+		_ = emit(struct {
+			Dir       string `json:"dir"`
+			Recipient string `json:"recipient"`
+			Backup    string `json:"backup,omitempty"`
+		}{dir, res.Recipient, res.BackupBlob}, func() {})
+		return nil
+	}
 	fmt.Printf("✓ state in %s\n", dir)
 	fmt.Printf("  recipient  %s\n", res.Recipient)
 	if res.BackupBlob != "" {
@@ -108,14 +116,15 @@ func KeyList(dir string) error {
 	if err != nil {
 		return err
 	}
-	for _, k := range keys {
-		mark := " "
-		if k.This {
-			mark = "*"
+	return emit(keys, func() {
+		for _, k := range keys {
+			mark := " "
+			if k.This {
+				mark = "*"
+			}
+			fmt.Printf("%s %-10s %s\n", mark, k.Name, k.Key)
 		}
-		fmt.Printf("%s %-10s %s\n", mark, k.Name, k.Key)
-	}
-	return nil
+	})
 }
 
 func plural(n int, word string) string {
