@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danilrwx/vpnctl-go/internal/hostscript"
 	"github.com/danilrwx/vpnctl-go/internal/plan"
 	"github.com/danilrwx/vpnctl-go/internal/render"
 )
@@ -91,7 +92,7 @@ func TestInstallScriptOrder(t *testing.T) {
 		{Path: "/etc/caddy/Caddyfile", Status: plan.New},
 		{Path: "/etc/sing-box/rules/old.json", Status: plan.Removed},
 	}}
-	s := InstallScript(hp, "/var/lib/vpnctl/backup/abc")
+	s := hostscript.InstallScript(hp, "/var/lib/vpnctl/backup/abc")
 	order := []string{
 		"systemctl daemon-reload",
 		"sysctl --system",
@@ -138,27 +139,27 @@ func TestServiceFor(t *testing.T) {
 		"/etc/systemd/system/mtg.service":  "systemd",
 	}
 	for path, want := range cases {
-		got, ok := ServiceFor(path)
+		got, ok := hostscript.ServiceFor(path)
 		if !ok || got != want {
 			t.Errorf("%s: %q %v", path, got, ok)
 		}
 	}
-	if _, ok := ServiceFor("/var/www/sub/x/split"); ok {
+	if _, ok := hostscript.ServiceFor("/var/www/sub/x/split"); ok {
 		t.Error("a subscription file must not map to a service")
 	}
 }
 
 func TestCheckCmd(t *testing.T) {
-	if c, ok := CheckCmd("sing-box", "/etc/sing-box/config.json"); !ok || !strings.Contains(c, "sing-box check") {
+	if c, ok := hostscript.CheckCmd("sing-box", "/etc/sing-box/config.json"); !ok || !strings.Contains(c, "sing-box check") {
 		t.Fatalf("%q %v", c, ok)
 	}
-	if c, ok := CheckCmd("xray", "/etc/xray/config.json"); !ok || !strings.Contains(c, "xray run -test") {
+	if c, ok := hostscript.CheckCmd("xray", "/etc/xray/config.json"); !ok || !strings.Contains(c, "xray run -test") {
 		t.Fatalf("%q %v", c, ok)
 	}
-	if _, ok := CheckCmd("xray", "/etc/sing-box/config.json"); ok {
+	if _, ok := hostscript.CheckCmd("xray", "/etc/sing-box/config.json"); ok {
 		t.Fatal("sing-box config must not be checked with xray")
 	}
-	if _, ok := CheckCmd("sing-box", "/var/www/sub/x/split"); ok {
+	if _, ok := hostscript.CheckCmd("sing-box", "/var/www/sub/x/split"); ok {
 		t.Fatal("no check for subscriptions")
 	}
 }
@@ -169,7 +170,7 @@ func TestInstallScriptEnablesTheProbeTimer(t *testing.T) {
 		{Path: "/etc/systemd/system/vpnctl-probe.timer", Status: plan.New},
 		{Path: "/etc/vpnctl/probe.sh", Status: plan.New},
 	}}
-	s := InstallScript(hp, "/var/lib/vpnctl/backup/abc")
+	s := hostscript.InstallScript(hp, "/var/lib/vpnctl/backup/abc")
 	if !strings.Contains(s, "systemctl enable -q vpnctl-probe.timer") {
 		t.Errorf("the timer is not enabled:\n%s", s)
 	}

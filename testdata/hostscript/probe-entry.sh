@@ -1,0 +1,1 @@
+curl -sS -o /dev/null -w '%{http_code}' --max-time 10 --socks5-hostname 127.0.0.1:1080 https://www.gstatic.com/generate_204

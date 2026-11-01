@@ -1,0 +1,1 @@
+systemctl is-active --quiet sing-box 2>/dev/null || systemctl is-active --quiet xray 2>/dev/null || exit 1; curl -sS -o /dev/null -w '%{http_code}' --max-time 10 https://www.gstatic.com/generate_204

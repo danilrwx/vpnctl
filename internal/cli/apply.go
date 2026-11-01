@@ -7,6 +7,7 @@ import (
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
 	"github.com/danilrwx/vpnctl-go/internal/apply"
+	"github.com/danilrwx/vpnctl-go/internal/hostscript"
 	"github.com/danilrwx/vpnctl-go/internal/remote"
 	"github.com/danilrwx/vpnctl-go/internal/render"
 	"github.com/danilrwx/vpnctl-go/internal/state"
@@ -47,7 +48,7 @@ func agentApply(c *remote.Client, host, commit string, files render.HostFiles) (
 	if err != nil {
 		return apply.HostResult{}, err
 	}
-	list, err := agent.FilesFromTree(files, apply.ModeForInt)
+	list, err := agent.FilesFromTree(files, hostscript.ModeForInt)
 	if err != nil {
 		return apply.HostResult{}, err
 	}

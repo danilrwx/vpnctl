@@ -14,7 +14,7 @@ import (
 // loadFixture reads the shared state with the plain-text fixture secrets.
 func loadFixture(t *testing.T) *state.State {
 	t.Helper()
-	dir := filepath.Join("..", "testdata", "basic")
+	dir := filepath.Join("..", "..", "testdata", "basic")
 	st, err := state.Load(dir)
 	if err != nil {
 		t.Fatalf("load fixture: %v", err)

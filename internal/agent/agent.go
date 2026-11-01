@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danilrwx/vpnctl-go/internal/apply"
+	"github.com/danilrwx/vpnctl-go/internal/hostscript"
 	"github.com/danilrwx/vpnctl-go/internal/plan"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -294,7 +294,7 @@ func Apply(r *Request, root string, out func(string)) Response {
 		if f.Status == plan.Unchanged {
 			continue
 		}
-		cmd, ok := apply.CheckCmd(engine, f.Path)
+		cmd, ok := hostscript.CheckCmd(engine, f.Path)
 		if !ok {
 			continue
 		}
@@ -305,18 +305,18 @@ func Apply(r *Request, root string, out func(string)) Response {
 		out("check ok: " + f.Path)
 	}
 	backup := filepath.Join(root, "backup", r.Commit)
-	if err := runSh(apply.InstallScript(hp, backup)); err != nil {
+	if err := runSh(hostscript.InstallScript(hp, backup)); err != nil {
 		out("swap failed, rolling back")
-		_ = runSh(apply.RollbackScript(hp, backup))
+		_ = runSh(hostscript.RollbackScript(hp, backup))
 		res.RolledBack = true
 		return fail(res, "io", err)
 	}
 	out("swapped")
-	probe := apply.ProbeScript(roleOf(role))
+	probe := hostscript.ProbeScript(roleOf(role))
 	code, err := outputSh(probe)
 	if err != nil || strings.TrimSpace(code) != "204" {
 		out("probe failed: " + strings.TrimSpace(code))
-		_ = runSh(apply.RollbackScript(hp, backup))
+		_ = runSh(hostscript.RollbackScript(hp, backup))
 		res.RolledBack = true
 		r2 := fail(res, "probe", fmt.Errorf("probe returned %q", strings.TrimSpace(code)))
 		return r2
