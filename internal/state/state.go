@@ -23,12 +23,14 @@ const (
 )
 
 type Host struct {
-	Role     Role   `yaml:"role"`
-	Engine   string `yaml:"engine"`
-	IP       string `yaml:"ip"`
-	Domain   string `yaml:"domain,omitempty"`
-	OS       string `yaml:"os,omitempty"`
-	SSH      string `yaml:"ssh"`
+	Role   Role   `yaml:"role"`
+	Engine string `yaml:"engine"`
+	IP     string `yaml:"ip"`
+	Domain string `yaml:"domain,omitempty"`
+	OS     string `yaml:"os,omitempty"`
+	SSH    string `yaml:"ssh"`
+	// SSHPort overrides 22, for hosts with a non-standard sshd.
+	SSHPort  int    `yaml:"ssh_port,omitempty"`
 	HostKey  string `yaml:"host_key,omitempty"`
 	Via      string `yaml:"via,omitempty"`
 	Retiring bool   `yaml:"retiring,omitempty"`

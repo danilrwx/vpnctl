@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -351,7 +352,11 @@ func address(h state.Host) (string, error) {
 	if h.IP == "" {
 		return "", fmt.Errorf("host %s has no ip", h.SSH)
 	}
-	return net.JoinHostPort(h.IP, sshPort), nil
+	port := sshPort
+	if h.SSHPort != 0 {
+		port = strconv.Itoa(h.SSHPort)
+	}
+	return net.JoinHostPort(h.IP, port), nil
 }
 
 // user is `user@host` from the ssh field, root when absent.
