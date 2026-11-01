@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -204,6 +205,22 @@ func (c *Client) Run(script string, stdin []byte) (Result, error) {
 		return res, fmt.Errorf("%s: %w", c.Name, err)
 	}
 	return res, nil
+}
+
+// Stream runs the script with stdin and passes the output through, for long
+// jobs like bootstrap where the operator wants to watch.
+func (c *Client) Stream(script string, stdin []byte, out io.Writer) error {
+	sess, err := c.conn.NewSession()
+	if err != nil {
+		return fmt.Errorf("%s: session: %w", c.Name, err)
+	}
+	defer sess.Close()
+	sess.Stdout = out
+	sess.Stderr = out
+	if stdin != nil {
+		sess.Stdin = bytes.NewReader(stdin)
+	}
+	return sess.Run(script)
 }
 
 // SH runs the script and treats a non-zero status as an error.

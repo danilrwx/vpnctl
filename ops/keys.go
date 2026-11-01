@@ -183,14 +183,23 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 		"links.yaml":     "links: []\n",
 		"users.yaml":     "users: {}\n",
 		"protocols.yaml": "inbounds: {}\n",
-		"versions.yaml": "sing-box: 1.12.4\nxray: 25.9.11\ngeodata: latest\n" +
-			"caddy: 2.10.0\nmtg: 2.1.7\nawg: 1.0.20250706\n",
-		".gitignore": "/out\n/metrics.sqlite\n",
+		".gitignore":     "/out\n/metrics.sqlite\n",
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			return InitResult{}, err
 		}
+	}
+	versions := map[string]state.Pin{
+		"sing-box": {Version: "1.12.4"},
+		"xray":     {Version: "25.9.11"},
+		"geodata":  {Version: "latest"},
+		"caddy":    {Version: "2.10.0"},
+		"mtg":      {Version: "2.1.7"},
+		"awg":      {Version: "1.0.20250706"},
+	}
+	if err := state.SaveVersions(dir, versions); err != nil {
+		return InitResult{}, err
 	}
 	defaults := map[string]string{
 		"sets/ru-direct.yaml": "geosite:\n- category-ru\n- yandex\n- vk\ndomains:\n- gosuslugi.ru\n",

@@ -272,6 +272,12 @@ type Secrets struct {
 	Links map[string]LinkSecrets `yaml:"links"`
 }
 
+// Pin is a pinned component version from versions.yaml.
+type Pin struct {
+	Version string `yaml:"version"`
+	SHA256  string `yaml:"sha256,omitempty"`
+}
+
 type State struct {
 	Dir       string
 	Hosts     map[string]Host
@@ -280,6 +286,7 @@ type State struct {
 	Inbounds  map[string]map[string]Inbound
 	Routing   map[string]Routing
 	Sets      map[string]Set
+	Versions  map[string]Pin
 	Secrets   Secrets
 	Encrypted bool
 }
@@ -306,6 +313,7 @@ func Load(dir string) (*State, error) {
 		Inbounds: map[string]map[string]Inbound{},
 		Routing:  map[string]Routing{},
 		Sets:     map[string]Set{},
+		Versions: map[string]Pin{},
 	}
 	var hosts struct {
 		Hosts map[string]Host `yaml:"hosts"`
@@ -346,6 +354,12 @@ func Load(dir string) (*State, error) {
 			return nil, err
 		}
 		st.Routing[name] = r
+	}
+
+	if b, err := os.ReadFile(filepath.Join(dir, "versions.yaml")); err == nil {
+		if err := yaml.Unmarshal(b, &st.Versions); err != nil {
+			return nil, fmt.Errorf("parse versions.yaml: %w", err)
+		}
 	}
 
 	entries, err := os.ReadDir(filepath.Join(dir, "sets"))
@@ -509,6 +523,15 @@ func KeyPath() string {
 // FillStubSecrets replaces the secrets with deterministic stubs: render and validate
 // in CI without the age key. Mirrors `vpnctl --stub-secrets`.
 func (s *State) FillStubSecrets() {
+	if s.Secrets.Hosts == nil {
+		s.Secrets.Hosts = map[string]HostSecrets{}
+	}
+	if s.Secrets.Users == nil {
+		s.Secrets.Users = map[string]UserSecrets{}
+	}
+	if s.Secrets.Links == nil {
+		s.Secrets.Links = map[string]LinkSecrets{}
+	}
 	stub := func(what string) string { return "STUB-" + what }
 	for n, u := range s.Users {
 		sec := s.Secrets.Users[n]
