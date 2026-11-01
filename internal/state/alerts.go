@@ -35,6 +35,16 @@ func CheckNtfy(raw string) (string, error) {
 	return strings.TrimRight(raw, "/"), nil
 }
 
+// NtfyName is the public name of an entry that serves its own notifications:
+// ntfy.<domain>. Empty when the host has no domain.
+func (st *State) NtfyName(host string) string {
+	h, ok := st.Hosts[host]
+	if !ok || h.Domain == "" {
+		return ""
+	}
+	return "ntfy." + h.Domain
+}
+
 // SaveAlerts writes alerts.yaml, or removes it when the topic is empty: a file
 // that says nothing is noise in the history.
 func SaveAlerts(dir string, a Alerts) error {
@@ -45,7 +55,13 @@ func SaveAlerts(dir string, a Alerts) error {
 		}
 		return nil
 	}
-	b, err := marshal(map[string]any{"ntfy": a.Ntfy})
+	b, err := marshal(func() map[string]any {
+		m := map[string]any{"ntfy": a.Ntfy}
+		if a.Serve != "" {
+			m["serve"] = a.Serve
+		}
+		return m
+	}())
 	if err != nil {
 		return fmt.Errorf("marshal alerts: %w", err)
 	}

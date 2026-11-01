@@ -156,3 +156,33 @@ func TestRebootDays(t *testing.T) {
 }
 
 var _ = render.EngineConfigPath
+
+// TestScriptNtfy: the notification server is installed only on the host that
+// alerts.yaml names, and the pin comes from versions.yaml like every other
+// component.
+func TestScriptNtfy(t *testing.T) {
+	st := fixtureState(t, state.Entry, "", false)
+	st.Versions["ntfy"] = state.Pin{Version: "2.36.0", SHA256: strings.Repeat("a", 64)}
+	st.Alerts = state.Alerts{Ntfy: "https://ntfy.vpn.example/topic", Serve: "node"}
+	s, err := Script(st, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"ntfy_2.36.0_linux_amd64.tar.gz",
+		"install -m 0755 /var/lib/vpnctl/dl/ntfy_2.36.0_linux_amd64/ntfy /usr/local/bin/ntfy",
+		"ntfy.service",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the bootstrap script lacks %q", want)
+		}
+	}
+	plain := fixtureState(t, state.Entry, "", false)
+	s, err = Script(plain, "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(s, "ntfy_") {
+		t.Error("a host without a topic installs the server anyway")
+	}
+}

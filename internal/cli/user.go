@@ -324,19 +324,26 @@ func isDir(p string) bool {
 	return err == nil && st.IsDir()
 }
 
+// checkState prints every validation error and keeps the worktree clean: a
+// rejected change is never written.
+func checkState(st *state.State) error {
+	errs := validate.State(st)
+	if len(errs) == 0 {
+		return nil
+	}
+	for _, e := range errs {
+		fmt.Fprintln(os.Stderr, "  ✗", e)
+	}
+	return fmt.Errorf("%d errors in the state", len(errs))
+}
+
 // save validates first and only then writes: a rejected change must not leave
 // a dirty worktree behind.
 func save(st *state.State, dir, msg string, nocommit bool) error {
-	if errs := validate.State(st); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, "  ✗", e)
-		}
-		return fmt.Errorf("%d errors in the state", len(errs))
-	}
-	if err := state.SaveUsers(dir, st.Users); err != nil {
+	if err := checkState(st); err != nil {
 		return err
 	}
-	if err := state.SaveAlerts(dir, st.Alerts); err != nil {
+	if err := state.SaveUsers(dir, st.Users); err != nil {
 		return err
 	}
 	if err := state.SaveSecrets(dir, st.Secrets); err != nil {

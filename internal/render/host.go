@@ -115,11 +115,24 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 			return nil, fmt.Errorf("the entry has no domain")
 		}
 		domain := h.Domain
+		caddy := map[string]any{
+			"host": name, "domain": domain, "caddy_port": CaddyPort,
+			"ws_path": "", "ws_port": 0, "profile_title": domain,
+			"ntfy_domain": "", "ntfy_port": NtfyPort,
+		}
 		if ws, ok := inb["ws"]; ok {
-			if err := emit("/etc/caddy/Caddyfile", "Caddyfile.j2", map[string]any{
-				"host": name, "domain": domain, "caddy_port": CaddyPort,
-				"ws_path": pathOr(ws.Path), "ws_port": ws.Port, "profile_title": domain,
-			}); err != nil {
+			caddy["ws_path"] = pathOr(ws.Path)
+			caddy["ws_port"] = ws.Port
+		}
+		// the notification server rides on the same cover site: reality splices
+		// every non-VPN client to Caddy, and Caddy picks the site by SNI
+		if st.Alerts.Serve == name {
+			caddy["ntfy_domain"] = st.NtfyName(name)
+			f["/etc/ntfy/server.yml"] = ntfyServer(st, name)
+			f["/etc/systemd/system/ntfy.service"] = ntfyUnit(name)
+		}
+		if caddy["ws_port"] != 0 || caddy["ntfy_domain"] != "" {
+			if err := emit("/etc/caddy/Caddyfile", "Caddyfile.j2", caddy); err != nil {
 				return nil, err
 			}
 		}
@@ -170,10 +183,10 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 		f["/etc/vpnctl/expiry"] = expiryFile(st, name)
 		// the chain probe runs on the entry: it is the only host that sees the
 		// whole path, and the only one that should alert
-		f["/etc/vpnctl/probe.sh"] = probeScript(st, name)
+		f["/etc/vpnctl/probe.sh"] = probeScript(st, name, EngineBin(h.Engine))
 		f["/etc/systemd/system/vpnctl-probe.service"] = probeUnit(name)
 		f["/etc/systemd/system/vpnctl-probe.timer"] = probeTimer(name)
-		f["/etc/vpnctl/alerts.env"] = alertsEnv(st)
+		f["/etc/vpnctl/alerts.env"] = alertsEnv(st, name)
 		// history lives on the entry: the device reads it from there
 		f["/etc/vpnctl/metrics.sh"] = metricsScript(name)
 		f["/etc/systemd/system/vpnctl-metrics.service"] = metricsUnit(name)

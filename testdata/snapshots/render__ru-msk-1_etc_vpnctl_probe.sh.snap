@@ -27,9 +27,7 @@ if [ "$code" = "204" ]; then
   exit 0
 fi
 printf 'chain probe: %s instead of 204\n' "${code:-no answer}"
-engine=sing-box
-[ -x /usr/local/bin/xray ] && engine=xray
-systemctl is-active --quiet "$engine" || printf 'engine %s is not running\n' "$engine"
+systemctl is-active --quiet sing-box || printf 'engine sing-box is not running\n' sing-box
 if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then
   notify high "chain probe returned ${code:-no answer}"
   mkdir -p /var/lib/vpnctl && printf '%s fail\n' "$now" > "$STATE"

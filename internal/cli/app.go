@@ -321,19 +321,22 @@ func App() *ucli.Command {
 				Commands: []*ucli.Command{
 					{
 						Name:  "set",
-						Usage: "point the probe at an ntfy topic",
+						Usage: "point the probe at an ntfy topic, ours or someone else's",
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
-							&ucli.StringFlag{Name: "ntfy", Usage: "https://ntfy.sh/vpnctl-xxxx"},
+							&ucli.StringFlag{Name: "ntfy", Usage: "https://ntfy.sh/vpnctl-xxxx, a topic that already exists"},
+							&ucli.StringFlag{Name: "serve", Usage: "entry that runs the notification server itself"},
+							&ucli.StringFlag{Name: "topic", Usage: "topic name for --serve, e.g. vpnctl-659b3bf0"},
 							&ucli.StringFlag{Name: "token-file", Usage: "file with the bearer token; a public topic needs none"},
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
-							if c.String("ntfy") == "" {
-								return errors.New("--ntfy is required, e.g. --ntfy https://ntfy.sh/vpnctl-xxxx")
+							if c.String("ntfy") == "" && c.String("serve") == "" {
+								return errors.New("either --ntfy <url> or --serve <host> --topic <name> is required")
 							}
-							return AlertsSet(c.String("dir"), c.String("ntfy"), c.String("token-file"), c.Bool("nocommit"))
+							return AlertsSet(c.String("dir"), c.String("ntfy"), c.String("serve"),
+								c.String("topic"), c.String("token-file"), c.Bool("nocommit"))
 						},
 					},
 					{

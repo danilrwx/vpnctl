@@ -58,7 +58,7 @@ users.yaml       пользователи: имя, входы (первый — 
 routing/<host>.yaml  правила по группам (для всех / split / full), DNS, выбор выхода: политика (auto/fixed), предпочтительный линк, urltest
 sets/*.yaml      наборы доменов и IP: geosite/geoip-категории + свои записи
 versions.yaml    версии и sha256 по архитектурам (amd64, arm64): sing-box/xray, geodata, caddy, mtg, amneziawg; openvpn — только версия пакета
-alerts.yaml      куда слать оповещения: ntfy-топик или чат Telegram
+alerts.yaml      куда слать оповещения: ntfy-топик и, если сервер свой, хост, который его держит
 secrets.age.yaml  шифртекст: UUID, ключи Reality + shortIds, пароли hy2 и trojan, ключи AWG и WG, CA и сертификаты OpenVPN, ключ tls-crypt, секрет mtg, subId, токен оповещений
 age.yaml         получатели secrets.age.yaml: устройства оператора и офлайн-бэкап
 templates/       шаблоны (.j2) вшиты в бинарник; одноимённый файл в состоянии перекрывает шаблон для всех хостов
@@ -149,7 +149,8 @@ vpnctl user disable|enable <name>             # выключить и включ
 vpnctl user rotate <name>                     # новые uuid, subId, пароли и пир
 vpnctl key backup --out <file>                # зашифрованная резервная идентичность
 vpnctl key restore <file>
-vpnctl alerts set --ntfy <url> [--token-file <f>]   # куда шлёт проба входа
+vpnctl alerts set --ntfy <url> [--token-file <f>]   # чужой топик
+vpnctl alerts set --serve <host> --topic <name>      # свой ntfy на входе
 vpnctl alerts show|off|test
 vpnctl user link <name>                       # ссылки и подписки
 vpnctl user message <name> [--format text|markdown] [--mode] [--lang ru|en] [--ip] [--no-links] [--no-tg]
@@ -368,6 +369,8 @@ API для приложения — `mobile.App` через `gomobile bind`. С�
 
 - Проба цепочки — `vpnctl-probe.timer`, раз в минуту, на входе: 204 через socks движка; иначе одно оповещение в ntfy. Скрипт `/etc/vpnctl/probe.sh`, топик и токен — `/etc/vpnctl/alerts.env` (0600), в скрипт не попадают. Сообщений ровно три вида: поломка (переход ok→fail), напоминание раз в 30 минут, пока цепочка лежит, и восстановление. Состояние пробы — `/var/lib/vpnctl/probe.state`, по нему скрипт отличает переход от повтора; без него каждый падающий запуск слал бы сообщение, 1440 в сутки.
 - Топик задаётся командой `vpnctl alerts set --ntfy https://ntfy.sh/vpnctl-xxxx` и попадает в `alerts.yaml`; токен читается из `--token-file`, трубы или скрытого приглашения и уходит только в секреты. `alerts test` отправляет одно сообщение сейчас, `alerts show` печатает топик и хосты, с которых идут оповещения, `alerts off` выключает их.
+- **Свой ntfy на входе.** `alerts set --serve <вход> --topic <имя>` пишет в `alerts.yaml` и топик, и хост, а публичное имя выводится из домена входа: `https://ntfy.<домен>/<имя>`. Сервер слушает только `127.0.0.1:2586`; наружу его выводит Caddy сайтом `https://ntfy.<домен>:8443 { bind 127.0.0.1 }` — туда же попадает обычный TLS-клиент, потому что reality сплайсит всё, что не прошло проверку, на `handshake.dest`, а это Caddy. Отдельного порта и отдельного сертификата не нужно: Caddy берёт его у Let's Encrypt через tls-alpn-01. Веб-интерфейс выключен, токена в первой версии нет — секрет топика это его имя, случайные 12 hex-символов. В `alerts.env` рядом с публичным адресом лежит loopback-адрес, и проба шлёт по нему: иначе сломанный ingress глушит оповещение о сломанном ingress. `alerts test` проверяет публичный путь с машины оператора, а путь пробы доказывает сам `apply`, который после свопа гоняет пробу цепочки.
+- **Юнит не стартует сам.** `bootstrap` ставит и включает юниты, но не запускает их: конфига на хосте ещё нет. Поэтому `apply` после daemon-reload добивает все юниты из рендера, которые не менялись: `systemctl is-active --quiet X || systemctl start X`. Иначе сервис, у которого единственный файл — это его юнит, ждал бы следующей правки конфига.
 - Метрики хоста — `vpnctl-metrics.timer`, раз в 5 минут: load, память, диск, uptime, соединения, флаг перезагрузки. Пишет JSON-строку в `/var/lib/vpnctl/metrics/<месяц>.jsonl`, хранит два месяца.
 - Оба юнита рендерятся из состояния, ставятся обычным `apply` и откатываются как любой файл. Секретов, кроме токена оповещений, на хосте не появляется.
 

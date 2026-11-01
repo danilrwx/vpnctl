@@ -272,6 +272,9 @@ type LinkSecrets struct {
 type Alerts struct {
 	// Ntfy is the topic URL, e.g. https://ntfy.sh/vpnctl-xxxx. Empty disables alerts.
 	Ntfy string `yaml:"ntfy,omitempty"`
+	// Serve names the host that runs the notification server itself; empty
+	// means the topic lives elsewhere (ntfy.sh, a phone, someone else's box).
+	Serve string `yaml:"serve,omitempty"`
 }
 
 type Secrets struct {

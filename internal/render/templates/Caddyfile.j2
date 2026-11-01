@@ -7,10 +7,10 @@ https://{{ domain }}:{{ caddy_port }} {
 	bind 127.0.0.1
 	root * /var/www/site
 	file_server
-
+{% if ws_port %}
 	@ws path {{ ws_path }}
 	reverse_proxy @ws 127.0.0.1:{{ ws_port }}
-
+{% endif %}
 	handle_path /s/* {
 		root * /var/www/sub
 		header profile-title "{{ profile_title }}"
@@ -23,7 +23,12 @@ https://{{ domain }}:{{ caddy_port }} {
 		file_server
 	}
 }
-
+{% if ntfy_domain %}
+https://{{ ntfy_domain }}:{{ caddy_port }} {
+	bind 127.0.0.1
+	reverse_proxy 127.0.0.1:{{ ntfy_port }}
+}
+{% endif %}
 http://{{ domain }} {
 	redir https://{{ domain }}{uri} permanent
 }

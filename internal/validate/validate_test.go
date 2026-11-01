@@ -129,6 +129,22 @@ func TestCases(t *testing.T) {
 			want: "an awg peer is described but the awg protocol is not set",
 		},
 		{
+			name: "a topic that is not under the server's name",
+			mutate: func(st *state.State) {
+				st.Alerts = state.Alerts{Ntfy: "https://ntfy.sh/x", Serve: "ru-msk-1"}
+				st.Versions["ntfy"] = state.Pin{Version: "2.36.0"}
+			},
+			want: "is not under https://ntfy.gw.example.ru/",
+		},
+		{
+			name: "a server without a pin",
+			mutate: func(st *state.State) {
+				st.Alerts = state.Alerts{Ntfy: "https://ntfy.gw.example.ru/x", Serve: "ru-msk-1"}
+				delete(st.Versions, "ntfy")
+			},
+			want: "no ntfy pin",
+		},
+		{
 			name: "a topic that is not https",
 			mutate: func(st *state.State) {
 				st.Alerts.Ntfy = "http://ntfy.sh/vpn"

@@ -23,6 +23,8 @@ func releaseURL(name, version string) (string, bool) {
 		return fmt.Sprintf("https://github.com/caddyserver/caddy/releases/download/v%s/caddy_%s_linux_amd64.tar.gz", version, version), true
 	case "mtg":
 		return fmt.Sprintf("https://github.com/9seconds/mtg/releases/download/v%s/mtg-%s-linux-amd64.tar.gz", version, version), true
+	case "ntfy":
+		return fmt.Sprintf("https://github.com/binwiederhier/ntfy/releases/download/v%s/ntfy_%s_linux_amd64.tar.gz", version, version), true
 	}
 	// geodata is a moving `latest`: there is nothing stable to pin
 	return "", false

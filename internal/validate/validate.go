@@ -136,6 +136,24 @@ func State(st *state.State) []string {
 	if _, e := state.CheckNtfy(st.Alerts.Ntfy); e != nil {
 		err("%v", e)
 	}
+	if s := st.Alerts.Serve; s != "" {
+		h, ok := st.Hosts[s]
+		switch {
+		case !ok:
+			err("alerts: serve host «%s» is not described", s)
+		case h.Role != state.Entry:
+			err("alerts: serve host «%s» is not an entry: notifications come from the entry", s)
+		case h.Domain == "":
+			err("alerts: serve host «%s» has no domain to serve ntfy under", s)
+		default:
+			if want := st.NtfyName(s); !strings.HasPrefix(st.Alerts.Ntfy, "https://"+want+"/") {
+				err("alerts: topic «%s» is not under https://%s/", st.Alerts.Ntfy, want)
+			}
+		}
+		if _, ok := st.Versions["ntfy"]; !ok {
+			err("alerts: versions.yaml has no ntfy pin, so bootstrap cannot install the server")
+		}
+	}
 
 	// hosts
 	domains := map[string][]string{}

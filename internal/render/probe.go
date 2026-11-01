@@ -12,7 +12,7 @@ import (
 // One message per transition, then at most one every half hour while the chain
 // is still down: a failing minute every minute would be 1440 messages a day and
 // the operator would mute the topic.
-func probeScript(st *state.State, host string) string {
+func probeScript(st *state.State, host, engine string) string {
 	// notify always exists: the call sites do not care whether a topic is set
 	notify := `# notifications are off: alerts.yaml has no topic
 notify() { return 0; }
@@ -24,10 +24,12 @@ notify() {
   text=$2
   [ -s /etc/vpnctl/alerts.env ] || return 0
   . /etc/vpnctl/alerts.env
-  [ -n "${VPNCTL_ALERTS_URL:-}" ] || return 0
+  url=${VPNCTL_ALERTS_LOCAL:-}
+  [ -n "$url" ] || url=${VPNCTL_ALERTS_URL:-}
+  [ -n "$url" ] || return 0
   set -- -sS --max-time 10 -o /dev/null -H "Title: vpnctl ` + host + `" -H "Priority: $priority" -d "$text"
   [ -n "${VPNCTL_ALERTS_TOKEN:-}" ] && set -- "$@" -H "Authorization: Bearer ${VPNCTL_ALERTS_TOKEN}"
-  curl "$@" "$VPNCTL_ALERTS_URL" || true
+  curl "$@" "$url" || true
 }
 `
 	}
@@ -54,15 +56,13 @@ if [ "$code" = "204" ]; then
   exit 0
 fi
 printf 'chain probe: %%s instead of 204\n' "${code:-no answer}"
-engine=sing-box
-[ -x /usr/local/bin/xray ] && engine=xray
-systemctl is-active --quiet "$engine" || printf 'engine %%s is not running\n' "$engine"
+systemctl is-active --quiet %s || printf 'engine %s is not running\n' %s
 if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then
   notify high "chain probe returned ${code:-no answer}"
   mkdir -p /var/lib/vpnctl && printf '%%s fail\n' "$now" > "$STATE"
 fi
 exit 1
-`, host, ProbeURL, notify, ProbePort)
+`, host, ProbeURL, notify, ProbePort, engine, engine, engine)
 }
 
 // probeUnit is the oneshot service the timer starts.
@@ -97,11 +97,15 @@ WantedBy=timers.target
 `, host, host)
 }
 
-// alertsEnv is what the script sources: the topic and the token, 0600.
-func alertsEnv(st *state.State) string {
-	token := ""
-	if st.Secrets.Alerts.Token != "" {
-		token = st.Secrets.Alerts.Token
+// alertsEnv is what the script sources: the topic and the token, 0600. When the
+// entry runs the server itself, the probe posts over loopback so a broken
+// ingress cannot swallow the message about the ingress being broken.
+func alertsEnv(st *state.State, host string) string {
+	token := st.Secrets.Alerts.Token
+	local := ""
+	if st.Alerts.Serve == host && st.Alerts.Ntfy != "" {
+		local = NtfyLocal(st.Alerts.Ntfy)
 	}
-	return fmt.Sprintf("VPNCTL_ALERTS_URL=%q\nVPNCTL_ALERTS_TOKEN=%q\n", st.Alerts.Ntfy, token)
+	return fmt.Sprintf("VPNCTL_ALERTS_URL=%q\nVPNCTL_ALERTS_LOCAL=%q\nVPNCTL_ALERTS_TOKEN=%q\n",
+		st.Alerts.Ntfy, local, token)
 }

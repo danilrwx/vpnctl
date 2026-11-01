@@ -21,6 +21,7 @@ const (
 	XrayURL    = "https://github.com/XTLS/Xray-core/releases/download/v{v}/Xray-linux-64.zip"
 	CaddyURL   = "https://github.com/caddyserver/caddy/releases/download/v{v}/caddy_{v}_linux_amd64.tar.gz"
 	MTGURL     = "https://github.com/9seconds/mtg/releases/download/v{v}/mtg-{v}-linux-amd64.tar.gz"
+	NtfyURL    = "https://github.com/binwiederhier/ntfy/releases/download/v{v}/ntfy_{v}_linux_amd64.tar.gz"
 )
 
 // Download is one file the bootstrap fetches and installs.
@@ -166,6 +167,16 @@ func Script(st *state.State, host string) (string, error) {
 		downloads = append(downloads, download("mtg", m, MTGURL,
 			fmt.Sprintf("mtg --version 2>/dev/null | grep -q '%s'", m.Version),
 			fmt.Sprintf("tar -xzf %s/mtg-%s-linux-amd64.tar.gz -C %s && install -m 0755 %s/mtg-%s-linux-amd64/mtg /usr/local/bin/mtg", dl, m.Version, dl, dl, m.Version)))
+		// the notification server rides on the same host only when alerts say so
+		if st.Alerts.Serve == host {
+			n, err := pin(st, "ntfy")
+			if err != nil {
+				return "", err
+			}
+			downloads = append(downloads, download("ntfy", n, NtfyURL,
+				fmt.Sprintf("ntfy --version 2>/dev/null | grep -q 'version %s$'", n.Version),
+				fmt.Sprintf("tar -xzf %s/ntfy_%s_linux_amd64.tar.gz -C %s && install -m 0755 %s/ntfy_%s_linux_amd64/ntfy /usr/local/bin/ntfy", dl, n.Version, dl, dl, n.Version)))
+		}
 	}
 	geodata, err := pin(st, "geodata")
 	if err != nil {
