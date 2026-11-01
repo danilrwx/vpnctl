@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,7 +86,13 @@ func openFixture(t *testing.T) *App {
 func TestUsersAndShare(t *testing.T) {
 	app := openFixture(t)
 
-	users := app.Users()
+	// the list crosses the gomobile boundary as JSON: a struct with a slice
+	// field is not bindable, and gobind drops such a method without a word
+	var users []UserInfo
+	if err := json.Unmarshal([]byte(app.Users()), &users); err != nil {
+		t.Fatalf("users are not JSON: %v", err)
+	}
+
 	if len(users) == 0 {
 		t.Fatal("no users")
 	}

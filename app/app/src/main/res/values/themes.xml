@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Compose theme draws everything; this only keeps the window from
+         flashing white before the first frame. -->
+    <style name="Theme.Vpnctl" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

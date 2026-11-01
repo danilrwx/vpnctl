@@ -74,6 +74,7 @@ vpnctl apply -dir ./state                                   # install it
 `versions check` | newest upstream release per pin, `--breaking` to exit 1 |
 `versions auto` | pull in patch updates: pin, sha256, commit, push, `--apply` to deploy |
 `versions pin` | sha256 of every pinned release |
+`completion` | the shell completion script |
 
 Every command accepts `--json`; a guard refusal exits `3`, a bad flag exits `2`.
 `render`, `plan`, `apply` and `host bootstrap` take `--at YYYY-MM-DD` — the day
@@ -93,6 +94,7 @@ internal/           state, render, validate, plan, apply, agent, bootstrap,
                     ops, cli, gitsync, remote, ageio
 mobile/             gomobile API for the Android app
 testdata/           the fixture and the golden snapshots
+app/                the Android app: Compose UI over the gomobile AAR
 docs/design.md      the design, the decisions and the trade-offs
 ```
 

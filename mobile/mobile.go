@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/apply"
@@ -20,19 +21,21 @@ import (
 	"github.com/danilrwx/vpnctl-go/internal/validate"
 )
 
-// Link is one copyable entry of a user card.
+// Link is one copyable entry of a user card. gomobile cannot bind a struct with
+// a slice field and drops such a method without a word, so every list crosses
+// the boundary as JSON: one shape, parseable by any client.
 type Link struct {
-	Label string
-	URL   string
+	Label string `json:"label"`
+	URL   string `json:"url"`
 }
 
-// UserInfo is what the list screen needs.
+// UserInfo is what the list screen needs, as JSON.
 type UserInfo struct {
-	Name      string
-	Modes     []string
-	Protocols []string
-	TG        bool
-	Enabled   bool
+	Name      string   `json:"name"`
+	Modes     []string `json:"modes"`
+	Protocols []string `json:"protocols"`
+	TG        bool     `json:"tg"`
+	Enabled   bool     `json:"enabled"`
 }
 
 // App holds the opened state; the UI keeps one instance.
@@ -68,7 +71,7 @@ func setKey(path string) error {
 }
 
 // Users returns the list, sorted by name.
-func (a *App) Users() []UserInfo {
+func (a *App) Users() string {
 	names := make([]string, 0, len(a.st.Users))
 	for n := range a.st.Users {
 		names = append(names, n)
@@ -88,19 +91,30 @@ func (a *App) Users() []UserInfo {
 		})
 	}
 
-	return out
+	return mustJSON(out)
 }
 
-// Links returns the subscription and the direct links of a user.
-func (a *App) Links(user string) ([]Link, error) {
+// mustJSON marshals what the UI gets back; a failure here is a programming
+// error, and an empty list is better than a crash on the list screen.
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "[]"
+	}
+
+	return string(b)
+}
+
+// Links returns the subscription and the direct links of a user, as JSON.
+func (a *App) Links(user string) (string, error) {
 	u, ok := a.st.Users[user]
 	if !ok {
-		return nil, fmt.Errorf("user %q is not described", user)
+		return "", fmt.Errorf("user %q is not described", user)
 	}
 
 	entry, err := a.st.Entry()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	mode := "split"
@@ -115,7 +129,7 @@ func (a *App) Links(user string) ([]Link, error) {
 
 	links, err := render.Links(a.st, entry, user, mode)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	for i, l := range links {
@@ -126,7 +140,20 @@ func (a *App) Links(user string) ([]Link, error) {
 		out = append(out, Link{Label: "telegram", URL: tg})
 	}
 
-	return out, nil
+	return mustJSON(out), nil
+}
+
+// splitList turns "split,full" into the list the ops layer wants.
+func splitList(s string) []string {
+	var out []string
+
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+
+	return out
 }
 
 // Share returns the ready-to-forward message of a user, in the system language.
@@ -138,8 +165,8 @@ func (a *App) Message(user, lang string, markdown bool) (string, error) {
 }
 
 // AddUser creates a user, writes the state and commits it.
-func (a *App) AddUser(name string, modes, protocols []string, tg bool) (string, error) {
-	msg, err := ops.UserAdd(a.st, name, modes, protocols, tg)
+func (a *App) AddUser(name, modes, protocols string, tg bool) (string, error) {
+	msg, err := ops.UserAdd(a.st, name, splitList(modes), splitList(protocols), tg)
 	if err != nil {
 		return "", err
 	}
