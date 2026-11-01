@@ -39,6 +39,7 @@ func App() *ucli.Command {
 					&ucli.StringFlag{Name: "name", Usage: "device name in age.yaml, default: hostname"},
 					&ucli.BoolFlag{Name: "backup", Usage: "create the offline backup identity; the passphrase is asked for"},
 					&ucli.StringFlag{Name: "backup-pass", Usage: "passphrase for --backup, for scripts"},
+					&ucli.StringFlag{Name: "out", Aliases: []string{"o"}, Usage: "write the backup blob here instead of printing it"},
 					&ucli.StringFlag{Name: "remote", Usage: "push the new state here"},
 					&ucli.BoolFlag{Name: "fresh", Usage: "overwrite a remote that already has history, keeping its tip as a backup branch"},
 					&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
@@ -53,7 +54,7 @@ func App() *ucli.Command {
 						}
 					}
 					return Init(c.String("dir"), c.String("name"), pass,
-						c.String("remote"), c.Bool("fresh"), c.Bool("nocommit"))
+						c.String("remote"), c.String("out"), c.Bool("fresh"), c.Bool("nocommit"))
 				},
 			},
 			{
@@ -83,11 +84,25 @@ func App() *ucli.Command {
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "pass", Usage: "passphrase that seals the blob"},
+							&ucli.StringFlag{Name: "out", Aliases: []string{"o"}, Usage: "write the blob here instead of printing it"},
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
-							return KeyBackup(c.String("dir"), c.String("pass"), c.Bool("nocommit"))
+							return KeyBackup(c.String("dir"), c.String("pass"), c.String("out"), c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:      "restore",
+						Usage:     "restore this device's identity from a sealed backup file",
+						ArgsUsage: "<file>",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "key", Usage: "where to write the identity, default: the usual lookup"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return KeyRestore(c.String("dir"), c.Args().First(), c.String("key"))
 						},
 					},
 					{

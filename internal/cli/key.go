@@ -1,12 +1,16 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/danilrwx/vpnctl-go/internal/ageio"
 	"golang.org/x/term"
 
 	"github.com/go-git/go-git/v5/config"
@@ -19,7 +23,7 @@ import (
 // Init creates a state directory: skeleton, age.yaml, first commit, and
 // optionally pushes it. A remote with history needs --fresh: the old tip goes
 // to a backup branch before main is overwritten.
-func Init(dir, name, backupPass, remote string, fresh, nocommit bool) error {
+func Init(dir, name, backupPass, remote, backupOut string, fresh, nocommit bool) error {
 	if _, err := os.Stat(dir); err == nil {
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
@@ -63,13 +67,21 @@ func Init(dir, name, backupPass, remote string, fresh, nocommit bool) error {
 	fmt.Printf("✓ state in %s\n", dir)
 	fmt.Printf("  recipient  %s\n", res.Recipient)
 	if res.BackupBlob != "" {
-		fmt.Println()
-		fmt.Println("  backup identity — показать один раз, сохранить вне устройств:")
-		fmt.Println()
-		for _, line := range strings.Split(strings.TrimSpace(res.BackupBlob), "\n") {
-			fmt.Println("  " + line)
+		if backupOut != "" {
+			if err := os.WriteFile(backupOut, []byte(res.BackupBlob), 0o600); err != nil {
+				return err
+			}
+			sum := sha256.Sum256([]byte(res.BackupBlob))
+			fmt.Printf("  backup     %s (sha256 %s)\n  keep it off this machine\n", backupOut, hex.EncodeToString(sum[:]))
+		} else {
+			fmt.Println()
+			fmt.Println("  backup identity — показать один раз, сохранить вне устройств:")
+			fmt.Println()
+			for _, line := range strings.Split(strings.TrimSpace(res.BackupBlob), "\n") {
+				fmt.Println("  " + line)
+			}
+			fmt.Println()
 		}
-		fmt.Println()
 	}
 	return nil
 }
@@ -222,8 +234,9 @@ func pushNewState(repo *gitsync.Repo, url string, fresh bool) (string, error) {
 	return url + " (old tip in " + backup + ")", nil
 }
 
-// KeyBackup issues a new offline backup identity and prints it once.
-func KeyBackup(dir, flagPass string, nocommit bool) error {
+// KeyBackup issues a new offline backup identity: written to --out, or printed
+// once when there is no file to write it to.
+func KeyBackup(dir, flagPass, out string, nocommit bool) error {
 	pass, err := passphrase(flagPass, true)
 	if err != nil {
 		return err
@@ -238,6 +251,22 @@ func KeyBackup(dir, flagPass string, nocommit bool) error {
 	}
 	if err := commit(dir, msg, nocommit); err != nil {
 		return err
+	}
+	if out != "" {
+		if err := os.WriteFile(out, []byte(blob), 0o600); err != nil {
+			return err
+		}
+		sum := sha256.Sum256([]byte(blob))
+		line := fmt.Sprintf("✓ %s\n  saved %s\n  sha256 %s\n  keep it off this machine", msg, out, hex.EncodeToString(sum[:]))
+		if jsonOut {
+			return emit(struct {
+				File string `json:"file"`
+				SHA  string `json:"sha256"`
+				Msg  string `json:"message"`
+			}{out, hex.EncodeToString(sum[:]), msg}, func() {})
+		}
+		fmt.Println(line)
+		return nil
 	}
 	if jsonOut {
 		return emit(struct {
@@ -287,4 +316,50 @@ func passphrase(flagValue string, confirm bool) (string, error) {
 		return "", errors.New("the passphrases differ")
 	}
 	return string(first), nil
+}
+
+// KeyRestore writes an identity from a sealed backup file into the key path and
+// proves it can read the state.
+func KeyRestore(dir, file, keyPath string) error {
+	if file == "" {
+		return errors.New("the backup file is required")
+	}
+	body, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	pass, err := passphrase("", false)
+	if err != nil {
+		return err
+	}
+	id, err := ageio.OpenIdentity(string(body), pass)
+	if err != nil {
+		return err
+	}
+	if keyPath == "" {
+		keyPath = state.KeyPath()
+	}
+	if _, err := os.Stat(keyPath); err == nil {
+		backup := keyPath + ".before-restore"
+		if err := os.Rename(keyPath, backup); err != nil {
+			return fmt.Errorf("move the existing key aside: %w", err)
+		}
+		fmt.Printf("  existing key moved to %s\n", backup)
+	}
+	if err := ageio.WriteIdentity(keyPath, id); err != nil {
+		return err
+	}
+	fmt.Printf("✓ identity restored into %s\n", keyPath)
+
+	// the point of the restore is reading the secrets: prove it when we can
+	if dir != "" {
+		if _, err := os.Stat(filepath.Join(dir, "secrets.age.yaml")); err == nil {
+			if _, err := ageio.Decrypt(filepath.Join(dir, "secrets.age.yaml"), keyPath); err != nil {
+				return fmt.Errorf("the restored key cannot read secrets.age.yaml: %w", err)
+			}
+			fmt.Printf("✓ secrets.age.yaml decrypts with the restored key\n")
+		}
+	}
+	fmt.Printf("\nnext: vpnctl key add <this-device> %s\n      vpnctl key backup --out <new-file>\n", ageio.RecipientOf(id))
+	return nil
 }
