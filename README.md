@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/danilrwx/vpnctl/actions/workflows/ci.yml/badge.svg)](https://github.com/danilrwx/vpnctl/actions/workflows/ci.yml)
 [![go](https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
-[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 Personal VPN infrastructure as a git repository. Hosts, links, users and routing
 are files; the hosts run exactly what the repository says; a phone can be the
@@ -82,4 +82,4 @@ Nothing outside the module can import `internal/`; `mobile` stays public because
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
+Apache 2.0, see [LICENSE](LICENSE). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
