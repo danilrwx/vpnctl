@@ -5,13 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,31 +103,45 @@ class MainActivity : ComponentActivity() {
 fun App(modifier: Modifier = Modifier) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var selected by remember { mutableStateOf<String?>(null) }
+    // a new user is written by another screen; the list reads it again when this
+    // changes, so the count and the rows cannot go stale
+    var version by remember { mutableStateOf(0) }
 
     when (selected) {
-        null -> UsersScreen(ctx, modifier, onPick = { selected = it })
+        null -> UsersScreen(ctx, modifier, version, onPick = { selected = it })
         PLAN -> PlanScreen(ctx, modifier, onBack = { selected = null })
+        ADD -> AddUserScreen(
+            ctx,
+            modifier,
+            onBack = { selected = null },
+            onCreated = {
+                version++
+                selected = null
+            },
+        )
         else -> UserScreen(ctx, modifier, name = selected!!, onBack = { selected = null })
     }
 }
 
 @Composable
-fun UsersScreen(ctx: android.content.Context, modifier: Modifier, onPick: (String) -> Unit) {
-    var app by remember { mutableStateOf(Core.current()) }
+fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, onPick: (String) -> Unit) {
     var status by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        if (app == null) {
-            app = withContext(Dispatchers.IO) { Core.openBundled(ctx) }
+        if (Core.current() == null) {
+            status = withContext(Dispatchers.IO) { Core.openBundled(ctx)?.let { "" } ?: "нет состояния" }
         }
 
-        if (app != null && !File(ctx.filesDir, "state/.git").exists()) {
+        if (Core.current() != null && !File(ctx.filesDir, "state/.git").exists()) {
             status = withContext(Dispatchers.IO) { Core.sync(ctx, REPO) }
-            app = Core.current()
         }
     }
 
-    val users = remember(app) { app?.let { parseUsers(it.users()) } ?: emptyList() }
+    // The handle is read here, not kept in remember: a Go object parked in Compose
+    // state did not survive the sync (the write never reached the read), and the
+    // list stayed on the APK fixture until the process restarted.
+    val app = Core.current()
+    val users = remember(app, version) { app?.let { parseUsers(it.users()) } ?: emptyList() }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (status.isNotEmpty()) {
@@ -132,7 +149,10 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, onPick: (Strin
         }
 
         Text("users: ${users.size}", style = MaterialTheme.typography.titleMedium)
-        Button(onClick = { onPick(PLAN) }) { Text("план") }
+        Row {
+            Button(onClick = { onPick(PLAN) }) { Text("план") }
+            Button(onClick = { onPick(ADD) }, modifier = Modifier.padding(start = 8.dp)) { Text("новый") }
+        }
 
         LazyColumn {
             items(users) { user ->
@@ -153,6 +173,7 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var links by remember { mutableStateOf(emptyList<UserLink>()) }
+    var message by remember { mutableStateOf("") }
 
     val scope = rememberCoroutineScope()
 
@@ -182,15 +203,32 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
         Text(name, style = MaterialTheme.typography.headlineSmall)
         Button(onClick = onBack) { Text("назад") }
 
-        LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
+        LazyColumn(modifier = Modifier.padding(top = 8.dp).weight(1f)) {
             items(links) { link ->
                 Text(link.label, style = MaterialTheme.typography.labelSmall)
                 Text(link.url, style = MaterialTheme.typography.bodySmall)
+            }
+
+            if (message.isNotEmpty()) {
+                item {
+                    Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                }
             }
         }
 
         Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("продлить 30 дней") }
         Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("выключить") }
+        Button(
+            onClick = {
+                act {
+                    val text = app?.share(name) ?: return@act "нет состояния"
+                    message = text
+                    copyToClipboard(ctx, text)
+                    "сообщение в буфере"
+                }
+            },
+            enabled = !busy,
+        ) { Text("сообщение") }
         Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("отправить в git") }
 
         if (status.isNotEmpty()) {
@@ -229,9 +267,92 @@ fun applyAll(app: mobile.App?): String {
     return if (result.contains("\"failed\"")) "ошибка: $result" else "применено"
 }
 
+/** addUser joins the sets the way the shell does: comma separated lists. */
+fun addUser(app: mobile.App?, name: String, modes: Set<String>, protocols: Set<String>, tg: Boolean): String {
+    val msg = app?.addUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "нет состояния"
+    return "ok: $msg"
+}
+
+/** copyToClipboard is how the message reaches the user: the phone has no mail. */
+fun copyToClipboard(ctx: android.content.Context, text: String) {
+    val clip = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    clip.setPrimaryClip(android.content.ClipData.newPlainText("vpnctl", text))
+}
+
 fun pushState(app: mobile.App?): String {
     val head = app?.push() ?: return "нет репозитория"
     return "pushed $head"
+}
+
+/** SelectRow is the one shape every choice on the create screen has: a set the
+ * tap replaces (mode) or extends (protocols). */
+@Composable
+fun SelectRow(label: String, options: List<String>, selected: Set<String>, onPick: (String) -> Unit) {
+    Text(label, style = MaterialTheme.typography.labelMedium)
+
+    Row {
+        options.forEach { option ->
+            Button(onClick = { onPick(option) }, modifier = Modifier.padding(end = 8.dp)) {
+                Text(if (option in selected) "✓ $option" else option)
+            }
+        }
+    }
+}
+
+/**
+ * AddUserScreen creates a user with fresh secrets. The core writes, validates
+ * and commits; the phone only chooses the name, the mode and the protocols. The
+ * hosts get the user on the next apply, not now.
+ */
+@Composable
+fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit, onCreated: () -> Unit) {
+    val app = remember { Core.current() }
+    var name by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf(setOf("split")) }
+    var protos by remember { mutableStateOf(setOf("reality", "ws")) }
+    var tg by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+
+    fun create() {
+        if (busy || name.isBlank() || protos.isEmpty()) {
+            return
+        }
+
+        busy = true
+        status = "…"
+
+        scope.launch {
+            val out = onIo { addUser(app, name.trim(), mode, protos, tg) }
+
+            busy = false
+            status = out
+
+            if (out.startsWith("ok")) {
+                onCreated()
+            }
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        Text("новый пользователь", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("назад") }
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("имя") }, singleLine = true)
+        SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
+        SelectRow("протоколы", listOf("reality", "ws", "hy2", "awg"), protos) {
+            protos = if (it in protos) protos - it else protos + it
+        }
+
+        Row {
+            Checkbox(checked = tg, onCheckedChange = { tg = it })
+            Text("телеграм", modifier = Modifier.padding(top = 12.dp))
+        }
+
+        Button(onClick = { create() }, enabled = !busy && name.isNotBlank() && protos.isNotEmpty()) { Text("создать") }
+        Text(status, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 /** PlanScreen shows what apply would change on every host. */
@@ -304,4 +425,5 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
 }
 
 const val PLAN = "план"
+const val ADD = "новый"
 const val REPO = "git@github.com:danilrwx/vpn.git"
