@@ -25,7 +25,7 @@ func main() {
 	// must not look like "pull the repository"
 	if len(os.Args) > 1 && !known(app, os.Args[1]) {
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", os.Args[1])
-		_ = cli.ShowAppHelp(app)
+		cli.PrintUsage(app, os.Stderr)
 		os.Exit(cli.ExitUsage)
 	}
 	if err := app.Run(context.Background(), os.Args); err != nil {
@@ -37,9 +37,15 @@ func main() {
 	}
 }
 
-// known reports whether the argument names a command or a flag.
+// known reports whether the argument names a command or a flag. help,
+// completion and version are built in by urfave or by us, not by the tree, and
+// rejecting them would break `vpnctl completion zsh > completions/zsh`.
 func known(app *ucli.Command, arg string) bool {
 	if len(arg) > 0 && arg[0] == '-' {
+		return true
+	}
+	switch arg {
+	case "help", "completion", "version":
 		return true
 	}
 	for _, c := range app.Commands {

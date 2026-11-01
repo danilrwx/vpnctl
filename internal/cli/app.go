@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -752,8 +754,22 @@ func splitList(s string) []string {
 	return out
 }
 
-// ShowAppHelp prints the top-level help, for the caller that has to reject an
-// unknown command before urfave turns it into its own exit code.
-func ShowAppHelp(app *ucli.Command) error {
-	return ucli.ShowAppHelp(app)
+// PrintUsage lists the commands. It is plain text on purpose: urfave renders
+// its help through a template that wants a fully initialised command, and the
+// caller reaches this before Run has touched anything — asking urfave here
+// panicked inside text/tabwriter, which is how `vpnctl completion` crashed.
+func PrintUsage(app *ucli.Command, w io.Writer) {
+	names := make([]string, 0, len(app.Commands))
+	for _, c := range app.Commands {
+		if c.Hidden || c.Name == "help" || c.Name == "completion" {
+			continue
+		}
+		names = append(names, c.Name)
+	}
+	sort.Strings(names)
+	fmt.Fprintf(w, "usage: %s <command> [flags]\n\ncommands:\n", app.Name)
+	for _, n := range names {
+		fmt.Fprintf(w, "  %s\n", n)
+	}
+	fmt.Fprintf(w, "\nrun %s help <command> for the flags of one command\n", app.Name)
 }
