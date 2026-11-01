@@ -20,6 +20,10 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -39,4 +43,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // JVM unit tests: no emulator, no device. org.json ships as a stub in
+    // android.jar, so the real implementation goes on the test classpath.
+    testImplementation(kotlin("test"))
+    testImplementation("org.json:json:20240303")
+    testImplementation("junit:junit:4.13.2")
 }
