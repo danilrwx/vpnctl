@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -61,14 +62,14 @@ func ipsOf(st *state.State, m state.Match) []string {
 }
 
 // XrayConfig renders /etc/xray/config.json for hosts with engine: xray.
-func XrayConfig(st *state.State, host string) (string, error) {
+func XrayConfig(st *state.State, host string, at time.Time) (string, error) {
 	h, err := st.Host(host)
 	if err != nil {
 		return "", err
 	}
 	inb := st.Inbounds[host]
 	hs := st.Secrets.Hosts[host]
-	users := UsersOf(st, host)
+	users := UsersOf(st, host, at)
 	incoming := InLinks(st, host)
 
 	accounts := func(p string) ([]acc, error) {

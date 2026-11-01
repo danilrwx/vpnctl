@@ -1,0 +1,13 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1
+[Unit]
+Description=vpnctl expiry tick (ru-msk-1)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '[ -x /usr/local/bin/vpnctl-agent ] || exit 0; exec /usr/local/bin/vpnctl-agent tick --config /etc/sing-box/config.json --engine sing-box --awg /etc/amnezia/amneziawg/awg0.conf'
+Nice=10

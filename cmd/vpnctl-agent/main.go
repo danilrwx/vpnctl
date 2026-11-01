@@ -7,6 +7,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -26,9 +27,24 @@ const (
 )
 
 func main() {
-	// a timer runs `vpnctl-agent tick`: report the accounts that expired today
+	// a timer runs `vpnctl-agent tick`: disable the accounts whose day has come
 	if len(os.Args) > 1 && os.Args[1] == "tick" {
-		if err := agent.RunTick("/etc/vpnctl/expiry", time.Now()); err != nil {
+		fs := flag.NewFlagSet("tick", flag.ContinueOnError)
+		expiry := fs.String("expiry", "/etc/vpnctl/expiry", "the plan apply wrote")
+		config := fs.String("config", "/etc/sing-box/config.json", "engine config to edit")
+		engine := fs.String("engine", "sing-box", "sing-box or xray")
+		subs := fs.String("subs", "/var/www/sub", "web root of the subscriptions")
+		awg := fs.String("awg", "", "awg interface config, empty when there is none")
+		dry := fs.Bool("dry-run", false, "report what would be removed and touch nothing")
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		err := agent.RunTick(agent.TickOptions{
+			ExpiryPath: *expiry, EngineConfig: *config, EngineBin: *engine,
+			SubRoot: *subs, AWGConfig: *awg, DryRun: *dry, Now: time.Now(),
+		})
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

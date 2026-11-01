@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -51,7 +52,7 @@ func Walk(root string) ([]struct{ Rel, Body string }, error) {
 
 // RenderHost renders every file the host must have: engine config, units, web server,
 // subscriptions, network config and state overrides.
-func RenderHost(st *state.State, name string) (HostFiles, error) {
+func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 	h, err := st.Host(name)
 	if err != nil {
 		return nil, err
@@ -76,7 +77,7 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 	bin := EngineBin(h.Engine)
 	cfgPath := EngineConfigPath(h.Engine)
 	if bin == engineSingBox {
-		cfg, err := SingBoxConfig(st, name)
+		cfg, err := SingBoxConfig(st, name, at)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +90,7 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 			f["/etc/sing-box/rules/"+s.Tag+".json"] = s.Body
 		}
 	} else {
-		cfg, err := XrayConfig(st, name)
+		cfg, err := XrayConfig(st, name, at)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +137,7 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 				return nil, err
 			}
 		}
-		for _, acc := range UsersOf(st, name) {
+		for _, acc := range UsersOf(st, name, at) {
 			us, ok := st.Secrets.Users[acc.Name]
 			if !ok {
 				return nil, fmt.Errorf("no secrets for user %s", acc.Name)
@@ -180,7 +181,10 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 				}
 			}
 		}
-		f["/etc/vpnctl/expiry"] = expiryFile(st, name)
+		f["/etc/vpnctl/expiry"] = expiryFile(st, name, at)
+		// the tick needs the plan and the engine path: both live on the entry
+		f["/etc/systemd/system/vpnctl-tick.service"] = tickUnit(st, name, h.Engine)
+		f["/etc/systemd/system/vpnctl-tick.timer"] = tickTimer(name)
 		// the chain probe runs on the entry: it is the only host that sees the
 		// whole path, and the only one that should alert
 		f["/etc/vpnctl/probe.sh"] = probeScript(st, name, EngineBin(h.Engine))
@@ -234,7 +238,7 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 			for _, net := range []string{clientAWG.Subnets.Split, clientAWG.Subnets.Full} {
 				addresses = append(addresses, fmt.Sprintf("%s/%d", Gateway(net), prefixLen(net)))
 			}
-			for _, acc := range UsersOf(st, name) {
+			for _, acc := range UsersOf(st, name, at) {
 				us, ok := st.Secrets.Users[acc.Name]
 				if !ok || acc.U.AWG == nil || us.AWG == nil {
 					continue
@@ -364,7 +368,7 @@ func RenderHost(st *state.State, name string) (HostFiles, error) {
 }
 
 // Render renders every described host, or only the named one.
-func Render(st *state.State, only string) (Rendered, error) {
+func Render(st *state.State, only string, at time.Time) (Rendered, error) {
 	out := Rendered{}
 	names := make([]string, 0, len(st.Hosts))
 	for name := range st.Hosts {
@@ -375,7 +379,7 @@ func Render(st *state.State, only string) (Rendered, error) {
 		if only != "" && only != name {
 			continue
 		}
-		f, err := RenderHost(st, name)
+		f, err := RenderHost(st, name, at)
 		if err != nil {
 			return nil, fmt.Errorf("render host %s: %w", name, err)
 		}
@@ -414,12 +418,12 @@ func Write(r Rendered, out string) error {
 }
 
 // Check renders twice and reports a difference: render must be reproducible.
-func Check(st *state.State) (Rendered, error) {
-	a, err := Render(st, "")
+func Check(st *state.State, at time.Time) (Rendered, error) {
+	a, err := Render(st, "", at)
 	if err != nil {
 		return nil, err
 	}
-	b, err := Render(st, "")
+	b, err := Render(st, "", at)
 	if err != nil {
 		return nil, err
 	}

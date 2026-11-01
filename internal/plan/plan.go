@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/remote"
@@ -169,8 +170,10 @@ func ParseProbe(out string) Probe {
 // ErrPreMigration is returned when the commit still holds the sops secrets file.
 var ErrPreMigration = errors.New("secrets at that commit are still in the sops file: render is impossible without the old core")
 
-// RenderAt is the render of the state at the marker commit, for drift.
-func RenderAt(st *state.State, commit, host string) (render.HostFiles, error) {
+// RenderAt is the render of the state at the marker commit, for drift. The date
+// is the same as the live render: expiry is part of what a host should have, so
+// a user whose day has come is gone from both sides and never looks like drift.
+func RenderAt(st *state.State, commit, host string, at time.Time) (render.HostFiles, error) {
 	repo, err := gitsync.Open(st.Dir)
 	if err != nil {
 		return nil, err
@@ -202,7 +205,7 @@ func RenderAt(st *state.State, commit, host string) (render.HostFiles, error) {
 	if err != nil {
 		return nil, err
 	}
-	return render.RenderHost(old, host)
+	return render.RenderHost(old, host, at)
 }
 
 func hashMap(f render.HostFiles) map[string]string {
@@ -218,12 +221,12 @@ func hashMap(f render.HostFiles) map[string]string {
 type Prober func(c *remote.Client, host string, paths []string) (Probe, error)
 
 // Plan queries the hosts in parallel with the shell probe.
-func Plan(st *state.State, rendered render.Rendered) ([]HostPlan, error) {
-	return PlanWith(st, rendered, nil)
+func Plan(st *state.State, rendered render.Rendered, at time.Time) ([]HostPlan, error) {
+	return PlanWith(st, rendered, at, nil)
 }
 
 // PlanWith queries the hosts in parallel and builds the plan, in host name order.
-func PlanWith(st *state.State, rendered render.Rendered, prober Prober) ([]HostPlan, error) {
+func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Prober) ([]HostPlan, error) {
 	names := make([]string, 0, len(rendered))
 	for name := range rendered {
 		names = append(names, name)
@@ -279,7 +282,7 @@ func PlanWith(st *state.State, rendered render.Rendered, prober Prober) ([]HostP
 			}
 			// plus old paths when the marker is known: they need hashing too
 			if p.HasMarker {
-				if old, err := RenderAt(st, p.Marker, name); err == nil {
+				if old, err := RenderAt(st, p.Marker, name, at); err == nil {
 					var extra []string
 					for path := range old {
 						if _, ok := files[path]; !ok {
@@ -341,7 +344,7 @@ func PlanWith(st *state.State, rendered render.Rendered, prober Prober) ([]HostP
 		if len(a.probe.Manifest) > 0 {
 			old = a.probe.Manifest
 		} else if a.probe.HasMarker {
-			if f, err := RenderAt(st, a.probe.Marker, name); err == nil {
+			if f, err := RenderAt(st, a.probe.Marker, name, at); err == nil {
 				old = hashMap(f)
 			} else if errors.Is(err, ErrPreMigration) {
 				hp.Notes = append(hp.Notes, fmt.Sprintf(

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
 	"github.com/danilrwx/vpnctl-go/internal/remote"
@@ -14,7 +15,7 @@ import (
 )
 
 // Plan reports what differs between the state and the hosts.
-func Plan(dir, host, diff, adopt string, viaAgent bool) error {
+func Plan(dir, host, diff, adopt string, viaAgent bool, at time.Time) error {
 	st, err := state.Load(dir)
 	if err != nil {
 		return err
@@ -25,7 +26,7 @@ func Plan(dir, host, diff, adopt string, viaAgent bool) error {
 		}
 		return fmt.Errorf("%d errors in the state", len(errs))
 	}
-	rendered, err := render.Check(st)
+	rendered, err := render.Check(st, at)
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func Plan(dir, host, diff, adopt string, viaAgent bool) error {
 	if viaAgent {
 		prober = agentProbe
 	}
-	plans, err := plan.PlanWith(st, one, prober)
+	plans, err := plan.PlanWith(st, one, at, prober)
 	if err != nil {
 		return err
 	}

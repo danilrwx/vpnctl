@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -78,7 +79,7 @@ func checkSnapshot(t *testing.T, name, body string) {
 
 func TestGoldenSingbox(t *testing.T) {
 	st := fixture(t)
-	r, err := Render(st, "")
+	r, err := Render(st, "", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func TestGoldenXray(t *testing.T) {
 	}
 	st.Links[0].Protocols = protos
 
-	files, err := RenderHost(st, "ru-msk-1")
+	files, err := RenderHost(st, "ru-msk-1", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,11 +137,17 @@ func TestGoldenXray(t *testing.T) {
 func TestStubSecretsRender(t *testing.T) {
 	st := fixture(t)
 	st.FillStubSecrets()
-	r, err := Render(st, "")
+	r, err := Render(st, "", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(r["ru-msk-1"]["/etc/sing-box/config.json"], "STUB-uuid-brat") {
 		t.Error("the stub secrets are not used")
 	}
+}
+
+// testDay is the date every golden test renders against: a snapshot that moved
+// with the wall clock would fail on somebody's birthday.
+func testDay() time.Time {
+	return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 }

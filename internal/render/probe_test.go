@@ -29,7 +29,7 @@ func probeFixture(role state.Role, ntfy string) *state.State {
 
 func TestProbeRenderedOnEntryOnly(t *testing.T) {
 	st := probeFixture(state.Entry, "https://ntfy.sh/vpn")
-	files, err := RenderHost(st, "node")
+	files, err := RenderHost(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestProbeRenderedOnEntryOnly(t *testing.T) {
 		t.Error("the timer does not run every minute")
 	}
 
-	exit, err := RenderHost(probeFixture(state.Exit, ""), "node")
+	exit, err := RenderHost(probeFixture(state.Exit, ""), "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestProbeRenderedOnEntryOnly(t *testing.T) {
 }
 
 func TestProbeWithoutAlerts(t *testing.T) {
-	files, err := RenderHost(probeFixture(state.Entry, ""), "node")
+	files, err := RenderHost(probeFixture(state.Entry, ""), "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}

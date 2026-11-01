@@ -29,7 +29,7 @@ func ntfyFixture(serve string) *state.State {
 }
 
 func TestNtfyServedByTheEntry(t *testing.T) {
-	files, err := RenderHost(ntfyFixture("node"), "node")
+	files, err := RenderHost(ntfyFixture("node"), "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestNtfyServedByTheEntry(t *testing.T) {
 // in alerts.yaml installs a notification server.
 func TestNtfyOnlyOnItsHost(t *testing.T) {
 	for _, host := range []string{"other", "exit"} {
-		files, err := RenderHost(ntfyFixture("node"), host)
+		files, err := RenderHost(ntfyFixture("node"), host, testDay())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,7 +86,7 @@ func TestNtfyOnlyOnItsHost(t *testing.T) {
 func TestNtfyOff(t *testing.T) {
 	st := ntfyFixture("")
 	st.Alerts = state.Alerts{}
-	files, err := RenderHost(st, "node")
+	files, err := RenderHost(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,16 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1
+[Unit]
+Description=vpnctl expiry tick timer (ru-msk-1)
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+AccuracySec=1min
+Unit=vpnctl-tick.service
+
+[Install]
+WantedBy=timers.target

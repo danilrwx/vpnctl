@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -377,14 +378,14 @@ func linkOutbounds(st *state.State, host string) ([]any, string, error) {
 }
 
 // SingBoxConfig renders /etc/sing-box/config.json.
-func SingBoxConfig(st *state.State, host string) (string, error) {
+func SingBoxConfig(st *state.State, host string, at time.Time) (string, error) {
 	h, err := st.Host(host)
 	if err != nil {
 		return "", err
 	}
 	inb := st.Inbounds[host]
 	hs := st.Secrets.Hosts[host]
-	users := UsersOf(st, host)
+	users := UsersOf(st, host, at)
 	cert, key := CertPaths(st, host)
 	inbounds := []any{}
 

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/bootstrap"
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
@@ -49,7 +50,7 @@ func HostAdd(dir string, o ops.HostOptions, nocommit bool) error {
 
 // HostBootstrap renders the setup script of a host and runs it over SSH.
 // With printOnly the script goes to stdout and the host is not touched.
-func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
+func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer, at time.Time) error {
 	if name == "" {
 		return fmt.Errorf("the host name is required")
 	}
@@ -64,7 +65,7 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
 		return fmt.Errorf("%d errors in the state", len(errs))
 	}
 	if printOnly {
-		script, err := bootstrap.Script(st, name)
+		script, err := bootstrap.Script(st, name, at)
 		if err != nil {
 			return err
 		}
@@ -73,7 +74,7 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
 	}
 	if jsonOut {
 		// progress goes to stderr, the answer stays machine-readable
-		if err := bootstrap.Run(st, name, ssh, os.Stderr); err != nil {
+		if err := bootstrap.Run(st, name, ssh, os.Stderr, at); err != nil {
 			return err
 		}
 		return emit(struct {
@@ -81,7 +82,7 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
 			OK   bool   `json:"ok"`
 		}{name, true}, func() {})
 	}
-	return bootstrap.Run(st, name, ssh, out)
+	return bootstrap.Run(st, name, ssh, out, at)
 }
 
 // HostRemove drops a host from the state.

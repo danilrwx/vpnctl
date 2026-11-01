@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
 	"github.com/danilrwx/vpnctl-go/internal/apply"
@@ -15,7 +16,7 @@ import (
 
 // Apply installs the state on the hosts. Under --json the progress goes nowhere
 // and the result is printed as JSON instead.
-func Apply(dir, host, branch string, force, unpushed, viaAgent bool) error {
+func Apply(dir, host, branch string, force, unpushed, viaAgent bool, at time.Time) error {
 	st, err := state.Load(dir)
 	if err != nil {
 		return err
@@ -24,7 +25,7 @@ func Apply(dir, host, branch string, force, unpushed, viaAgent bool) error {
 	if jsonOut {
 		out = io.Discard
 	}
-	opts := &apply.Opts{Host: host, Branch: branch, Force: force, Unpushed: unpushed}
+	opts := &apply.Opts{Host: host, Branch: branch, Force: force, Unpushed: unpushed, At: at}
 	if viaAgent {
 		opts.AgentApply = agentApply
 	}

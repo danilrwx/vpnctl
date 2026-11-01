@@ -173,10 +173,15 @@ func App() *ucli.Command {
 					&ucli.StringFlag{Name: "out", Usage: "output directory"},
 					&ucli.StringFlag{Name: "host", Usage: "only this host"},
 					&ucli.BoolFlag{Name: "stub", Usage: "secret stubs instead of the age key"},
+					atFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
-					return Render(c.String("dir"), c.String("out"), c.String("host"), c.Bool("stub"))
+					at, err := dayArg(c)
+					if err != nil {
+						return err
+					}
+					return Render(c.String("dir"), c.String("out"), c.String("host"), c.Bool("stub"), at)
 				},
 			},
 			{
@@ -189,10 +194,15 @@ func App() *ucli.Command {
 					&ucli.StringFlag{Name: "diff", Usage: "show a file diff: host:/path"},
 					&ucli.StringFlag{Name: "adopt", Usage: "take a file from a host into overrides/: host:/path"},
 					&ucli.BoolFlag{Name: "agent", Usage: "ask the host agent instead of running a probe script"},
+					atFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
-					return Plan(c.String("dir"), c.String("host"), c.String("diff"), c.String("adopt"), c.Bool("agent"))
+					at, err := dayArg(c)
+					if err != nil {
+						return err
+					}
+					return Plan(c.String("dir"), c.String("host"), c.String("diff"), c.String("adopt"), c.Bool("agent"), at)
 				},
 			},
 			{
@@ -206,11 +216,16 @@ func App() *ucli.Command {
 					&ucli.BoolFlag{Name: "force", Usage: "do not stop on a dead link or a missing certificate"},
 					&ucli.BoolFlag{Name: "unpushed", Usage: "apply a commit that is not on origin/main: only when the remote is unavailable"},
 					&ucli.BoolFlag{Name: "agent", Usage: "one signed request to the host agent instead of shell steps"},
+					atFlag(),
 				},
 				Action: func(_ context.Context, c *ucli.Command) error {
 					SetJSON(c.Bool("json"))
+					at, err := dayArg(c)
+					if err != nil {
+						return err
+					}
 					return Apply(c.String("dir"), c.String("host"), c.String("branch"),
-						c.Bool("force"), c.Bool("unpushed"), c.Bool("agent"))
+						c.Bool("force"), c.Bool("unpushed"), c.Bool("agent"), at)
 				},
 			},
 			{
@@ -289,10 +304,15 @@ func App() *ucli.Command {
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "ssh", Usage: "user@host to record when the state has none"},
 							&ucli.BoolFlag{Name: "print", Usage: "print the script instead of running it"},
+							atFlag(),
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
-							return HostBootstrap(c.String("dir"), c.Args().First(), c.String("ssh"), c.Bool("print"), os.Stdout)
+							at, err := dayArg(c)
+							if err != nil {
+								return err
+							}
+							return HostBootstrap(c.String("dir"), c.Args().First(), c.String("ssh"), c.Bool("print"), os.Stdout, at)
 						},
 					},
 				},

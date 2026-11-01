@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -107,8 +108,10 @@ type Account struct {
 	U    state.User
 }
 
-// UsersOf returns enabled users served by the entry, sorted by name.
-func UsersOf(st *state.State, entry string) []Account {
+// UsersOf returns enabled users served by the entry, sorted by name. An expired
+// user is not enabled any more: the same rule drives the agent's tick, so the
+// host and the render agree on who is gone.
+func UsersOf(st *state.State, entry string, at time.Time) []Account {
 	var names []string
 	for name := range st.Users {
 		names = append(names, name)
@@ -117,7 +120,7 @@ func UsersOf(st *state.State, entry string) []Account {
 	var out []Account
 	for _, name := range names {
 		u := st.Users[name]
-		if !u.IsEnabled() {
+		if !u.IsEnabled() || state.Expired(u.Expires, at) {
 			continue
 		}
 		if e, ok := st.EntryOf(u); !ok || e != entry {

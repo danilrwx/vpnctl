@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/remote"
@@ -110,12 +111,12 @@ func download(name string, p state.Pin, url, check, install string) Download {
 }
 
 // Script is the bootstrap script of a host: a pure function of the state and the render.
-func Script(st *state.State, host string) (string, error) {
+func Script(st *state.State, host string, at time.Time) (string, error) {
 	h, err := st.Host(host)
 	if err != nil {
 		return "", err
 	}
-	files, err := render.RenderHost(st, host)
+	files, err := render.RenderHost(st, host, at)
 	if err != nil {
 		return "", err
 	}
@@ -260,7 +261,7 @@ func Script(st *state.State, host string) (string, error) {
 }
 
 // Run records the host key when it is missing, then executes the script over SSH.
-func Run(st *state.State, host, sshOverride string, out io.Writer) error {
+func Run(st *state.State, host, sshOverride string, out io.Writer, at time.Time) error {
 	h, err := st.Host(host)
 	if err != nil {
 		return err
@@ -294,7 +295,7 @@ func Run(st *state.State, host, sshOverride string, out io.Writer) error {
 			return err
 		}
 	}
-	script, err := Script(st, host)
+	script, err := Script(st, host, at)
 	if err != nil {
 		return err
 	}

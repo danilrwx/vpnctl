@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/apply"
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
@@ -152,7 +153,7 @@ func (a *App) Plan(host string) (string, error) {
 	if errs := validate.State(a.st); len(errs) > 0 {
 		return "", fmt.Errorf("invalid state: %s", errs[0])
 	}
-	rendered, err := render.Check(a.st)
+	rendered, err := render.Check(a.st, time.Now().UTC())
 	if err != nil {
 		return "", err
 	}
@@ -162,7 +163,7 @@ func (a *App) Plan(host string) (string, error) {
 			one[name] = files
 		}
 	}
-	plans, err := plan.Plan(a.st, one)
+	plans, err := plan.Plan(a.st, one, time.Now().UTC())
 	if err != nil {
 		return "", err
 	}

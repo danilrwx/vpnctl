@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/render"
 	"github.com/danilrwx/vpnctl-go/internal/state"
@@ -57,7 +58,7 @@ func fixtureState(t *testing.T, role state.Role, engine string, awgLink bool) *s
 
 func TestScriptEntryRunning(t *testing.T) {
 	st := fixtureState(t, state.Entry, "", false)
-	s, err := Script(st, "node")
+	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestScriptEntryRunning(t *testing.T) {
 
 func TestScriptExitAndAWG(t *testing.T) {
 	st := fixtureState(t, state.Exit, "", true)
-	s, err := Script(st, "node")
+	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestScriptExitAndAWG(t *testing.T) {
 
 func TestScriptXray(t *testing.T) {
 	st := fixtureState(t, state.Exit, "xray", false)
-	s, err := Script(st, "node")
+	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ func TestScriptXray(t *testing.T) {
 func TestScriptMissingPin(t *testing.T) {
 	st := fixtureState(t, state.Exit, "", true)
 	delete(st.Versions, "sing-box")
-	if _, err := Script(st, "node"); err == nil {
+	if _, err := Script(st, "node", testDay()); err == nil {
 		t.Fatal("a missing pin was accepted")
 	}
 }
@@ -164,7 +165,7 @@ func TestScriptNtfy(t *testing.T) {
 	st := fixtureState(t, state.Entry, "", false)
 	st.Versions["ntfy"] = state.Pin{Version: "2.36.0", SHA256: strings.Repeat("a", 64)}
 	st.Alerts = state.Alerts{Ntfy: "https://ntfy.vpn.example/topic", Serve: "node"}
-	s, err := Script(st, "node")
+	s, err := Script(st, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,11 +179,16 @@ func TestScriptNtfy(t *testing.T) {
 		}
 	}
 	plain := fixtureState(t, state.Entry, "", false)
-	s, err = Script(plain, "node")
+	s, err = Script(plain, "node", testDay())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(s, "ntfy_") {
 		t.Error("a host without a topic installs the server anyway")
 	}
+}
+
+// testDay keeps the bootstrap script independent of the wall clock.
+func testDay() time.Time {
+	return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 }

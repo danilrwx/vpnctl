@@ -32,6 +32,8 @@ type Opts struct {
 	// AgentApply replaces the shell steps with one signed request to the host
 	// agent. It is injected by the CLI so this package stays free of the agent.
 	AgentApply func(c *remote.Client, host, commit string, files render.HostFiles) (HostResult, error)
+	// At is the day expiry is measured against; the zero value means today.
+	At time.Time
 }
 
 // Order is hosts from leaves to the jump: the longer the via chain, the earlier.
@@ -289,11 +291,15 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 	branch, _ := repo.Branch()
 	result.Head, result.Branch = head, branch
 
-	rendered, err := render.Check(st)
+	at := opts.At
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	rendered, err := render.Check(st, at)
 	if err != nil {
 		return result, err
 	}
-	plans, err := plan.Plan(st, rendered)
+	plans, err := plan.Plan(st, rendered, at)
 	if err != nil {
 		return result, err
 	}
