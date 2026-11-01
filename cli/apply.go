@@ -6,10 +6,10 @@ import (
 )
 
 // Apply installs the state on the hosts.
-func Apply(dir, host, branch string, force bool) error {
+func Apply(dir, host, branch string, force, unpushed bool) error {
 	st, err := state.Load(dir)
 	if err != nil {
 		return err
 	}
-	return apply.Apply(st, &apply.Opts{Host: host, Branch: branch, Force: force})
+	return apply.Apply(st, &apply.Opts{Host: host, Branch: branch, Force: force, Unpushed: unpushed})
 }

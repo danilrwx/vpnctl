@@ -24,6 +24,9 @@ type Opts struct {
 	Host   string
 	Branch string
 	Force  bool
+	// Unpushed applies a commit that is not on origin/main: only when the
+	// remote is unavailable, and the marker says so.
+	Unpushed bool
 }
 
 // Order is hosts from leaves to the jump: the longer the via chain, the earlier.
@@ -53,7 +56,7 @@ func Order(st *state.State, names []string) []string {
 	return out
 }
 
-// Guards refuse to apply a dirty worktree or a branch other than the expected one.
+// Guards refuse to apply anything but a clean, pushed, current state.
 func Guards(st *state.State, opts *Opts) error {
 	repo, err := gitsync.Open(st.Dir)
 	if err != nil {
@@ -76,6 +79,45 @@ func Guards(st *state.State, opts *Opts) error {
 	}
 	if branch != want {
 		return fmt.Errorf("branch %s, only %s is applied (or pass --branch %s explicitly)", branch, want, branch)
+	}
+	if opts.Unpushed {
+		return nil
+	}
+	// Order is always commit → push → apply: the hosts must run what every
+	// device sees, and the marker must point at a commit the others can render.
+	if err := repo.Fetch(); err != nil {
+		return fmt.Errorf("%w (use --unpushed when the remote is unavailable)", err)
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return err
+	}
+	origin, err := repo.OriginMain()
+	if err != nil {
+		return fmt.Errorf("%w (use --unpushed when the remote is unavailable)", err)
+	}
+	if head != origin {
+		return fmt.Errorf("HEAD %s is not pushed: origin/main is %s — push first, then apply (or --unpushed)", head, origin)
+	}
+	return nil
+}
+
+// checkAncestors refuses to roll a host back: the marker must be in the history
+// of this state, otherwise another device has already applied a newer commit.
+func checkAncestors(repo *gitsync.Repo, head string, plans []plan.HostPlan, names []string) error {
+	for _, name := range names {
+		for _, hp := range plans {
+			if hp.Name != name || hp.Marker == "" || hp.Unpushed {
+				continue
+			}
+			ok, err := repo.IsAncestor(hp.Marker, head)
+			if err != nil {
+				return fmt.Errorf("%s: marker %s: %w", name, hp.Marker, err)
+			}
+			if !ok {
+				return fmt.Errorf("%s runs %s, which is not in the history of %s: another device is ahead — pull first", name, hp.Marker, head)
+			}
+		}
 	}
 	return nil
 }
@@ -400,6 +442,9 @@ func Apply(st *state.State, opts *Opts) error {
 	if len(names) == 0 {
 		return fmt.Errorf("nothing to apply: host not found")
 	}
+	if err := checkAncestors(repo, head, plans, names); err != nil {
+		return err
+	}
 	order := Order(st, names)
 	branch, _ := repo.Branch()
 	fmt.Printf("plan for %s @ %s · order: %s\n", branch, head, strings.Join(order, " → "))
@@ -427,7 +472,7 @@ func Apply(st *state.State, opts *Opts) error {
 		}
 		files := rendered[name]
 		if hp.Changes() == 0 {
-			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", head, plan.Marker)); err != nil {
+			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
 				c.Close()
 				return err
 			}
@@ -515,7 +560,7 @@ func Apply(st *state.State, opts *Opts) error {
 			via = "the chain"
 		}
 		fmt.Printf("  ✓ probe: 204 via %s\n", via)
-		if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", head, plan.Marker)); err != nil {
+		if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
 			c.Close()
 			return err
 		}
@@ -533,4 +578,12 @@ func Apply(st *state.State, opts *Opts) error {
 		fmt.Printf("done %d of %d\n", done, len(order))
 	}
 	return nil
+}
+
+// markerValue is the applied commit, with a note when it is not on the remote.
+func markerValue(head string, opts *Opts) string {
+	if opts.Unpushed {
+		return head + " unpushed"
+	}
+	return head
 }
