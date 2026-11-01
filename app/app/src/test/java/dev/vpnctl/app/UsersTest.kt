@@ -33,4 +33,21 @@ class UsersTest {
         assertTrue(parseUsers("not json").isEmpty())
         assertTrue(parseUsers("").isEmpty())
     }
+
+    @Test
+    fun `the screen offers only what the entry serves`() {
+        // the live entry has reality and ws plus mtg, which is the Telegram flag
+        // and never a client protocol
+        assertEquals(listOf("reality", "ws"), userProtocols(listOf("reality", "ws", "mtg")))
+        // an entry that serves hy2 must offer it, in the same fixed order
+        assertEquals(listOf("reality", "hy2"), userProtocols(listOf("hy2", "reality")))
+        // nothing readable at all still leaves the command line's default
+        assertEquals(listOf("reality", "ws"), userProtocols(emptyList()))
+    }
+
+    @Test
+    fun `a new user starts with the pair the command line picks`() {
+        assertEquals(setOf("reality", "ws"), defaultProtocols(listOf("reality", "ws", "hy2")))
+        assertEquals(setOf("reality"), defaultProtocols(listOf("reality")))
+    }
 }

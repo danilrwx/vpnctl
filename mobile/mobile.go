@@ -238,6 +238,64 @@ func (a *App) SetEnabled(name string, on bool) (string, error) {
 	return msg, nil
 }
 
+// Protocols returns the protocols the entry actually serves, as JSON. The screen
+// offers only these: choosing one the entry has no inbound for passes nothing
+// until save, and the refusal looks like the app's mistake, not the state's.
+func (a *App) Protocols() string {
+	entry, err := a.st.Entry()
+	if err != nil {
+		return "[]"
+	}
+
+	names := make([]string, 0, len(a.st.Inbounds[entry]))
+	for name, in := range a.st.Inbounds[entry] {
+		if in.IsEnabled() {
+			names = append(names, name)
+		}
+	}
+
+	sort.Strings(names)
+
+	return mustJSON(names)
+}
+
+// EditUser replaces what a user gets: the modes, the protocols and the Telegram
+// flag. The screen shows the current values as toggles, so it sends the whole
+// choice back instead of the one field that changed.
+func (a *App) EditUser(name, modes, protocols string, tg bool) (string, error) {
+	if len(splitList(modes)) == 0 || len(splitList(protocols)) == 0 {
+		return "", fmt.Errorf("user %q: a mode and a protocol are required", name)
+	}
+
+	msg, err := ops.UserEdit(a.st, name, ops.UserPatch{
+		Modes: splitList(modes), Protocols: splitList(protocols), TG: &tg,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.save(msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+// RmUser removes a user and its secrets. The hosts keep the account until the
+// next apply, so the answer is a commit, not a disconnection.
+func (a *App) RmUser(name string) (string, error) {
+	msg, err := ops.UserRm(a.st, name)
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.save(msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
 // Renew extends a term from the later of today and the current date.
 func (a *App) Renew(name string, days int) (string, error) {
 	msg, err := ops.UserRenew(a.st, name, days, "", time.Now().UTC())

@@ -33,7 +33,14 @@ import org.json.JSONArray
 import java.io.File
 
 /** One row of the list screen. */
-data class UserRow(val name: String, val modes: String, val enabled: Boolean, val expires: String)
+data class UserRow(
+    val name: String,
+    val modes: String,
+    val protocols: List<String>,
+    val tg: Boolean,
+    val enabled: Boolean,
+    val expires: String,
+)
 
 /** One copyable line of a user card. */
 data class UserLink(val label: String, val url: String)
@@ -63,15 +70,49 @@ fun parseUsers(json: String): List<UserRow> = try {
     (0 until arr.length()).map { i ->
         val o = arr.getJSONObject(i)
         val modes = o.getJSONArray("modes")
+        val protos = o.optJSONArray("protocols")
         UserRow(
             name = o.getString("name"),
             modes = (0 until modes.length()).joinToString("/") { modes.getString(it) },
+            protocols = if (protos == null) emptyList() else (0 until protos.length()).map { protos.getString(it) },
+            tg = o.optBoolean("tg"),
             enabled = o.getBoolean("enabled"),
             expires = o.optString("expires"),
         )
     }
 } catch (e: Exception) {
     emptyList()
+}
+
+/** parseProtocols reads the entry's own inbound names. */
+fun parseProtocols(json: String): List<String> = try {
+    val arr = JSONArray(json)
+    (0 until arr.length()).map { arr.getString(it) }
+} catch (e: Exception) {
+    emptyList()
+}
+
+/**
+ * userProtocols keeps what a user can be given on this entry, in a fixed order.
+ * The entry carries mtg too, but that is the Telegram flag, not a client
+ * protocol, and offering one the entry has no inbound for fails at save.
+ */
+fun userProtocols(served: List<String>): List<String> {
+    val out = listOf("reality", "ws", "hy2", "awg").filter { it in served }
+
+    return if (out.isEmpty()) listOf("reality", "ws") else out
+}
+
+/** servedProtocols is the entry's own answer, cut to what a user can have. */
+fun servedProtocols(app: mobile.App?): List<String> =
+    userProtocols(app?.let { parseProtocols(it.protocols()) } ?: emptyList())
+
+/** defaultProtocols is what the command line creates when it is not told: the
+ * pair the entry serves, or its first protocol when it serves only one. */
+fun defaultProtocols(served: List<String>): Set<String> {
+    val both = listOf("reality", "ws").filter { it in served }
+
+    return if (both.isEmpty()) setOf(served.first()) else both.toSet()
 }
 
 /** parseLinks is the same shape for Links(): a label and a URL per row. */
@@ -119,29 +160,47 @@ fun App(modifier: Modifier = Modifier) {
                 selected = null
             },
         )
-        else -> UserScreen(ctx, modifier, name = selected!!, onBack = { selected = null })
+        else -> UserScreen(
+            ctx,
+            modifier,
+            name = selected!!,
+            onBack = { selected = null },
+            onDeleted = {
+                version++
+                selected = null
+            },
+        )
     }
 }
 
 @Composable
 fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, onPick: (String) -> Unit) {
     var status by remember { mutableStateOf("") }
+    // The handle is read in composition, not kept in state: a Go object parked in
+    // Compose state did not survive the open (the write never reached the read),
+    // and the list stayed on the APK fixture until the process restarted. Reading
+    // it needs a reason to recompose, and a successful open has nothing to say,
+    // so the counter is the reason.
+    var epoch by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         if (Core.current() == null) {
-            status = withContext(Dispatchers.IO) { Core.openBundled(ctx)?.let { "" } ?: "нет состояния" }
+            val opened = withContext(Dispatchers.IO) { Core.openBundled(ctx) }
+            if (opened == null) {
+                status = "нет состояния"
+            }
+
+            epoch++
         }
 
         if (Core.current() != null && !File(ctx.filesDir, "state/.git").exists()) {
             status = withContext(Dispatchers.IO) { Core.sync(ctx, REPO) }
+            epoch++
         }
     }
 
-    // The handle is read here, not kept in remember: a Go object parked in Compose
-    // state did not survive the sync (the write never reached the read), and the
-    // list stayed on the APK fixture until the process restarted.
     val app = Core.current()
-    val users = remember(app, version) { app?.let { parseUsers(it.users()) } ?: emptyList() }
+    val users = remember(app, epoch, version) { app?.let { parseUsers(it.users()) } ?: emptyList() }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (status.isNotEmpty()) {
@@ -168,12 +227,25 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
 }
 
 @Composable
-fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, onBack: () -> Unit) {
+fun UserScreen(
+    ctx: android.content.Context,
+    modifier: Modifier,
+    name: String,
+    onBack: () -> Unit,
+    onDeleted: () -> Unit,
+) {
     val app = remember { Core.current() }
+    val served = remember { servedProtocols(app) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var links by remember { mutableStateOf(emptyList<UserLink>()) }
     var message by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf(setOf("split")) }
+    var protos by remember { mutableStateOf(emptySet<String>()) }
+    var tg by remember { mutableStateOf(false) }
+    // the second tap really deletes: the first one only says what it will do
+    var confirming by remember { mutableStateOf(false) }
+    var reload by remember { mutableStateOf(0) }
 
     val scope = rememberCoroutineScope()
 
@@ -193,9 +265,19 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
         }
     }
 
-    LaunchedEffect(name) {
+    LaunchedEffect(name, reload) {
         links = withContext(Dispatchers.IO) {
             app?.let { parseLinks(it.links(name)) } ?: emptyList()
+        }
+
+        val row = withContext(Dispatchers.IO) {
+            app?.let { parseUsers(it.users()).firstOrNull { u -> u.name == name } }
+        }
+
+        if (row != null) {
+            mode = row.modes.split("/").toSet()
+            protos = row.protocols.toSet()
+            tg = row.tg
         }
     }
 
@@ -216,6 +298,30 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
             }
         }
 
+        SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
+        SelectRow("протоколы", served, protos) {
+            protos = if (it in protos) protos - it else protos + it
+        }
+
+        Row {
+            Checkbox(checked = tg, onCheckedChange = { tg = it })
+            Text("телеграм", modifier = Modifier.padding(top = 12.dp))
+        }
+
+        Button(
+            onClick = {
+                act {
+                    val out = saveUser(app, name, mode, protos, tg)
+                    if (out.startsWith("ok")) {
+                        reload++
+                    }
+
+                    out
+                }
+            },
+            enabled = !busy && protos.isNotEmpty(),
+        ) { Text("сохранить") }
+
         Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("продлить 30 дней") }
         Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("выключить") }
         Button(
@@ -230,6 +336,27 @@ fun UserScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
             enabled = !busy,
         ) { Text("сообщение") }
         Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("отправить в git") }
+
+        Button(
+            onClick = {
+                if (!confirming) {
+                    confirming = true
+                    status = "нажмите ещё раз: пользователь и его ключи удаляются из состояния"
+
+                    return@Button
+                }
+
+                act {
+                    val out = removeUser(app, name)
+                    if (out.startsWith("ok")) {
+                        onDeleted()
+                    }
+
+                    out
+                }
+            },
+            enabled = !busy,
+        ) { Text(if (confirming) "точно удалить" else "удалить") }
 
         if (status.isNotEmpty()) {
             Text(status, style = MaterialTheme.typography.bodySmall)
@@ -279,6 +406,17 @@ fun copyToClipboard(ctx: android.content.Context, text: String) {
     clip.setPrimaryClip(android.content.ClipData.newPlainText("vpnctl", text))
 }
 
+/** saveUser sends the whole choice back: the screen shows it as toggles. */
+fun saveUser(app: mobile.App?, name: String, modes: Set<String>, protocols: Set<String>, tg: Boolean): String {
+    val msg = app?.editUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "нет состояния"
+    return "ok: $msg"
+}
+
+fun removeUser(app: mobile.App?, name: String): String {
+    val msg = app?.rmUser(name) ?: return "нет состояния"
+    return "ok: $msg"
+}
+
 fun pushState(app: mobile.App?): String {
     val head = app?.push() ?: return "нет репозитория"
     return "pushed $head"
@@ -307,9 +445,10 @@ fun SelectRow(label: String, options: List<String>, selected: Set<String>, onPic
 @Composable
 fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit, onCreated: () -> Unit) {
     val app = remember { Core.current() }
+    val served = remember { servedProtocols(app) }
     var name by remember { mutableStateOf("") }
     var mode by remember { mutableStateOf(setOf("split")) }
-    var protos by remember { mutableStateOf(setOf("reality", "ws")) }
+    var protos by remember { mutableStateOf(defaultProtocols(served)) }
     var tg by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -341,7 +480,7 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
         Button(onClick = onBack) { Text("назад") }
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("имя") }, singleLine = true)
         SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
-        SelectRow("протоколы", listOf("reality", "ws", "hy2", "awg"), protos) {
+        SelectRow("протоколы", served, protos) {
             protos = if (it in protos) protos - it else protos + it
         }
 
