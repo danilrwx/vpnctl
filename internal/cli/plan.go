@@ -10,6 +10,7 @@ import (
 
 	"github.com/danilrwx/vpnctl-go/internal/plan"
 	"github.com/danilrwx/vpnctl-go/internal/render"
+	"github.com/danilrwx/vpnctl-go/internal/state"
 	"github.com/danilrwx/vpnctl-go/internal/validate"
 )
 
@@ -55,7 +56,9 @@ func Plan(dir, host, diff, adopt string, viaAgent bool, at time.Time) error {
 	}
 	var prober plan.Prober
 	if viaAgent {
-		prober = agentProbe
+		prober = func(host string, paths []string) (plan.Probe, error) {
+			return agentProbe(st, host, paths)
+		}
 	}
 	plans, err := plan.PlanWith(st, one, at, prober)
 	if err != nil {
@@ -73,7 +76,12 @@ func splitTarget(s string) (string, string) {
 }
 
 // agentProbe asks the agent for the marker and the hashes in one request.
-func agentProbe(c *remote.Client, host string, paths []string) (plan.Probe, error) {
+func agentProbe(st *state.State, host string, paths []string) (plan.Probe, error) {
+	c, err := remote.Dial(st, host)
+	if err != nil {
+		return plan.Probe{}, err
+	}
+	defer func() { _ = c.Close() }()
 	key, err := agent.LoadKey(agent.KeyPath())
 	if err != nil {
 		return plan.Probe{}, err

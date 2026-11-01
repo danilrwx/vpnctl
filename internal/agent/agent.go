@@ -349,14 +349,16 @@ func hashFile(p string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func runSh(script string) error {
-	return exec.Command("sh", "-c", script).Run()
-}
-
-func outputSh(script string) (string, error) {
-	b, err := exec.Command("sh", "-c", script).Output()
-	return string(b), err
-}
+// The shell is a seam: a test replaces these with a recorder and asks what the
+// agent would have run, without root and without a host. Production never
+// changes them.
+var (
+	runSh    = func(script string) error { return exec.Command("sh", "-c", script).Run() }
+	outputSh = func(script string) (string, error) {
+		b, err := exec.Command("sh", "-c", script).Output()
+		return string(b), err
+	}
+)
 
 func newKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

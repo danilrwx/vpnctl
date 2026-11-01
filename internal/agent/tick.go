@@ -143,41 +143,15 @@ func Tick(opts TickOptions) (TickReport, error) {
 
 	// subscriptions: off the web root, kept under the expired directory so a
 	// mistaken date can be undone without re-rendering
-	for _, name := range gone {
-		sub := exp.Users[name].SubID
-		if sub == "" {
-			continue
-		}
-		src := filepath.Join(opts.SubRoot, sub)
-		if _, err := os.Stat(src); err != nil {
-			continue
-		}
-		if err := os.MkdirAll(opts.ExpiredDir, 0o700); err != nil {
-			return rep, err
-		}
-		if err := os.Rename(src, filepath.Join(opts.ExpiredDir, "sub-"+sub)); err != nil {
-			return rep, err
-		}
-		rep.Subs = append(rep.Subs, sub)
+	subs, err := takeDownSubs(opts, exp, gone)
+	if err != nil {
+		return rep, err
 	}
 
-	// awg peers: a live tunnel outlives the engine identity, so it goes too
-	for _, name := range gone {
-		ip := exp.Users[name].AWGIP
-		if ip == "" || opts.AWGConfig == "" {
-			continue
-		}
-		changed, err := DropPeer(opts.AWGConfig, ip)
-		if err != nil {
-			return rep, err
-		}
-		if !changed {
-			continue
-		}
-		rep.Peers = append(rep.Peers, ip)
-		if _, err := opts.Run("systemctl restart awg-quick@awg0"); err != nil {
-			return rep, fmt.Errorf("restart awg-quick@awg0: %w", err)
-		}
+	rep.Subs = subs
+	rep.Peers, err = dropPeers(opts, exp, gone)
+	if err != nil {
+		return rep, err
 	}
 
 	if rep.Changed || len(rep.Subs) > 0 || len(rep.Peers) > 0 {
@@ -192,6 +166,65 @@ func Tick(opts TickOptions) (TickReport, error) {
 		}
 	}
 	return rep, nil
+}
+
+// takeDownSubs moves every subscription of the expired accounts out of the web
+// root. A directory that is already gone is not an error: the tick is idempotent.
+func takeDownSubs(opts TickOptions, exp state.Expiry, gone []string) ([]string, error) {
+	var subs []string
+
+	for _, name := range gone {
+		sub := exp.Users[name].SubID
+		if sub == "" {
+			continue
+		}
+
+		src := filepath.Join(opts.SubRoot, sub)
+		if _, err := os.Stat(src); err != nil {
+			continue
+		}
+
+		if err := os.MkdirAll(opts.ExpiredDir, 0o700); err != nil {
+			return subs, err
+		}
+
+		if err := os.Rename(src, filepath.Join(opts.ExpiredDir, "sub-"+sub)); err != nil {
+			return subs, err
+		}
+
+		subs = append(subs, sub)
+	}
+
+	return subs, nil
+}
+
+// dropPeers removes the awg peer of every expired account: a live tunnel
+// outlives the engine identity, so the account would keep its path otherwise.
+func dropPeers(opts TickOptions, exp state.Expiry, gone []string) ([]string, error) {
+	var peers []string
+
+	for _, name := range gone {
+		ip := exp.Users[name].AWGIP
+		if ip == "" || opts.AWGConfig == "" {
+			continue
+		}
+
+		changed, err := DropPeer(opts.AWGConfig, ip)
+		if err != nil {
+			return peers, err
+		}
+
+		if !changed {
+			continue
+		}
+
+		peers = append(peers, ip)
+		if _, err := opts.Run("systemctl restart awg-quick@awg0"); err != nil {
+			return peers, fmt.Errorf("restart awg-quick@awg0: %w", err)
+		}
+	}
+
+	return peers, nil
 }
 
 // swapChecked writes the new config only after it passes the engine's own check,

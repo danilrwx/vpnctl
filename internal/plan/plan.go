@@ -219,7 +219,9 @@ func hashMap(f render.HostFiles) map[string]string {
 
 // Prober answers the probe for one host: the shell script by default, the agent
 // when the CLI passes one.
-type Prober func(c *remote.Client, host string, paths []string) (Probe, error)
+// A Prober answers the probe for one host. It never dials: the caller that
+// supplies one owns the connection, and a test supplies one that owns nothing.
+type Prober func(host string, paths []string) (Probe, error)
 
 // Plan queries the hosts in parallel with the shell probe.
 func Plan(st *state.State, rendered render.Rendered, at time.Time) ([]HostPlan, error) {
@@ -253,25 +255,27 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 				mu.Unlock()
 			}()
 			files := rendered[name]
-			c, err := remote.Dial(st, name)
-			if err != nil {
-				a.err = err
-				return
-			}
-			defer func() { _ = c.Close() }()
-			if err := c.Reachable(); err != nil {
-				a.err = err
-				return
-			}
 			paths := make([]string, 0, len(files))
 			for p := range files {
 				paths = append(paths, p)
 			}
 			sort.Strings(paths)
 			var p Probe
+			var err error
+			var c *remote.Client
 			if prober != nil {
-				p, err = prober(c, name, paths)
+				p, err = prober(name, paths)
 			} else {
+				c, err = remote.Dial(st, name)
+				if err != nil {
+					a.err = err
+					return
+				}
+				defer func() { _ = c.Close() }()
+				if err := c.Reachable(); err != nil {
+					a.err = err
+					return
+				}
 				var out string
 				out, err = c.SH(ProbeScript(paths))
 				if err == nil {
@@ -295,7 +299,7 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 						sort.Strings(extra)
 						var p2 Probe
 						if prober != nil {
-							p2, err = prober(c, name, extra)
+							p2, err = prober(name, extra)
 						} else {
 							var out2 string
 							out2, err = c.SH(ProbeScript(extra))
@@ -319,6 +323,10 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 			a.probe = p
 			// what the host actually runs: the agent writes this at install time.
 			// A stale agent silently lacks whatever we added since it was copied.
+			// A prober that owns no connection cannot be asked.
+			if c == nil {
+				return
+			}
 			if out, err := c.SH("cat /etc/vpnctl/agent.version 2>/dev/null || echo -"); err == nil {
 				if v := strings.TrimSpace(out); v != "" && v != "-" {
 					// tolerate the "vpnctl-agent " prefix an older install wrote

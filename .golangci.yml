@@ -21,3 +21,8 @@ formatters:
   enable:
     - gofmt
     - goimports
+    # gofumpt is gofmt with the empty-line sloppiness removed: no blank line
+    # right after an opening brace or before a closing one. It does not invent
+    # blank lines, which is why it is here and wsl is not: a linter that puts a
+    # blank line between every guard turns one thought into four.
+    - gofumpt
