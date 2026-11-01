@@ -210,3 +210,39 @@ func TestReleaseURL(t *testing.T) {
 		t.Error("a moving latest was given a pinned URL")
 	}
 }
+
+// TestUserRmTakesTheSecretsWithIt: a removed user whose UUID and hysteria
+// password stay in the secrets file is a credential that still works wherever
+// someone kept a link, so both maps have to lose the name together.
+func TestUserRmTakesTheSecretsWithIt(t *testing.T) {
+	st := fixture(t)
+
+	if _, err := UserAdd(st, "gone", []string{"split"}, []string{"reality"}, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := st.Secrets.Users["gone"]; !ok {
+		t.Fatal("the fixture did not mint secrets")
+	}
+
+	msg, err := UserRm(st, "gone")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "users: - gone"; msg != want {
+		t.Fatalf("message %q, want %q", msg, want)
+	}
+
+	if _, ok := st.Users["gone"]; ok {
+		t.Error("the user is still described")
+	}
+
+	if _, ok := st.Secrets.Users["gone"]; ok {
+		t.Error("the secrets outlived the user")
+	}
+
+	if _, err := UserRm(st, "gone"); err == nil {
+		t.Error("removing a user twice succeeded")
+	}
+}
