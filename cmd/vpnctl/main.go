@@ -29,6 +29,82 @@ func main() {
 			"the hosts, `apply` installs it leaves first, `user config` hands out client profiles.",
 		Commands: []*ucli.Command{
 			{
+				Name:  "init",
+				Usage: "create a state: skeleton, age.yaml and the first commit",
+				Flags: []ucli.Flag{
+					dirFlag(),
+					&ucli.StringFlag{Name: "name", Usage: "device name in age.yaml, default: hostname"},
+					&ucli.StringFlag{Name: "backup-pass", Usage: "create the offline backup identity sealed with this passphrase"},
+					&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+				},
+				Action: func(_ context.Context, c *ucli.Command) error {
+					return cli.Init(c.String("dir"), c.String("name"), c.String("backup-pass"), c.Bool("nocommit"))
+				},
+			},
+			{
+				Name:  "key",
+				Usage: "recipients of secrets.age.yaml",
+				Commands: []*ucli.Command{
+					{
+						Name:      "init",
+						Usage:     "write age.yaml from the local identity",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the device name is required")
+							}
+							return cli.KeyInit(c.String("dir"), name, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:      "add",
+						Usage:     "add a device: re-encrypts the secrets for everyone",
+						ArgsUsage: "<name> <age1…>",
+						Flags: []ucli.Flag{
+							dirFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							name := c.Args().Get(0)
+							key := c.Args().Get(1)
+							if name == "" || key == "" {
+								return errors.New("usage: key add <name> <age1…>")
+							}
+							return cli.KeyAdd(c.String("dir"), name, key, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:      "rm",
+						Usage:     "drop a device: re-encrypts the secrets for the rest",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the device name is required")
+							}
+							return cli.KeyRemove(c.String("dir"), name, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:  "list",
+						Usage: "list recipients, * marks this device",
+						Flags: []ucli.Flag{dirFlag()},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							return cli.KeyList(c.String("dir"))
+						},
+					},
+				},
+			},
+			{
 				Name:    "check",
 				Aliases: []string{"validate"},
 				Usage:   "validate the state statically",

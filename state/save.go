@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,9 +10,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// marshal renders YAML with two-space indentation: the state files have been
+// written this way since the Rust core, and four spaces make every diff noisy.
+func marshal(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := yaml.NewEncoder(&b)
+	enc.SetIndent(2)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
 // SaveUsers writes users.yaml.
 func SaveUsers(dir string, users map[string]User) error {
-	b, err := yaml.Marshal(map[string]any{"users": users})
+	b, err := marshal(map[string]any{"users": users})
 	if err != nil {
 		return fmt.Errorf("marshal users: %w", err)
 	}
@@ -21,7 +37,7 @@ func SaveUsers(dir string, users map[string]User) error {
 // SaveSecrets writes the secrets file for every recipient listed in age.yaml,
 // or for the local identity alone when the state has no age.yaml yet.
 func SaveSecrets(dir string, sec Secrets) error {
-	b, err := yaml.Marshal(sec)
+	b, err := marshal(sec)
 	if err != nil {
 		return fmt.Errorf("marshal secrets: %w", err)
 	}
@@ -42,7 +58,7 @@ func SaveSecrets(dir string, sec Secrets) error {
 
 // SaveLinks writes links.yaml.
 func SaveLinks(dir string, links []Link) error {
-	b, err := yaml.Marshal(map[string]any{"links": links})
+	b, err := marshal(map[string]any{"links": links})
 	if err != nil {
 		return fmt.Errorf("marshal links: %w", err)
 	}
