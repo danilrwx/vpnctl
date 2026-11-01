@@ -321,7 +321,8 @@ func PlanWith(st *state.State, rendered render.Rendered, at time.Time, prober Pr
 			// A stale agent silently lacks whatever we added since it was copied.
 			if out, err := c.SH("cat /etc/vpnctl/agent.version 2>/dev/null || echo -"); err == nil {
 				if v := strings.TrimSpace(out); v != "" && v != "-" {
-					a.agent = v
+					// tolerate the "vpnctl-agent " prefix an older install wrote
+					a.agent = strings.TrimPrefix(v, "vpnctl-agent ")
 				}
 			}
 		}(name)

@@ -63,7 +63,7 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 		{"install", "install -m 0755 /tmp/vpnctl-agent.new /usr/local/bin/vpnctl-agent && rm -f /tmp/vpnctl-agent.new", nil},
 		{"host name", fmt.Sprintf("install -d -m 0755 /etc/vpnctl && printf '%%s\\n' %q > /etc/vpnctl/host", host), nil},
 		// what the host runs, so plan can say it out loud when it is stale
-		{"version", "/usr/local/bin/vpnctl-agent --version > /etc/vpnctl/agent.version", nil},
+		{"version", "/usr/local/bin/vpnctl-agent --version | cut -d' ' -f2- > /etc/vpnctl/agent.version", nil},
 		{"key dir", "install -d -m 0700 /etc/vpnctl/agents && install -d -m 0700 /var/lib/vpnctl/nonces", nil},
 		{"public key", "cat > /etc/vpnctl/agents/" + operator + ".pub", pubPEM},
 		{"authorized_keys", "install -d -m 0700 /root/.ssh && touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys && grep -qF 'vpnctl-agent:" + operator + "' /root/.ssh/authorized_keys || printf '%s\\n' " + shellQuote(line) + " >> /root/.ssh/authorized_keys", nil},
