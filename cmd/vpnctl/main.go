@@ -164,6 +164,34 @@ func main() {
 				Usage: "hosts: setup and maintenance",
 				Commands: []*ucli.Command{
 					{
+						Name:      "add",
+						Usage:     "create a host with its inbound, keys and routing",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(),
+							&ucli.StringFlag{Name: "role", Value: "exit", Usage: "entry or exit"},
+							&ucli.StringFlag{Name: "ssh", Usage: "root@ip"},
+							&ucli.StringFlag{Name: "ip", Usage: "address, inferred from --ssh when omitted"},
+							&ucli.StringFlag{Name: "domain", Usage: "the entry domain, required for an entry"},
+							&ucli.StringFlag{Name: "via", Usage: "jump host name"},
+							&ucli.StringFlag{Name: "engine", Usage: "sing-box (default) or xray"},
+							&ucli.BoolFlag{Name: "awg", Usage: "add an AmneziaWG inbound"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							return cli.HostAdd(c.String("dir"), ops.HostOptions{
+								Name:   c.Args().First(),
+								Role:   c.String("role"),
+								SSH:    c.String("ssh"),
+								IP:     c.String("ip"),
+								Domain: c.String("domain"),
+								Via:    c.String("via"),
+								Engine: c.String("engine"),
+								AWG:    c.Bool("awg"),
+							}, c.Bool("nocommit"))
+						},
+					},
+					{
 						Name:      "bootstrap",
 						Usage:     "install packages, engines and units on a host, idempotent",
 						ArgsUsage: "<name>",
