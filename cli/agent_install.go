@@ -84,9 +84,15 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 	if err != nil {
 		return fmt.Errorf("%s: the agent did not answer: %w", host, err)
 	}
-	fmt.Printf("✓ %s: agent installed, marker %q, bootstrapped %v\n", host, resp.Marker, resp.Bootstrapped)
-	fmt.Printf("  key for %s is restricted to /usr/local/bin/vpnctl-agent\n", operator)
-	return nil
+	return emit(struct {
+		Host     string `json:"host"`
+		Operator string `json:"operator"`
+		Marker   string `json:"marker"`
+		Booted   bool   `json:"bootstrapped"`
+	}{host, operator, resp.Marker, resp.Bootstrapped}, func() {
+		fmt.Printf("✓ %s: agent installed, marker %q, bootstrapped %v\n", host, resp.Marker, resp.Bootstrapped)
+		fmt.Printf("  key for %s is restricted to /usr/local/bin/vpnctl-agent\n", operator)
+	})
 }
 
 // defaultAgentBinary looks for vpnctl-agent next to the running binary.

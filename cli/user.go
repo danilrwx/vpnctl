@@ -57,6 +57,23 @@ func UserRm(dir, name string, nocommit bool) error {
 	return nil
 }
 
+// UserRotate gives a user fresh credentials and commits.
+func UserRotate(dir, name string, nocommit bool) error {
+	st, err := state.Load(dir)
+	if err != nil {
+		return err
+	}
+	msg, err := ops.UserRotate(st, name)
+	if err != nil {
+		return err
+	}
+	if err := save(st, dir, msg, nocommit); err != nil {
+		return err
+	}
+	fmt.Printf("✓ %s\n", msg)
+	return nil
+}
+
 // UserList prints every user with its modes, protocols and flags.
 func UserList(dir string) error {
 	st, err := state.Load(dir)

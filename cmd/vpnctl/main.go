@@ -228,6 +228,24 @@ func main() {
 						},
 					},
 					{
+						Name:          "rm",
+						Usage:         "remove a host with its inbound and routing",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeHosts,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the host name is required")
+							}
+							return cli.HostRemove(c.String("dir"), name, c.Bool("nocommit"))
+						},
+					},
+					{
 						Name:          "bootstrap",
 						Usage:         "install packages, engines and units on a host, idempotent",
 						ArgsUsage:     "<name>",
@@ -305,6 +323,24 @@ func main() {
 								return errors.New("the user name is required")
 							}
 							return cli.UserRm(c.String("dir"), name, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:          "rotate",
+						Usage:         "new uuid, passwords and sub id: a leaked link stops working",
+						ArgsUsage:     "<name>",
+						ShellComplete: completeUsers,
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							cli.SetJSON(c.Bool("json"))
+							name := c.Args().First()
+							if name == "" {
+								return errors.New("the user name is required")
+							}
+							return cli.UserRotate(c.String("dir"), name, c.Bool("nocommit"))
 						},
 					},
 					{

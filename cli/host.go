@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/danilrwx/vpnctl-go/bootstrap"
 	"github.com/danilrwx/vpnctl-go/gitsync"
@@ -71,4 +72,45 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
 		return nil
 	}
 	return bootstrap.Run(st, name, ssh, out)
+}
+
+// HostRemove drops a host from the state.
+func HostRemove(dir, name string, nocommit bool) error {
+	st, err := state.Load(dir)
+	if err != nil {
+		return err
+	}
+	msg, err := ops.HostRemove(st, name)
+	if err != nil {
+		return err
+	}
+	if err := state.SaveHosts(dir, st.Hosts); err != nil {
+		return err
+	}
+	if err := state.SaveInbounds(dir, st.Inbounds); err != nil {
+		return err
+	}
+	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
+		return err
+	}
+	os.Remove(filepath.Join(dir, "routing", name+".yaml"))
+	if errs := validate.State(st); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintln(os.Stderr, "  ✗", e)
+		}
+		return fmt.Errorf("%d errors in the state", len(errs))
+	}
+	if nocommit {
+		fmt.Println("(not committed)")
+	} else {
+		repo, err := gitsync.Open(dir)
+		if err != nil {
+			return err
+		}
+		if err := repo.Commit(msg); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("✓ %s\n", msg)
+	return nil
 }
