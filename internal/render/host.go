@@ -422,7 +422,7 @@ func Check(st *state.State) (Rendered, error) {
 func prefixLen(cidr string) int {
 	if i := strings.LastIndex(cidr, "/"); i >= 0 {
 		var n int
-		fmt.Sscanf(cidr[i+1:], "%d", &n)
+		_, _ = fmt.Sscanf(cidr[i+1:], "%d", &n)
 		return n
 	}
 	return 32

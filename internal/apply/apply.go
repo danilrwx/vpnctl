@@ -523,18 +523,18 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		files := rendered[name]
 		if hp.Changes() == 0 {
 			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
-				c.Close()
+				_ = c.Close()
 				return fail(name, 0, err)
 			}
 			fmt.Fprintf(out, "  – no changes, marker %s updated\n", head)
-			c.Close()
+			_ = c.Close()
 			done++
 			result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "unchanged", Marker: head})
 			continue
 		}
 		if opts.AgentApply != nil {
 			hr, err := opts.AgentApply(c, name, head, files)
-			c.Close()
+			_ = c.Close()
 			if err != nil {
 				return fail(name, hp.Changes(), err)
 			}
@@ -547,7 +547,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		}
 		notes, err := preflight(st, c, name, files, opts.Force)
 		if err != nil {
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), err)
 		}
 		for _, n := range notes {
@@ -556,16 +556,16 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		fmt.Fprintf(out, "  ✓ render · %d files, %d changes\n", len(files), hp.Changes())
 		tarball, err := Tarball(files)
 		if err != nil {
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), err)
 		}
 		cmdOut, err := c.Run("rm -rf /tmp/.vpnctl && mkdir -p /tmp/.vpnctl && tar -xf - -C /tmp/.vpnctl", tarball)
 		if err != nil {
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), err)
 		}
 		if !cmdOut.OK() {
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), fmt.Errorf("%s: copy failed: %s", name, strings.TrimSpace(string(cmdOut.Stderr))))
 		}
 		fmt.Fprintln(out, "  ✓ copied over the connection → /tmp/.vpnctl/")
@@ -579,12 +579,12 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 			}
 			cmdOut, err := c.Run(cmd, nil)
 			if err != nil {
-				c.Close()
+				_ = c.Close()
 				return fail(name, hp.Changes(), err)
 			}
 			if !cmdOut.OK() {
-				c.Run("rm -rf /tmp/.vpnctl", nil)
-				c.Close()
+				_, _ = c.Run("rm -rf /tmp/.vpnctl", nil)
+				_ = c.Close()
 				return fail(name, hp.Changes(), fmt.Errorf("%s: check of %s failed:\n%s", name, f.Path, strings.TrimSpace(string(cmdOut.Stderr))))
 			}
 			fmt.Fprintf(out, "  ✓ check %s\n", f.Path)
@@ -592,14 +592,14 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		backup := "/var/lib/vpnctl/backup/" + head
 		cmdOut, err = c.Run(InstallScript(hp, backup), nil)
 		if err != nil {
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), err)
 		}
 		if !cmdOut.OK() {
 			fmt.Fprintln(out, strings.TrimSpace(string(cmdOut.Stderr)))
 			fmt.Fprintln(out, "  ✗ swap failed, rolled back to the backup")
-			c.Run(RollbackScript(hp, backup), nil)
-			c.Close()
+			_, _ = c.Run(RollbackScript(hp, backup), nil)
+			_ = c.Close()
 			return fail(name, hp.Changes(), fmt.Errorf("%s: swap failed — series stopped", name))
 		}
 		fmt.Fprintln(out, "  ✓ atomic swap · services reloaded")
@@ -616,7 +616,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 			if rb, err := c.Run(RollbackScript(hp, backup), nil); err == nil && !rb.OK() {
 				fmt.Fprintln(out, strings.TrimSpace(string(rb.Stderr)))
 			}
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), fmt.Errorf("%s: chain probe failed, config restored — series stopped", name))
 		}
 		via := "the exit"
@@ -625,11 +625,11 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		}
 		fmt.Fprintf(out, "  ✓ probe: 204 via %s\n", via)
 		if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
-			c.Close()
+			_ = c.Close()
 			return fail(name, hp.Changes(), err)
 		}
 		fmt.Fprintf(out, "  ✓ marker %s written\n", head)
-		c.Close()
+		_ = c.Close()
 		done++
 		result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "applied", Changes: hp.Changes(), Probe: code, Marker: head})
 	}

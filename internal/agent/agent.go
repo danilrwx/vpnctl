@@ -143,7 +143,7 @@ func CheckPath(path string, mode int) error {
 		return &Error{Code: "path", Err: fmt.Errorf("%s: not an absolute path", path)}
 	}
 	if strings.Contains(path, "..") {
-		return &Error{Code: "path", Err: fmt.Errorf("%s: contains ..", path)}
+		return &Error{Code: "path", Err: fmt.Errorf("%s: contains a parent directory reference", path)}
 	}
 	if strings.ContainsFunc(path, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return &Error{Code: "path", Err: fmt.Errorf("%q: control character", path)}
@@ -307,7 +307,7 @@ func Apply(r *Request, root string, out func(string)) Response {
 	backup := filepath.Join(root, "backup", r.Commit)
 	if err := runSh(apply.InstallScript(hp, backup)); err != nil {
 		out("swap failed, rolling back")
-		runSh(apply.RollbackScript(hp, backup))
+		_ = runSh(apply.RollbackScript(hp, backup))
 		res.RolledBack = true
 		return fail(res, "io", err)
 	}
@@ -316,7 +316,7 @@ func Apply(r *Request, root string, out func(string)) Response {
 	code, err := outputSh(probe)
 	if err != nil || strings.TrimSpace(code) != "204" {
 		out("probe failed: " + strings.TrimSpace(code))
-		runSh(apply.RollbackScript(hp, backup))
+		_ = runSh(apply.RollbackScript(hp, backup))
 		res.RolledBack = true
 		r2 := fail(res, "probe", fmt.Errorf("probe returned %q", strings.TrimSpace(code)))
 		return r2

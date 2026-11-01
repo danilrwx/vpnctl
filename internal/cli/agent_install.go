@@ -52,7 +52,7 @@ func HostAgentInstall(dir, host, binary, operator string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	steps := []struct {
 		name   string

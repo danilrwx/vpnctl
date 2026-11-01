@@ -68,7 +68,7 @@ func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprint(out, script)
+		_, _ = fmt.Fprint(out, script)
 		return nil
 	}
 	if jsonOut {
@@ -103,7 +103,7 @@ func HostRemove(dir, name string, nocommit bool) error {
 	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
 		return err
 	}
-	os.Remove(filepath.Join(dir, "routing", name+".yaml"))
+	_ = os.Remove(filepath.Join(dir, "routing", name+".yaml"))
 	if errs := validate.State(st); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, "  ✗", e)

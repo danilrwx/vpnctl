@@ -172,7 +172,7 @@ func RenderAt(st *state.State, commit, host string) (render.HostFiles, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	for name, body := range files {
 		p := filepath.Join(tmp, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -237,7 +237,7 @@ func PlanWith(st *state.State, rendered render.Rendered, prober Prober) ([]HostP
 				a.err = err
 				return
 			}
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 			if err := c.Reachable(); err != nil {
 				a.err = err
 				return
@@ -410,7 +410,7 @@ func Fetch(st *state.State, host, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	return c.SH("cat '" + path + "'")
 }
 

@@ -118,12 +118,12 @@ func Dial(st *state.State, host string) (*Client, error) {
 		for _, name := range chain[1:] {
 			j, err := st.Host(name)
 			if err != nil {
-				conn.Close()
+				_ = conn.Close()
 				return nil, err
 			}
 			a, err := address(j)
 			if err != nil {
-				conn.Close()
+				_ = conn.Close()
 				return nil, err
 			}
 			next, err := dialThrough(conn, a, &ssh.ClientConfig{
@@ -134,14 +134,14 @@ func Dial(st *state.State, host string) (*Client, error) {
 				Timeout:           timeout,
 			})
 			if err != nil {
-				conn.Close()
+				_ = conn.Close()
 				return nil, fmt.Errorf("%s: %w", name, err)
 			}
 			conn = next
 		}
 		next, err := dialThrough(conn, addr, c.cfg)
 		if err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return nil, fmt.Errorf("%s: %w", host, err)
 		}
 		conn = next
@@ -157,7 +157,7 @@ func dialThrough(jump *ssh.Client, addr string, cfg *ssh.ClientConfig) (*ssh.Cli
 	}
 	cc, chans, reqs, err := ssh.NewClientConn(nc, addr, cfg)
 	if err != nil {
-		nc.Close()
+		_ = nc.Close()
 		return nil, err
 	}
 	return ssh.NewClient(cc, chans, reqs), nil
@@ -187,7 +187,7 @@ func (c *Client) Run(script string, stdin []byte) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("%s: session: %w", c.Name, err)
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 	var out, errb bytes.Buffer
 	sess.Stdout = &out
 	sess.Stderr = &errb
@@ -214,7 +214,7 @@ func (c *Client) Stream(script string, stdin []byte, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("%s: session: %w", c.Name, err)
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 	sess.Stdout = out
 	sess.Stderr = out
 	if stdin != nil {
@@ -286,7 +286,7 @@ func ScanKey(st *state.State, host string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", chain[0], err)
 		}
-		defer dialer.Close()
+		defer func() { _ = dialer.Close() }()
 	}
 	addr, err = address(h)
 	if err != nil {
@@ -301,7 +301,7 @@ func ScanKey(st *state.State, host string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	var key ssh.PublicKey
 	cfg := &ssh.ClientConfig{
 		User:    user(h),
@@ -317,7 +317,7 @@ func ScanKey(st *state.State, host string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("handshake %s: %w", addr, err)
 	}
-	ssh.NewClient(cc, chans, reqs).Close()
+	_ = ssh.NewClient(cc, chans, reqs).Close()
 	if key == nil {
 		return "", fmt.Errorf("%s: ssh-keyscan returned nothing", addr)
 	}

@@ -3,6 +3,7 @@ package apply
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -32,7 +33,7 @@ func TestTarballRoundTrip(t *testing.T) {
 	tr := tar.NewReader(bytes.NewReader(b))
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -65,7 +66,7 @@ func TestTarballModes(t *testing.T) {
 	tr := tar.NewReader(bytes.NewReader(b))
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

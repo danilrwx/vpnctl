@@ -1,0 +1,23 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - nilerr
+    - unconvert
+  settings:
+    errcheck:
+      # writing to a terminal is not worth an error path
+      exclude-functions:
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - fmt.Print
+        - fmt.Println
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

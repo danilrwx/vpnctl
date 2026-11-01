@@ -292,7 +292,7 @@ func Run(st *state.State, host, sshOverride string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if err := c.Stream("sh -s", []byte(script), out); err != nil {
 		return fmt.Errorf("bootstrap %s failed; a re-run will finish the rest: %w", host, err)
 	}

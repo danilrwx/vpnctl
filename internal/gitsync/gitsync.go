@@ -3,6 +3,7 @@
 package gitsync
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -110,7 +111,7 @@ func (r *Repo) Clean() (bool, error) {
 
 // Push sends the current branch to origin.
 func (r *Repo) Push() error {
-	if err := r.r.Push(&git.PushOptions{}); err != nil && err != git.NoErrAlreadyUpToDate {
+	if err := r.r.Push(&git.PushOptions{}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("push: %w", err)
 	}
 	return nil
@@ -122,7 +123,7 @@ func (r *Repo) Pull() error {
 	if err != nil {
 		return fmt.Errorf("worktree: %w", err)
 	}
-	if err := w.Pull(&git.PullOptions{RemoteName: "origin"}); err != nil && err != git.NoErrAlreadyUpToDate {
+	if err := w.Pull(&git.PullOptions{RemoteName: "origin"}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("pull: %w", err)
 	}
 	return nil
@@ -185,7 +186,7 @@ func (r *Repo) FilesAt(rev string) (map[string][]byte, error) {
 // an RSA key held by the agent, while git itself can.
 func (r *Repo) Fetch() error {
 	err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin"})
-	if err == nil || err == git.NoErrAlreadyUpToDate {
+	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return nil
 	}
 	if r.dir != "" {
@@ -263,7 +264,7 @@ func ListRemote(url string, auth transport.AuthMethod) ([]*plumbing.Reference, e
 
 // FetchAuth fetches with an explicit credential.
 func (r *Repo) FetchAuth(auth transport.AuthMethod) error {
-	if err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin", Auth: auth}); err != nil && err != git.NoErrAlreadyUpToDate {
+	if err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin", Auth: auth}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("fetch: %w", err)
 	}
 	return nil
@@ -273,7 +274,7 @@ func (r *Repo) FetchAuth(auth transport.AuthMethod) error {
 func (r *Repo) PushRefs(auth transport.AuthMethod, force bool, refs ...config.RefSpec) error {
 	opts := &git.PushOptions{RemoteName: "origin", Auth: auth, Force: force}
 	opts.RefSpecs = refs
-	if err := r.r.Push(opts); err != nil && err != git.NoErrAlreadyUpToDate {
+	if err := r.r.Push(opts); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("push: %w", err)
 	}
 	return nil
