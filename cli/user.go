@@ -252,19 +252,20 @@ func isDir(p string) bool {
 	return err == nil && st.IsDir()
 }
 
-// save writes the users and the secrets, validates and optionally commits.
+// save validates first and only then writes: a rejected change must not leave
+// a dirty worktree behind.
 func save(st *state.State, dir, msg string, nocommit bool) error {
-	if err := state.SaveUsers(dir, st.Users); err != nil {
-		return err
-	}
-	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
-		return err
-	}
 	if errs := validate.State(st); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, "  ✗", e)
 		}
 		return fmt.Errorf("%d errors in the state", len(errs))
+	}
+	if err := state.SaveUsers(dir, st.Users); err != nil {
+		return err
+	}
+	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
+		return err
 	}
 	if nocommit {
 		fmt.Println("(not committed)")

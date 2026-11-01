@@ -155,11 +155,16 @@ func (r *Recipients) Save(dir string) error {
 		return errors.New("no recipients: refusing to write an empty age.yaml")
 	}
 	sortRecipients(r.Recipients)
-	b, err := yaml.Marshal(r)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(r); err != nil {
 		return fmt.Errorf("marshal %s: %w", RecipientsFile, err)
 	}
-	return os.WriteFile(filepath.Join(dir, RecipientsFile), b, 0o644)
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("marshal %s: %w", RecipientsFile, err)
+	}
+	return os.WriteFile(filepath.Join(dir, RecipientsFile), buf.Bytes(), 0o644)
 }
 
 func sortRecipients(list []Recipient) {
