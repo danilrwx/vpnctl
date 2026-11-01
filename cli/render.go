@@ -32,8 +32,16 @@ func Render(dir, out, host string, stub bool) error {
 			return err
 		}
 	}
+	counts := map[string]int{}
 	for name, files := range r {
-		fmt.Printf("%s: %d files → %s\n", name, len(files), filepath.Join(out, name))
+		counts[name] = len(files)
 	}
-	return nil
+	return emit(struct {
+		Out   string         `json:"out,omitempty"`
+		Hosts map[string]int `json:"hosts"`
+	}{Out: out, Hosts: counts}, func() {
+		for name, files := range r {
+			fmt.Printf("%s: %d files → %s\n", name, len(files), filepath.Join(out, name))
+		}
+	})
 }

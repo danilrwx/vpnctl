@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -405,32 +406,68 @@ func preflight(st *state.State, c *remote.Client, name string, files render.Host
 	return notes, nil
 }
 
+// HostResult is what happened on one host.
+type HostResult struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"` // applied, unchanged, skipped, failed
+	Changes int    `json:"changes"`
+	Probe   string `json:"probe,omitempty"`
+	Marker  string `json:"marker,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// Result is the whole series.
+type Result struct {
+	Branch string       `json:"branch"`
+	Head   string       `json:"head"`
+	Hosts  []HostResult `json:"hosts"`
+	Tag    string       `json:"tag,omitempty"`
+}
+
+// GuardError is a refusal by a guard, not a failure: the caller must pull,
+// push or ask a human, and section 16 gives it its own exit code.
+type GuardError struct{ Err error }
+
+func (e *GuardError) Error() string { return e.Err.Error() }
+func (e *GuardError) Unwrap() error { return e.Err }
+
+func guardErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &GuardError{Err: err}
+}
+
 // Apply renders, plans and installs the configs host by host.
-func Apply(st *state.State, opts *Opts) error {
+func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
+	result := Result{}
 	if errs := validate.State(st); len(errs) > 0 {
 		for _, e := range errs {
-			fmt.Println("  ✗", e)
+			fmt.Fprintln(out, "  ✗", e)
 		}
-		return fmt.Errorf("%d errors in the state", len(errs))
+		return result, fmt.Errorf("%d errors in the state", len(errs))
 	}
 	if err := Guards(st, opts); err != nil {
-		return err
+		return result, guardErr(err)
 	}
 	repo, err := gitsync.Open(st.Dir)
 	if err != nil {
-		return err
+		return result, err
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return err
+		return result, err
 	}
+	branch, _ := repo.Branch()
+	result.Head, result.Branch = head, branch
+
 	rendered, err := render.Check(st)
 	if err != nil {
-		return err
+		return result, err
 	}
 	plans, err := plan.Plan(st, rendered)
 	if err != nil {
-		return err
+		return result, err
 	}
 	var names []string
 	for _, p := range plans {
@@ -440,16 +477,19 @@ func Apply(st *state.State, opts *Opts) error {
 		names = append(names, p.Name)
 	}
 	if len(names) == 0 {
-		return fmt.Errorf("nothing to apply: host not found")
+		return result, fmt.Errorf("nothing to apply: host not found")
 	}
 	if err := checkAncestors(repo, head, plans, names); err != nil {
-		return err
+		return result, guardErr(err)
 	}
 	order := Order(st, names)
-	branch, _ := repo.Branch()
-	fmt.Printf("plan for %s @ %s · order: %s\n", branch, head, strings.Join(order, " → "))
+	fmt.Fprintf(out, "plan for %s @ %s · order: %s\n", branch, head, strings.Join(order, " → "))
 
 	done := 0
+	fail := func(name string, changes int, err error) (Result, error) {
+		result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "failed", Changes: changes, Error: err.Error()})
+		return result, err
+	}
 	for _, name := range order {
 		var hp plan.HostPlan
 		for _, p := range plans {
@@ -458,53 +498,55 @@ func Apply(st *state.State, opts *Opts) error {
 			}
 		}
 		h := st.Hosts[name]
-		fmt.Printf("▸ %s\n", name)
+		fmt.Fprintf(out, "▸ %s\n", name)
 		if hp.Unreachable != "" {
-			return fmt.Errorf("%s: %s — series stopped", name, hp.Unreachable)
+			return fail(name, hp.Changes(), fmt.Errorf("%s: %s — series stopped", name, hp.Unreachable))
 		}
 		if !hp.Bootstrapped {
-			fmt.Println("  – skipped: bootstrap not done")
+			fmt.Fprintln(out, "  – skipped: bootstrap not done")
+			result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "skipped"})
 			continue
 		}
 		c, err := remote.Dial(st, name)
 		if err != nil {
-			return err
+			return fail(name, hp.Changes(), err)
 		}
 		files := rendered[name]
 		if hp.Changes() == 0 {
 			if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
 				c.Close()
-				return err
+				return fail(name, 0, err)
 			}
-			fmt.Printf("  – no changes, marker %s updated\n", head)
+			fmt.Fprintf(out, "  – no changes, marker %s updated\n", head)
 			c.Close()
 			done++
+			result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "unchanged", Marker: head})
 			continue
 		}
 		notes, err := preflight(st, c, name, files, opts.Force)
 		if err != nil {
 			c.Close()
-			return err
+			return fail(name, hp.Changes(), err)
 		}
 		for _, n := range notes {
-			fmt.Printf("  ! %s\n", n)
+			fmt.Fprintf(out, "  ! %s\n", n)
 		}
-		fmt.Printf("  ✓ render · %d files, %d changes\n", len(files), hp.Changes())
+		fmt.Fprintf(out, "  ✓ render · %d files, %d changes\n", len(files), hp.Changes())
 		tarball, err := Tarball(files)
 		if err != nil {
 			c.Close()
-			return err
+			return fail(name, hp.Changes(), err)
 		}
-		res, err := c.Run("rm -rf /tmp/.vpnctl && mkdir -p /tmp/.vpnctl && tar -xf - -C /tmp/.vpnctl", tarball)
+		cmdOut, err := c.Run("rm -rf /tmp/.vpnctl && mkdir -p /tmp/.vpnctl && tar -xf - -C /tmp/.vpnctl", tarball)
 		if err != nil {
 			c.Close()
-			return err
+			return fail(name, hp.Changes(), err)
 		}
-		if !res.OK() {
+		if !cmdOut.OK() {
 			c.Close()
-			return fmt.Errorf("%s: copy failed: %s", name, strings.TrimSpace(string(res.Stderr)))
+			return fail(name, hp.Changes(), fmt.Errorf("%s: copy failed: %s", name, strings.TrimSpace(string(cmdOut.Stderr))))
 		}
-		fmt.Println("  ✓ copied over the connection → /tmp/.vpnctl/")
+		fmt.Fprintln(out, "  ✓ copied over the connection → /tmp/.vpnctl/")
 		for _, f := range hp.Files {
 			if f.Status == plan.Unchanged || f.Status == plan.Removed {
 				continue
@@ -513,71 +555,73 @@ func Apply(st *state.State, opts *Opts) error {
 			if !ok {
 				continue
 			}
-			res, err := c.Run(cmd, nil)
+			cmdOut, err := c.Run(cmd, nil)
 			if err != nil {
 				c.Close()
-				return err
+				return fail(name, hp.Changes(), err)
 			}
-			if !res.OK() {
+			if !cmdOut.OK() {
 				c.Run("rm -rf /tmp/.vpnctl", nil)
 				c.Close()
-				return fmt.Errorf("%s: check of %s failed:\n%s", name, f.Path, strings.TrimSpace(string(res.Stderr)))
+				return fail(name, hp.Changes(), fmt.Errorf("%s: check of %s failed:\n%s", name, f.Path, strings.TrimSpace(string(cmdOut.Stderr))))
 			}
-			fmt.Printf("  ✓ check %s\n", f.Path)
+			fmt.Fprintf(out, "  ✓ check %s\n", f.Path)
 		}
 		backup := "/var/lib/vpnctl/backup/" + head
-		res, err = c.Run(InstallScript(hp, backup), nil)
+		cmdOut, err = c.Run(InstallScript(hp, backup), nil)
 		if err != nil {
 			c.Close()
-			return err
+			return fail(name, hp.Changes(), err)
 		}
-		if !res.OK() {
-			fmt.Println(strings.TrimSpace(string(res.Stderr)))
-			fmt.Println("  ✗ swap failed, rolled back to the backup")
+		if !cmdOut.OK() {
+			fmt.Fprintln(out, strings.TrimSpace(string(cmdOut.Stderr)))
+			fmt.Fprintln(out, "  ✗ swap failed, rolled back to the backup")
 			c.Run(RollbackScript(hp, backup), nil)
 			c.Close()
-			return fmt.Errorf("%s: swap failed — series stopped", name)
+			return fail(name, hp.Changes(), fmt.Errorf("%s: swap failed — series stopped", name))
 		}
-		fmt.Println("  ✓ atomic swap · services reloaded")
-		res, err = c.Run(ProbeScript(h.Role), nil)
+		fmt.Fprintln(out, "  ✓ atomic swap · services reloaded")
+		cmdOut, err = c.Run(ProbeScript(h.Role), nil)
 		code := ""
 		if err == nil {
-			code = strings.TrimSpace(string(res.Stdout))
+			code = strings.TrimSpace(string(cmdOut.Stdout))
 		}
 		if code != "204" {
 			if code == "" {
 				code = "no answer"
 			}
-			fmt.Printf("  ✗ probe: %s instead of 204 · rollback\n", code)
-			if res, err := c.Run(RollbackScript(hp, backup), nil); err == nil && !res.OK() {
-				fmt.Println(strings.TrimSpace(string(res.Stderr)))
+			fmt.Fprintf(out, "  ✗ probe: %s instead of 204 · rollback\n", code)
+			if rb, err := c.Run(RollbackScript(hp, backup), nil); err == nil && !rb.OK() {
+				fmt.Fprintln(out, strings.TrimSpace(string(rb.Stderr)))
 			}
 			c.Close()
-			return fmt.Errorf("%s: chain probe failed, config restored — series stopped", name)
+			return fail(name, hp.Changes(), fmt.Errorf("%s: chain probe failed, config restored — series stopped", name))
 		}
 		via := "the exit"
 		if h.Role == state.Entry {
 			via = "the chain"
 		}
-		fmt.Printf("  ✓ probe: 204 via %s\n", via)
+		fmt.Fprintf(out, "  ✓ probe: 204 via %s\n", via)
 		if _, err := c.SH(fmt.Sprintf("mkdir -p /etc/vpnctl && echo %s > %s", markerValue(head, opts), plan.Marker)); err != nil {
 			c.Close()
-			return err
+			return fail(name, hp.Changes(), err)
 		}
-		fmt.Printf("  ✓ marker %s written\n", head)
+		fmt.Fprintf(out, "  ✓ marker %s written\n", head)
 		c.Close()
 		done++
+		result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "applied", Changes: hp.Changes(), Probe: code, Marker: head})
 	}
 	if done > 0 && opts.Host == "" {
 		tag := "applied/" + time.Now().UTC().Format("2006-01-02T15-04-05")
 		if err := repo.Tag(tag); err != nil {
-			return err
+			return result, err
 		}
-		fmt.Printf("done %d of %d · tag %s\n", done, len(order), tag)
+		result.Tag = tag
+		fmt.Fprintf(out, "done %d of %d · tag %s\n", done, len(order), tag)
 	} else {
-		fmt.Printf("done %d of %d\n", done, len(order))
+		fmt.Fprintf(out, "done %d of %d\n", done, len(order))
 	}
-	return nil
+	return result, nil
 }
 
 // markerValue is the applied commit, with a note when it is not on the remote.

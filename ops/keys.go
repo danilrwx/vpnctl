@@ -11,9 +11,9 @@ import (
 
 // KeyInfo is one recipient of secrets.age.yaml with the local device marked.
 type KeyInfo struct {
-	Name string
-	Key  string
-	This bool
+	Name string `json:"name"`
+	Key  string `json:"key"`
+	This bool   `json:"this"`
 }
 
 // KeyInit writes age.yaml from the local identity: the state gets an explicit

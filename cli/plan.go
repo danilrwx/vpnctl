@@ -54,8 +54,45 @@ func Plan(dir, host, diff, adopt string) error {
 	if err != nil {
 		return err
 	}
-	plan.Print(plans)
-	return nil
+	return emit(toPlanJSON(plans), func() { plan.Print(plans) })
+}
+
+// planJSON is the machine-readable plan: what an agent reads before applying.
+type planJSON []hostPlanJSON
+
+type hostPlanJSON struct {
+	Name         string     `json:"name"`
+	Marker       string     `json:"marker,omitempty"`
+	Unpushed     bool       `json:"unpushed,omitempty"`
+	Bootstrapped bool       `json:"bootstrapped"`
+	Unreachable  string     `json:"unreachable,omitempty"`
+	Changes      int        `json:"changes"`
+	Files        []fileJSON `json:"files"`
+	Notes        []string   `json:"notes,omitempty"`
+}
+
+type fileJSON struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
+func toPlanJSON(plans []plan.HostPlan) planJSON {
+	out := make(planJSON, 0, len(plans))
+	for _, p := range plans {
+		h := hostPlanJSON{
+			Name: p.Name, Marker: p.Marker, Unpushed: p.Unpushed,
+			Bootstrapped: p.Bootstrapped, Unreachable: p.Unreachable,
+			Changes: p.Changes(), Notes: p.Notes,
+		}
+		for _, f := range p.Files {
+			h.Files = append(h.Files, fileJSON{Path: f.Path, Status: f.Status.Mark()})
+		}
+		if h.Files == nil {
+			h.Files = []fileJSON{}
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 func splitTarget(s string) (string, string) {
