@@ -39,6 +39,9 @@ type Opts struct {
 	// FetchAuth is the credential the guard uses to fetch origin. A device has
 	// no key file and no ssh agent, so it passes the signer it already holds.
 	FetchAuth transport.AuthMethod
+	// Prober asks the hosts what they have. A phone can only reach them through
+	// the agent, and the shell probe would see every host as unreachable.
+	Prober plan.Prober
 }
 
 // Order is hosts from leaves to the jump: the longer the via chain, the earlier.
@@ -362,7 +365,7 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 		return result, err
 	}
 
-	plans, err := plan.Plan(st, rendered, at)
+	plans, err := plan.PlanWith(st, rendered, at, opts.Prober)
 	if err != nil {
 		return result, err
 	}

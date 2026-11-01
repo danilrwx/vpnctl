@@ -337,6 +337,10 @@ func (a *App) Apply(host string) (string, error) {
 			opts.FetchAuth = gitsync.GitAuth("git", sshSigner)
 		}
 
+		opts.Prober = func(host string, paths []string) (plan.Probe, error) {
+			return agentProbe(a.st, host, paths)
+		}
+
 		// a phone has no ssh key on the hosts, only the agent's
 		opts.AgentApply = agentApply
 	}
