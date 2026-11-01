@@ -101,3 +101,25 @@ func TestProbeWithoutAlerts(t *testing.T) {
 		t.Error("the script calls notify without defining it, so a recovery would print command-not-found")
 	}
 }
+
+// TestProbeChecksTheSilentPaths: a 204 through the chain says nothing about the
+// fronting name of the host or about Telegram, and both were down for hours
+// while the chain probe stayed green.
+func TestProbeChecksTheSilentPaths(t *testing.T) {
+	st := probeFixture(state.Entry, "https://ntfy.sh/vpn")
+	files, err := RenderHost(st, "node", testDay())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	probe := files["/etc/vpnctl/probe.sh"]
+	for _, want := range []string{
+		"probe_socks own \"https://vpn.example\"",
+		`probe_socks telegram "https://pluto.web.telegram.org"`,
+		`[ "$code" = "204" ] && [ -z "$broken" ]`,
+	} {
+		if !strings.Contains(probe, want) {
+			t.Errorf("the probe lacks %q", want)
+		}
+	}
+}

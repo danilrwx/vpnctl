@@ -35,6 +35,14 @@ notify() {
 `
 	}
 
+	// the host's own fronting name and one Telegram endpoint: the two paths that
+	// broke while the chain itself was fine
+	ownURL := "https://" + st.Hosts[host].Domain
+	telegramURL := "https://pluto.web.telegram.org"
+	if st.Hosts[host].Domain == "" {
+		ownURL = ""
+	}
+
 	return fmt.Sprintf(`#!/bin/sh
 # vpnctl · chain probe on %s · every minute by vpnctl-probe.timer
 set -u
@@ -50,21 +58,39 @@ fi
 case ${last:-} in ''|*[!0-9]*) last=0 ;; esac
 was=${was:-ok}
 %s
+# what the chain is actually used for besides a 204: the fronting name of this
+# host and a Telegram endpoint. Both failed silently once — the chain probe was
+# green while the Telegram proxy was down for hours.
+probe_socks() {
+  name=$1
+  url=$2
+  scode=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 --socks5-hostname 127.0.0.1:%d "$url" 2>/dev/null || true)
+  case ${scode:-000} in
+    000|"")
+      printf 'socks path broken: %%s\n' "$name"
+      broken="$broken $name"
+      ;;
+  esac
+}
 code=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 --socks5-hostname 127.0.0.1:%d "$PROBE_URL" 2>/dev/null || true)
-if [ "$code" = "204" ]; then
+broken=""
+probe_socks own "%s"
+probe_socks telegram "%s"
+if [ "$code" = "204" ] && [ -z "$broken" ]; then
   printf 'ok 204\n'
   if [ "$was" = "fail" ]; then notify default "chain probe: recovered"; fi
   mkdir -p /var/lib/vpnctl && printf '%%s ok\n' "$now" > "$STATE"
   exit 0
 fi
 printf 'chain probe: %%s instead of 204\n' "${code:-no answer}"
+if [ -n "$broken" ]; then printf 'broken paths:%%s\n' "$broken"; fi
 systemctl is-active --quiet %s || printf 'engine %s is not running\n' %s
 if [ "$was" != "fail" ] || [ $((now - last)) -ge "$REMIND" ]; then
-  notify high "chain probe returned ${code:-no answer}"
+  notify high "chain probe returned ${code:-no answer}${broken:+; broken:$broken}"
   mkdir -p /var/lib/vpnctl && printf '%%s fail\n' "$now" > "$STATE"
 fi
 exit 1
-`, host, ProbeURL, notify, ProbePort, engine, engine, engine)
+`, host, ProbeURL, notify, ProbePort, ProbePort, ownURL, telegramURL, engine, engine, engine)
 }
 
 // probeUnit is the oneshot service the timer starts.
