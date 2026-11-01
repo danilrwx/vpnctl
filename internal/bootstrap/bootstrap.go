@@ -34,6 +34,9 @@ type Download struct {
 	File    string
 	Check   string
 	Install string
+	// Restart is the service that has to be restarted after an install. Without
+	// it the file says 1.14.4 while the process still runs the old binary.
+	Restart string
 }
 
 // RuleSet is one downloaded .srs file.
@@ -113,6 +116,10 @@ func pin(st *state.State, name string) (state.Pin, error) {
 }
 
 func download(name string, p state.Pin, url, check, install string) Download {
+	return downloadWith(name, p, url, check, install, "")
+}
+
+func downloadWith(name string, p state.Pin, url, check, install, restart string) Download {
 	u := strings.ReplaceAll(url, "{v}", p.Version)
 
 	file := u
@@ -120,7 +127,7 @@ func download(name string, p state.Pin, url, check, install string) Download {
 		file = u[i+1:]
 	}
 
-	return Download{Name: name, Version: p.Version, URL: u, SHA: p.SHA256, File: file, Check: check, Install: install}
+	return Download{Name: name, Version: p.Version, URL: u, SHA: p.SHA256, File: file, Check: check, Install: install, Restart: restart}
 }
 
 // Script is the bootstrap script of a host: a pure function of the state and the render.
@@ -147,9 +154,9 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		}
 
 		v := p.Version
-		downloads = append(downloads, download("sing-box", p, SingBoxURL,
+		downloads = append(downloads, downloadWith("sing-box", p, SingBoxURL,
 			fmt.Sprintf("sing-box version 2>/dev/null | grep -q 'version %s$'", v),
-			fmt.Sprintf("tar -xzf %s/sing-box-%s-linux-amd64.tar.gz -C %s && install -m 0755 %s/sing-box-%s-linux-amd64/sing-box /usr/local/bin/sing-box && mkdir -p /etc/sing-box/rules", dl, v, dl, dl, v)))
+			fmt.Sprintf("tar -xzf %s/sing-box-%s-linux-amd64.tar.gz -C %s && install -m 0755 %s/sing-box-%s-linux-amd64/sing-box /usr/local/bin/sing-box && mkdir -p /etc/sing-box/rules", dl, v, dl, dl, v), "sing-box"))
 	default:
 		p, err := pin(st, "xray")
 		if err != nil {
@@ -157,9 +164,9 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		}
 
 		v := p.Version
-		downloads = append(downloads, download("xray", p, XrayURL,
+		downloads = append(downloads, downloadWith("xray", p, XrayURL,
 			fmt.Sprintf("xray version 2>/dev/null | grep -q '^Xray %s '", v),
-			fmt.Sprintf("rm -rf %s/xray && mkdir -p %s/xray && unzip -qo %s/Xray-linux-64.zip -d %s/xray && install -m 0755 %s/xray/xray /usr/local/bin/xray && mkdir -p /etc/xray", dl, dl, dl, dl, dl)))
+			fmt.Sprintf("rm -rf %s/xray && mkdir -p %s/xray && unzip -qo %s/Xray-linux-64.zip -d %s/xray && install -m 0755 %s/xray/xray /usr/local/bin/xray && mkdir -p /etc/xray", dl, dl, dl, dl, dl), "xray"))
 		// unlike sing-box, xray reads geosite.dat/geoip.dat from the binary directory
 		g, err := pin(st, "geodata")
 		if err != nil {
@@ -277,6 +284,7 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		dlCtx = append(dlCtx, map[string]string{
 			"name": d.Name, "version": d.Version, "url": d.URL,
 			"sha": d.SHA, "file": d.File, "check": d.Check, "install": d.Install,
+			"restart": d.Restart,
 		})
 	}
 
@@ -287,6 +295,7 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 
 	return render.Template(st, "bootstrap.sh.j2", map[string]any{
 		"host":        host,
+		"engine":      render.EngineBin(h.Engine),
 		"role":        role,
 		"domain":      h.Domain,
 		"reboot_days": RebootDays(h.Role),

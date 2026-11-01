@@ -50,7 +50,9 @@ if {{ d.check }}; then skip "{{ d.name }} {{ d.version }}"; else
   fetch "{{ d.name }}" "{{ d.url }}" "{{ d.sha }}" "/var/lib/vpnctl/dl/{{ d.file }}"
   {{ d.install }}
   ok "{{ d.name }} {{ d.version }}"
-fi
+{% if d.restart %}  # the file is new, the process is not: restart what runs it
+  systemctl restart {{ d.restart }} 2>/dev/null || true
+{% endif %}fi
 {% endfor %}
 {% if rule_sets %}
 # --- engine rule sets · release {{ geodata }}
@@ -126,6 +128,14 @@ ok "nftables and sysctl"
 {% endfor %}systemctl daemon-reload
 systemctl enable -q {{ enable | join(" ") }}
 ok "units enabled, not started: {{ enable | join(" ") }}"
+{% if engine %}# the engine binary may be newer than the process that runs it: installing a
+# release does not replace a running one, and a host then reports the new
+# version from `{{ engine }} version` while serving with the old one
+if systemctl list-unit-files {{ engine }}.service >/dev/null 2>&1; then
+  systemctl restart {{ engine }} 2>/dev/null || true
+  ok "{{ engine }} restarted on the installed binary"
+fi
+{% endif %}
 
 echo "{{ commit }}" > /etc/vpnctl/bootstrap
 ok "marker /etc/vpnctl/bootstrap = {{ commit }}"
