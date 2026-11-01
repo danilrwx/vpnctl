@@ -28,6 +28,9 @@ type Opts struct {
 	// Unpushed applies a commit that is not on origin/main: only when the
 	// remote is unavailable, and the marker says so.
 	Unpushed bool
+	// AgentApply replaces the shell steps with one signed request to the host
+	// agent. It is injected by the CLI so this package stays free of the agent.
+	AgentApply func(c *remote.Client, host, commit string, files render.HostFiles) (HostResult, error)
 }
 
 // Order is hosts from leaves to the jump: the longer the via chain, the earlier.
@@ -189,6 +192,9 @@ func ModeFor(path string) int64 {
 	}
 	return 0o644
 }
+
+// ModeForInt is ModeFor with an int: the agent request carries JSON modes.
+func ModeForInt(path string) int { return int(ModeFor(path)) }
 
 // Tarball packs every host file; paths are relative to the root, the result is reproducible.
 func Tarball(files render.HostFiles) ([]byte, error) {
@@ -521,6 +527,19 @@ func Apply(st *state.State, opts *Opts, out io.Writer) (Result, error) {
 			c.Close()
 			done++
 			result.Hosts = append(result.Hosts, HostResult{Name: name, Status: "unchanged", Marker: head})
+			continue
+		}
+		if opts.AgentApply != nil {
+			hr, err := opts.AgentApply(c, name, head, files)
+			c.Close()
+			if err != nil {
+				return fail(name, hp.Changes(), err)
+			}
+			hr.Name = name
+			hr.Changes = hp.Changes()
+			fmt.Fprintf(out, "  ✓ agent: %d files applied, probe %s\n", len(files), hr.Probe)
+			result.Hosts = append(result.Hosts, hr)
+			done++
 			continue
 		}
 		notes, err := preflight(st, c, name, files, opts.Force)
