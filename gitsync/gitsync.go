@@ -5,6 +5,7 @@ package gitsync
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -19,7 +20,8 @@ import (
 
 // Repo wraps an opened state repository.
 type Repo struct {
-	r *git.Repository
+	r   *git.Repository
+	dir string
 }
 
 // Open opens an existing repository in dir.
@@ -28,7 +30,7 @@ func Open(dir string) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open repo: %w", err)
 	}
-	return &Repo{r: r}, nil
+	return &Repo{r: r, dir: dir}, nil
 }
 
 // Init creates a repository in dir when there is none yet.
@@ -43,7 +45,7 @@ func Init(dir string) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init repo: %w", err)
 	}
-	return &Repo{r: r}, nil
+	return &Repo{r: r, dir: dir}, nil
 }
 
 // AddRemote registers origin, replacing an existing one.
@@ -178,12 +180,20 @@ func (r *Repo) FilesAt(rev string) (map[string][]byte, error) {
 	return files, nil
 }
 
-// Fetch updates the remote-tracking refs from origin.
+// Fetch updates the remote-tracking refs from origin. The system git is the
+// fallback: go-git cannot always authenticate, for example against GitHub with
+// an RSA key held by the agent, while git itself can.
 func (r *Repo) Fetch() error {
-	if err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin"}); err != nil && err != git.NoErrAlreadyUpToDate {
-		return fmt.Errorf("fetch: %w", err)
+	err := r.r.Fetch(&git.FetchOptions{RemoteName: "origin"})
+	if err == nil || err == git.NoErrAlreadyUpToDate {
+		return nil
 	}
-	return nil
+	if r.dir != "" {
+		if cmd := exec.Command("git", "-C", r.dir, "fetch", "-q", "origin"); cmd.Run() == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("fetch: %w", err)
 }
 
 // OriginMain is the short hash of origin/main.
