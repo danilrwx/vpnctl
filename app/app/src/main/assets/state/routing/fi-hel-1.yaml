@@ -1,0 +1,12 @@
+exit:
+  policy: auto
+  urltest:
+    interval_s: 60
+    tolerance_ms: 300
+    failures: 2
+groups: {}
+dns:
+  direct:
+    - 77.88.8.8
+    - 1.1.1.1
+  remote: https://1.1.1.1/dns-query

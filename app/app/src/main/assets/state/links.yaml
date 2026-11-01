@@ -1,0 +1,14 @@
+links:
+  - from: ru-msk-1
+    to: fi-hel-1
+    protocols:
+      - awg
+      - reality
+      - hy2
+    policy: fixed
+    active: awg
+    tunnel: 10.9.1.0/30
+    urltest:
+      interval_s: 60
+      tolerance_ms: 300
+      failures: 2

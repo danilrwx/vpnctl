@@ -27,6 +27,8 @@ data class UserRow(val name: String, val modes: String, val enabled: Boolean)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // the fixture ships inside the APK until the sync screen exists
+        Core.openBundled(applicationContext)
         setContent {
             MaterialTheme {
                 Scaffold { padding ->
