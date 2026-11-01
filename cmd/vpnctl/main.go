@@ -22,8 +22,10 @@ func main() {
 	}
 	app := cli.App()
 	// urfave exits 3 for an unknown command, which is our guard code: a typo
-	// must not look like "pull the repository"
-	if len(os.Args) > 1 && !known(app, os.Args[1]) {
+	// must not look like "pull the repository". The shell completion asks about
+	// a half-typed word by design ("vpnctl appl --generate-shell-completion"),
+	// so that path is never ours to police.
+	if len(os.Args) > 1 && !wantsCompletion(os.Args) && !known(app, os.Args[1]) {
 		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", os.Args[1])
 		cli.PrintUsage(app, os.Stderr)
 		os.Exit(cli.ExitUsage)
@@ -35,6 +37,17 @@ func main() {
 		}
 		os.Exit(cli.ExitCode(err))
 	}
+}
+
+// wantsCompletion reports a shell completion request, where the argument after
+// the program is a prefix of a command and must reach urfave untouched.
+func wantsCompletion(args []string) bool {
+	for _, a := range args[1:] {
+		if a == "--generate-shell-completion" {
+			return true
+		}
+	}
+	return false
 }
 
 // known reports whether the argument names a command or a flag. help,

@@ -22,3 +22,14 @@ func TestKnownAcceptsBuiltins(t *testing.T) {
 		}
 	}
 }
+
+// TestCompletionBypassesTheGuard: the shell asks about a prefix, so "appl" is a
+// legitimate argument and must not be answered with exit 2.
+func TestCompletionBypassesTheGuard(t *testing.T) {
+	if !wantsCompletion([]string{"vpnctl", "appl", "--generate-shell-completion"}) {
+		t.Fatal("a completion request was treated as a typo")
+	}
+	if wantsCompletion([]string{"vpnctl", "apply"}) {
+		t.Fatal("a plain command was taken for a completion request")
+	}
+}
