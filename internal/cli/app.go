@@ -493,3 +493,9 @@ func splitList(s string) []string {
 	}
 	return out
 }
+
+// ShowAppHelp prints the top-level help, for the caller that has to reject an
+// unknown command before urfave turns it into its own exit code.
+func ShowAppHelp(app *ucli.Command) error {
+	return ucli.ShowAppHelp(app)
+}

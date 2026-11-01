@@ -564,12 +564,19 @@ func SingBoxConfig(st *state.State, host string) (string, error) {
 		dns = obj("servers", []any{obj("type", "local", "tag", "dns-direct-1")}, "final", "dns-direct-1")
 	}
 
+	// sing-box 1.12 wants an explicit resolver for dial fields; without it the
+	// config is deprecated and 1.14 refuses it
+	resolver := "dns-remote"
+	if h.Role != state.Entry {
+		resolver = "dns-direct-1"
+	}
 	cfg := obj(
 		"log", obj("level", "info", "timestamp", true),
 		"dns", dns,
 		"inbounds", inbounds,
 		"outbounds", outbounds,
-		"route", obj("rules", rules, "rule_set", rs.tags(), "final", "direct", "auto_detect_interface", true),
+		"route", obj("rules", rules, "rule_set", rs.tags(), "final", "direct", "auto_detect_interface", true,
+			"default_domain_resolver", resolver),
 		// the official sing-box build has no v2ray_api; clash_api is available
 		"experimental", obj("clash_api", obj("external_controller", StatsAPI)),
 	)
