@@ -34,6 +34,27 @@ android {
     }
 }
 
+// The Go core reaches the app as a flatDir .aar, so Gradle has no way to know it
+// is stale: a Go change that was not rebuilt silently ran old code, twice. The
+// script is the only builder of that file, so the build runs it.
+val buildAar by tasks.registering(Exec::class) {
+    val root = rootProject.projectDir.parentFile
+
+    workingDir = root
+    commandLine("sh", "scripts/build-aar.sh")
+
+    inputs.dir(root.resolve("internal"))
+    inputs.dir(root.resolve("mobile"))
+    inputs.dir(root.resolve("cmd"))
+    inputs.file(root.resolve("go.mod"))
+    inputs.file(root.resolve("go.sum"))
+    outputs.file(root.resolve("app/app/libs/vpnctl.aar"))
+}
+
+tasks.named("preBuild") {
+    dependsOn(buildAar)
+}
+
 dependencies {
     // the Go core, built by scripts/build-aar.sh: gomobile bind -target=android.
     // A flatDir dependency, not files(): a local .aar added as files() does not
