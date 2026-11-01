@@ -180,106 +180,8 @@ func State(st *state.State) []string {
 	}
 
 	// hosts
-	domains := map[string][]string{}
+	hostErrors(st, err)
 
-	for _, name := range sortedHosts(st) {
-		h := st.Hosts[name]
-		if !identOK(name) {
-			err("host «%s»: name must match [a-z0-9-_]", name)
-		}
-
-		if h.Via != "" {
-			if _, ok := st.Hosts[h.Via]; !ok {
-				err("host «%s»: via «%s» is not described", name, h.Via)
-			}
-
-			if h.Via == name {
-				err("host «%s»: via points to the host itself", name)
-			}
-		}
-
-		if h.Domain != "" {
-			domains[h.Domain] = append(domains[h.Domain], name)
-		}
-
-		inb := st.Inbounds[name]
-		if h.Engine == "xray" {
-			if _, ok := inb["hy2"]; ok {
-				err("host «%s»: engine xray does not support hysteria2 — drop the hy2 inbound or switch the engine", name)
-			}
-
-			if _, ok := inb["awg"]; ok && h.Role == state.Entry {
-				err("host «%s»: engine xray cannot serve DNS for L3 clients — awg on the entry requires sing-box", name)
-			}
-		}
-
-		tcp := map[int]string{}
-		udp := map[int]string{}
-
-		for _, p := range protoOrder {
-			i, ok := inb[p]
-			if !ok {
-				continue
-			}
-
-			table := tcp
-			if p == "hy2" || p == "awg" {
-				table = udp
-			}
-
-			if other, ok := table[i.Port]; ok {
-				err("host «%s»: port %d is used by both %s and %s", name, i.Port, other, p)
-			}
-
-			table[i.Port] = p
-			if p == "awg" && h.Role == state.Entry {
-				switch {
-				case i.Subnets == nil:
-					err("host «%s»: awg on the entry requires subnets (split/full)", name)
-				case cidrContains(i.Subnets.Split, i.Subnets.Full) || cidrContains(i.Subnets.Full, i.Subnets.Split):
-					err("host «%s»: awg subnets split %s and full %s overlap",
-						name, canonCIDR(i.Subnets.Split), canonCIDR(i.Subnets.Full))
-				}
-			}
-		}
-
-		hs, hasHS := st.Secrets.Hosts[name]
-		if _, ok := inb["reality"]; ok && (!hasHS || hs.Reality == nil) {
-			err("host «%s»: no reality keys in secrets", name)
-		}
-
-		if _, ok := inb["awg"]; ok && (!hasHS || hs.AWG == nil) {
-			err("host «%s»: no awg keys in secrets", name)
-		}
-
-		if _, ok := inb["mtg"]; ok && (!hasHS || hs.MTG == "") {
-			err("host «%s»: no mtg secret in secrets", name)
-		}
-
-		if h.Role == state.Entry && h.Domain == "" {
-			err("host «%s»: the entry requires a domain", name)
-		}
-	}
-
-	for _, d := range sortedKeys(domains) {
-		hs := domains[d]
-		if len(hs) < 2 {
-			continue
-		}
-
-		retiring := false
-
-		for _, n := range hs {
-			if st.Hosts[n].Retiring {
-				retiring = true
-			}
-		}
-
-		if !retiring {
-			err("domain %s on hosts %s: allowed only during a migration, mark the old host retiring: true",
-				d, strings.Join(hs, ", "))
-		}
-	}
 	// cycle in the via graph
 	for _, start := range sortedHosts(st) {
 		seen := []string{start}
@@ -376,97 +278,7 @@ func State(st *state.State) []string {
 	}
 
 	// users
-	peerIPs := map[string]string{}
-
-	for _, name := range sortedUsers(st) {
-		u := st.Users[name]
-		if !identOK(name) {
-			err("user «%s»: name must match [a-z0-9-_]", name)
-		}
-
-		if len(u.Modes) == 0 {
-			err("user «%s»: no modes", name)
-		}
-
-		for _, m := range u.Modes {
-			if m != "split" && m != "full" {
-				err("user «%s»: mode «%s» is neither split nor full", name, m)
-			}
-		}
-
-		if len(u.Protocols) == 0 {
-			err("user «%s»: no protocols", name)
-		}
-
-		if u.Expires != "" && !dateOK(u.Expires) {
-			err("user «%s»: expires «%s» is not YYYY-MM-DD", name, u.Expires)
-		}
-
-		entry, ok := st.EntryOf(u)
-		if !ok {
-			err("user «%s»: entry is not set and there is not exactly one entry", name)
-			continue
-		}
-
-		if h, ok := st.Hosts[entry]; !ok || h.Role != state.Entry {
-			err("user «%s»: entry «%s» is not an entry host", name, entry)
-			continue
-		}
-
-		inb := st.Inbounds[entry]
-		for _, p := range u.Protocols {
-			if _, ok := inb[p]; !ok {
-				err("user «%s»: entry «%s» has no inbound %s", name, entry, p)
-			}
-		}
-
-		hasAWG := contains(u.Protocols, "awg")
-		switch {
-		case u.AWG != nil && hasAWG:
-			peer := u.AWG
-
-			if s := inb["awg"].Subnets; s != nil {
-				netCIDR := s.Split
-				if peer.Mode == "full" {
-					netCIDR = s.Full
-				}
-
-				ip := net.ParseIP(peer.IP)
-
-				n := parseCIDR(netCIDR)
-				if n != nil && ip != nil && !n.Contains(ip) {
-					err("user «%s»: awg address %s is outside the %s mode subnet (%s)",
-						name, peer.IP, peer.Mode, canonCIDR(netCIDR))
-				}
-
-				gw := gatewayOf(netCIDR)
-				if ip != nil && gw != nil && (sameIP(ip, n.IP) || sameIP(ip, gw)) {
-					err("user «%s»: awg address %s is reserved for the gateway", name, peer.IP)
-				}
-			}
-
-			if !contains(u.Modes, peer.Mode) {
-				err("user «%s»: awg peer mode %s is not among the user's modes", name, peer.Mode)
-			}
-
-			if other, ok := peerIPs[peer.IP]; ok {
-				err("awg address %s is used by both «%s» and «%s»", peer.IP, other, name)
-			}
-
-			peerIPs[peer.IP] = name
-			if sec, ok := st.Secrets.Users[name]; !ok || sec.AWG == nil {
-				err("user «%s»: no awg keys in secrets", name)
-			}
-		case u.AWG == nil && hasAWG:
-			err("user «%s»: awg protocol without a peer description (awg: {mode, ip})", name)
-		case u.AWG != nil:
-			err("user «%s»: an awg peer is described but the awg protocol is not set", name)
-		}
-
-		if _, ok := st.Secrets.Users[name]; !ok {
-			err("user «%s»: no secrets (uuid, hy2_password, sub_id)", name)
-		}
-	}
+	userErrors(st, err)
 
 	// routing and sets
 	for _, name := range sortedKeys(st.Sets) {
@@ -606,4 +418,208 @@ func Warnings(st *state.State) []string {
 	}
 
 	return w
+}
+
+// userErrors checks what an account owns: its modes and protocols, the inbounds
+// of its entry, the awg peer and the secrets behind it. The order of the
+// messages is part of the contract — the comparison table with the old core was
+// written against it, so this function is moved, never reordered.
+func userErrors(st *state.State, err func(string, ...any)) {
+	peerIPs := map[string]string{}
+
+	for _, name := range sortedUsers(st) {
+		u := st.Users[name]
+		if !identOK(name) {
+			err("user «%s»: name must match [a-z0-9-_]", name)
+		}
+
+		if len(u.Modes) == 0 {
+			err("user «%s»: no modes", name)
+		}
+
+		for _, m := range u.Modes {
+			if m != "split" && m != "full" {
+				err("user «%s»: mode «%s» is neither split nor full", name, m)
+			}
+		}
+
+		if len(u.Protocols) == 0 {
+			err("user «%s»: no protocols", name)
+		}
+
+		if u.Expires != "" && !dateOK(u.Expires) {
+			err("user «%s»: expires «%s» is not YYYY-MM-DD", name, u.Expires)
+		}
+
+		entry, ok := st.EntryOf(u)
+		if !ok {
+			err("user «%s»: entry is not set and there is not exactly one entry", name)
+			continue
+		}
+
+		if h, ok := st.Hosts[entry]; !ok || h.Role != state.Entry {
+			err("user «%s»: entry «%s» is not an entry host", name, entry)
+			continue
+		}
+
+		inb := st.Inbounds[entry]
+		for _, p := range u.Protocols {
+			if _, ok := inb[p]; !ok {
+				err("user «%s»: entry «%s» has no inbound %s", name, entry, p)
+			}
+		}
+
+		hasAWG := contains(u.Protocols, "awg")
+		switch {
+		case u.AWG != nil && hasAWG:
+			peer := u.AWG
+
+			if s := inb["awg"].Subnets; s != nil {
+				netCIDR := s.Split
+				if peer.Mode == "full" {
+					netCIDR = s.Full
+				}
+
+				ip := net.ParseIP(peer.IP)
+
+				n := parseCIDR(netCIDR)
+				if n != nil && ip != nil && !n.Contains(ip) {
+					err("user «%s»: awg address %s is outside the %s mode subnet (%s)",
+						name, peer.IP, peer.Mode, canonCIDR(netCIDR))
+				}
+
+				gw := gatewayOf(netCIDR)
+				if ip != nil && gw != nil && (sameIP(ip, n.IP) || sameIP(ip, gw)) {
+					err("user «%s»: awg address %s is reserved for the gateway", name, peer.IP)
+				}
+			}
+
+			if !contains(u.Modes, peer.Mode) {
+				err("user «%s»: awg peer mode %s is not among the user's modes", name, peer.Mode)
+			}
+
+			if other, ok := peerIPs[peer.IP]; ok {
+				err("awg address %s is used by both «%s» and «%s»", peer.IP, other, name)
+			}
+
+			peerIPs[peer.IP] = name
+			if sec, ok := st.Secrets.Users[name]; !ok || sec.AWG == nil {
+				err("user «%s»: no awg keys in secrets", name)
+			}
+		case u.AWG == nil && hasAWG:
+			err("user «%s»: awg protocol without a peer description (awg: {mode, ip})", name)
+		case u.AWG != nil:
+			err("user «%s»: an awg peer is described but the awg protocol is not set", name)
+		}
+
+		if _, ok := st.Secrets.Users[name]; !ok {
+			err("user «%s»: no secrets (uuid, hy2_password, sub_id)", name)
+		}
+	}
+}
+
+// hostErrors checks a host on its own: its name, the jump it uses, the ports of
+// its inbounds, the certificate and the engine it runs. The cycle check stays in
+// State, because it looks at the graph, not at one host.
+func hostErrors(st *state.State, err func(string, ...any)) {
+	domains := map[string][]string{}
+
+	for _, name := range sortedHosts(st) {
+		h := st.Hosts[name]
+		if !identOK(name) {
+			err("host «%s»: name must match [a-z0-9-_]", name)
+		}
+
+		if h.Via != "" {
+			if _, ok := st.Hosts[h.Via]; !ok {
+				err("host «%s»: via «%s» is not described", name, h.Via)
+			}
+
+			if h.Via == name {
+				err("host «%s»: via points to the host itself", name)
+			}
+		}
+
+		if h.Domain != "" {
+			domains[h.Domain] = append(domains[h.Domain], name)
+		}
+
+		inb := st.Inbounds[name]
+		if h.Engine == "xray" {
+			if _, ok := inb["hy2"]; ok {
+				err("host «%s»: engine xray does not support hysteria2 — drop the hy2 inbound or switch the engine", name)
+			}
+
+			if _, ok := inb["awg"]; ok && h.Role == state.Entry {
+				err("host «%s»: engine xray cannot serve DNS for L3 clients — awg on the entry requires sing-box", name)
+			}
+		}
+
+		tcp := map[int]string{}
+		udp := map[int]string{}
+
+		for _, p := range protoOrder {
+			i, ok := inb[p]
+			if !ok {
+				continue
+			}
+
+			table := tcp
+			if p == "hy2" || p == "awg" {
+				table = udp
+			}
+
+			if other, ok := table[i.Port]; ok {
+				err("host «%s»: port %d is used by both %s and %s", name, i.Port, other, p)
+			}
+
+			table[i.Port] = p
+			if p == "awg" && h.Role == state.Entry {
+				switch {
+				case i.Subnets == nil:
+					err("host «%s»: awg on the entry requires subnets (split/full)", name)
+				case cidrContains(i.Subnets.Split, i.Subnets.Full) || cidrContains(i.Subnets.Full, i.Subnets.Split):
+					err("host «%s»: awg subnets split %s and full %s overlap",
+						name, canonCIDR(i.Subnets.Split), canonCIDR(i.Subnets.Full))
+				}
+			}
+		}
+
+		hs, hasHS := st.Secrets.Hosts[name]
+		if _, ok := inb["reality"]; ok && (!hasHS || hs.Reality == nil) {
+			err("host «%s»: no reality keys in secrets", name)
+		}
+
+		if _, ok := inb["awg"]; ok && (!hasHS || hs.AWG == nil) {
+			err("host «%s»: no awg keys in secrets", name)
+		}
+
+		if _, ok := inb["mtg"]; ok && (!hasHS || hs.MTG == "") {
+			err("host «%s»: no mtg secret in secrets", name)
+		}
+
+		if h.Role == state.Entry && h.Domain == "" {
+			err("host «%s»: the entry requires a domain", name)
+		}
+	}
+
+	for _, d := range sortedKeys(domains) {
+		hs := domains[d]
+		if len(hs) < 2 {
+			continue
+		}
+
+		retiring := false
+
+		for _, n := range hs {
+			if st.Hosts[n].Retiring {
+				retiring = true
+			}
+		}
+
+		if !retiring {
+			err("domain %s on hosts %s: allowed only during a migration, mark the old host retiring: true",
+				d, strings.Join(hs, ", "))
+		}
+	}
 }
