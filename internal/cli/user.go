@@ -15,7 +15,7 @@ import (
 // UserAdd creates a user with fresh secrets, writes the state and commits it.
 func UserAdd(dir, name string, modes, protocols []string, tg bool, entry string, nocommit bool) error {
 	if name == "" {
-		return fmt.Errorf("the user name is required")
+		return Usage(fmt.Errorf("the user name is required"))
 	}
 	st, err := state.Load(dir)
 	if err != nil {

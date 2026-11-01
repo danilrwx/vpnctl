@@ -52,7 +52,7 @@ func HostAdd(dir string, o ops.HostOptions, nocommit bool) error {
 // With printOnly the script goes to stdout and the host is not touched.
 func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer, at time.Time) error {
 	if name == "" {
-		return fmt.Errorf("the host name is required")
+		return Usage(fmt.Errorf("the host name is required"))
 	}
 	st, err := state.Load(dir)
 	if err != nil {

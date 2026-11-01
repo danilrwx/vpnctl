@@ -322,7 +322,7 @@ func passphrase(flagValue string, confirm bool) (string, error) {
 // proves it can read the state.
 func KeyRestore(dir, file, keyPath string) error {
 	if file == "" {
-		return errors.New("the backup file is required")
+		return Usage(errors.New("the backup file is required"))
 	}
 	body, err := os.ReadFile(file)
 	if err != nil {

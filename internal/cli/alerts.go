@@ -36,11 +36,11 @@ func AlertsSet(dir, ntfy, serve, topic, tokenFile string, nocommit bool) error {
 		msg, err = ops.AlertsServe(st, serve, topic, token)
 	case ntfy != "":
 		if topic != "" {
-			return errors.New("--topic belongs to --serve: pass the whole path in --ntfy instead")
+			return Usage(errors.New("--topic belongs to --serve: pass the whole path in --ntfy instead"))
 		}
 		msg, err = ops.AlertsSet(st, ntfy, token)
 	default:
-		return errors.New("either --ntfy <url> or --serve <host> --topic <name> is required")
+		return Usage(errors.New("either --ntfy <url> or --serve <host> --topic <name> is required"))
 	}
 	if err != nil {
 		return err

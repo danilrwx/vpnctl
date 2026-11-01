@@ -73,7 +73,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the device name is required")
+								return Usage(errors.New("the device name is required"))
 							}
 							return KeyInit(c.String("dir"), name, c.Bool("nocommit"))
 						},
@@ -118,7 +118,7 @@ func App() *ucli.Command {
 							name := c.Args().Get(0)
 							key := c.Args().Get(1)
 							if name == "" || key == "" {
-								return errors.New("usage: key add <name> <age1…>")
+								return Usage(errors.New("usage: key add <name> <age1…>"))
 							}
 							return KeyAdd(c.String("dir"), name, key, c.Bool("nocommit"))
 						},
@@ -135,7 +135,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the device name is required")
+								return Usage(errors.New("the device name is required"))
 							}
 							return KeyRemove(c.String("dir"), name, c.Bool("nocommit"))
 						},
@@ -290,7 +290,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the host name is required")
+								return Usage(errors.New("the host name is required"))
 							}
 							return HostRemove(c.String("dir"), name, c.Bool("nocommit"))
 						},
@@ -330,7 +330,7 @@ func App() *ucli.Command {
 					SetJSON(c.Bool("json"))
 					name := c.Args().First()
 					if name == "" {
-						return errors.New("the host name is required")
+						return Usage(errors.New("the host name is required"))
 					}
 					return Metrics(c.String("dir"), name, c.Int("last"))
 				},
@@ -353,7 +353,7 @@ func App() *ucli.Command {
 						Action: func(_ context.Context, c *ucli.Command) error {
 							SetJSON(c.Bool("json"))
 							if c.String("ntfy") == "" && c.String("serve") == "" {
-								return errors.New("either --ntfy <url> or --serve <host> --topic <name> is required")
+								return Usage(errors.New("either --ntfy <url> or --serve <host> --topic <name> is required"))
 							}
 							return AlertsSet(c.String("dir"), c.String("ntfy"), c.String("serve"),
 								c.String("topic"), c.String("token-file"), c.Bool("nocommit"))
@@ -474,7 +474,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserAdd(c.String("dir"), name,
 								splitList(c.String("modes")), splitList(c.String("protos")),
@@ -494,7 +494,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserRm(c.String("dir"), name, c.Bool("nocommit"))
 						},
@@ -512,7 +512,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserRotate(c.String("dir"), name, c.Bool("nocommit"))
 						},
@@ -530,7 +530,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserSetEnabled(c.String("dir"), name, false, c.Bool("nocommit"))
 						},
@@ -548,7 +548,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserSetEnabled(c.String("dir"), name, true, c.Bool("nocommit"))
 						},
@@ -572,7 +572,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							var modes, protos []string
 							if c.IsSet("modes") {
@@ -584,7 +584,7 @@ func App() *ucli.Command {
 							var tg *bool
 							switch {
 							case c.Bool("tg") && c.Bool("no-tg"):
-								return errors.New("either --tg or --no-tg, not both")
+								return Usage(errors.New("either --tg or --no-tg, not both"))
 							case c.Bool("tg"):
 								v := true
 								tg = &v
@@ -623,7 +623,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserLink(c.String("dir"), name)
 						},
@@ -647,7 +647,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserMessage(MessageOpts{
 								Dir:     c.String("dir"),
@@ -676,7 +676,7 @@ func App() *ucli.Command {
 							SetJSON(c.Bool("json"))
 							name := c.Args().First()
 							if name == "" {
-								return errors.New("the user name is required")
+								return Usage(errors.New("the user name is required"))
 							}
 							return UserConfig(c.String("dir"), name, c.String("mode"), c.String("format"), c.String("out"))
 						},
