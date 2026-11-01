@@ -181,8 +181,12 @@ func write(res agent.Response) {
 	fmt.Println(string(b))
 }
 
-func hostName() string {
-	if b, err := os.ReadFile(hostFile); err == nil {
+func hostName() string { return hostNameFrom(hostFile) }
+
+// hostNameFrom is what the signature is checked against: the name the state
+// gave this host, or the machine name when the file is missing or empty.
+func hostNameFrom(path string) string {
+	if b, err := os.ReadFile(path); err == nil {
 		if s := strings.TrimSpace(string(b)); s != "" {
 			return s
 		}
