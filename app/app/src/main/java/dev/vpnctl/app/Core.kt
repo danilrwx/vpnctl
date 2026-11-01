@@ -11,6 +11,10 @@ import mobile.Mobile
  * repository from the sync screen later.
  */
 object Core {
+    // The app is opened on a worker thread and read on the main one, so the field
+    // has to be visible across them: without this a fresh clone stayed invisible
+    // to the first screen until the process was restarted.
+    @Volatile
     private var app: App? = null
 
     fun open(dir: String, ageKeyPath: String): App? {
@@ -153,6 +157,14 @@ object Core {
         if (File(dir, ".git").exists()) {
             "already cloned"
         } else {
+            // The fixture that ships in the APK is copied to the same path, so a
+            // clone into it would leave the fixture's files in a repository that
+            // reports the real head: the app then shows both, and the timestamps
+            // make it look like a successful sync.
+            if (dir.exists()) {
+                dir.deleteRecursively()
+            }
+
             val head = Mobile.syncState(url, dir.absolutePath)
             app = null
             open(dir.absolutePath, ageKeyFile(ctx) ?: "")
