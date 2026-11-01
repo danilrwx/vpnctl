@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/transport"
+
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/hostscript"
 	"github.com/danilrwx/vpnctl-go/internal/plan"
@@ -34,6 +36,9 @@ type Opts struct {
 	AgentApply func(c *remote.Client, host, commit string, files render.HostFiles) (HostResult, error)
 	// At is the day expiry is measured against; the zero value means today.
 	At time.Time
+	// FetchAuth is the credential the guard uses to fetch origin. A device has
+	// no key file and no ssh agent, so it passes the signer it already holds.
+	FetchAuth transport.AuthMethod
 }
 
 // Order is hosts from leaves to the jump: the longer the via chain, the earlier.
@@ -104,7 +109,12 @@ func Guards(st *state.State, opts *Opts) error {
 	}
 	// Order is always commit → push → apply: the hosts must run what every
 	// device sees, and the marker must point at a commit the others can render.
-	if err := repo.Fetch(); err != nil {
+	fetch := repo.Fetch
+	if opts.FetchAuth != nil {
+		fetch = func() error { return repo.FetchAuth(opts.FetchAuth) }
+	}
+
+	if err := fetch(); err != nil {
 		return fmt.Errorf("%w (use --unpushed when the remote is unavailable)", err)
 	}
 
