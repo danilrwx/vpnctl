@@ -67,6 +67,16 @@ func SaveSecrets(dir string, sec Secrets) error {
 	return ageio.Write(path, KeyPath(), b)
 }
 
+// SaveDevices writes devices.yaml: the phones and laptops the agent accepts.
+func SaveDevices(dir string, devices map[string]Device) error {
+	b, err := marshal(map[string]any{"devices": devices})
+	if err != nil {
+		return fmt.Errorf("marshal devices: %w", err)
+	}
+
+	return os.WriteFile(filepath.Join(dir, "devices.yaml"), b, 0o644)
+}
+
 // SaveLinks writes links.yaml.
 func SaveLinks(dir string, links []Link) error {
 	b, err := marshal(map[string]any{"links": links})

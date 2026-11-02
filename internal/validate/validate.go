@@ -2,13 +2,17 @@
 package validate
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"fmt"
 	"net"
 	"sort"
 	"strings"
 	"time"
 
+	"filippo.io/age"
 	"github.com/danilrwx/vpnctl-go/internal/state"
+	"golang.org/x/crypto/ssh"
 )
 
 // protoOrder is the declaration order of the protocol enum: errors follow it, as the
@@ -176,6 +180,33 @@ func State(st *state.State) []string {
 
 		if _, ok := st.Versions["ntfy"]; !ok {
 			err("alerts: versions.yaml has no ntfy pin, so bootstrap cannot install the server")
+		}
+	}
+
+	// devices: a name that can be a file, an ECDSA P-256 key the agent can
+	// verify, and an age recipient that parses
+	for name, d := range st.Devices {
+		if e := state.ValidDeviceName(name); e != nil {
+			err("%v", e)
+			continue
+		}
+
+		pub, _, _, _, e := ssh.ParseAuthorizedKey([]byte(d.SSH))
+		if e != nil {
+			err("device «%s»: ssh key: %v", name, e)
+		} else {
+			crypto, ok := pub.(ssh.CryptoPublicKey)
+			if !ok {
+				err("device «%s»: ssh key is not a public key", name)
+			} else if ec, ok := crypto.CryptoPublicKey().(*ecdsa.PublicKey); !ok || ec.Curve != elliptic.P256() {
+				err("device «%s»: the agent needs a P-256 key", name)
+			}
+		}
+
+		if d.Age != "" {
+			if _, e := age.ParseX25519Recipient(d.Age); e != nil {
+				err("device «%s»: age recipient: %v", name, e)
+			}
 		}
 	}
 

@@ -1,0 +1,7 @@
+---
+source: tests/render.rs
+expression: body
+---
+# BEGIN vpnctl devices
+# managed by vpnctl apply; lines outside this block are kept
+# END vpnctl devices

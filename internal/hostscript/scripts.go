@@ -172,6 +172,24 @@ func InstallScript(hp plan.HostPlan, backup string) string {
 			}
 		}
 	}
+	// The device block is the state's access list. The block file is always
+	// written, even when it is empty, so a device removed from the state also
+	// leaves authorized_keys. Lines outside the block belong to the operator
+	// and are kept; the agent-install key is one of them.
+	s.WriteString(`if [ -f /etc/vpnctl/authorized_keys ]; then
+  install -d -m 0700 /root/.ssh
+  touch /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+  tmp=$(mktemp /root/.ssh/.vpnctl-XXXXXX)
+  awk 'BEGIN { skip = 0 }
+       /^# BEGIN vpnctl devices$/ { skip = 1; next }
+       /^# END vpnctl devices$/ { skip = 0; next }
+       skip == 0' /root/.ssh/authorized_keys > "$tmp"
+  cat /etc/vpnctl/authorized_keys >> "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" /root/.ssh/authorized_keys
+fi
+`)
 	// systemd and network before services, engine last
 	rank := func(s string) int {
 		switch {

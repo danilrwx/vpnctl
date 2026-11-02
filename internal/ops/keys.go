@@ -221,6 +221,7 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 		"links.yaml":     "links: []\n",
 		"users.yaml":     "users: {}\n",
 		"protocols.yaml": "inbounds: {}\n",
+		"devices.yaml":   "devices: {}\n",
 		".gitignore":     "/out\n/metrics.sqlite\n",
 	}
 	for name, body := range files {

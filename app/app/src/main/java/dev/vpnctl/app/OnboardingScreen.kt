@@ -104,7 +104,7 @@ fun OnboardingScreen(ctx: android.content.Context, onDone: () -> Unit) {
                             }
 
                             Text(
-                                "Add the recipient with `vpnctl key add phone <age1…>`; add the ssh key as a deploy key on the state repository, or with `vpnctl host agent-install` for a host. Both are one-time.",
+                                "Add the ssh key as a deploy key on the state repository (one-time), then register this phone on the Devices screen. `vpnctl device sync` adds its age recipient, and `vpnctl apply` puts the key on every host.",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Muted,
                                 modifier = Modifier.padding(top = 8.dp),

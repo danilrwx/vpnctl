@@ -6,6 +6,19 @@ cp --parents -a '/etc/sysctl.d/90-vpnctl.conf' /var/lib/vpnctl/backup/abc1234; i
 echo '/etc/caddy/Caddyfile' >> /var/lib/vpnctl/backup/abc1234/.new; install -D -m 0644 '/tmp/.vpnctl/etc/caddy/Caddyfile' '/etc/caddy/Caddyfile'
 cp --parents -a '/etc/sing-box/rules/old.json' /var/lib/vpnctl/backup/abc1234 2>/dev/null || true; rm -f '/etc/sing-box/rules/old.json'
 cp --parents -a '/etc/systemd/system/mtg.service' /var/lib/vpnctl/backup/abc1234; install -D -m 0644 '/tmp/.vpnctl/etc/systemd/system/mtg.service' '/etc/systemd/system/mtg.service'
+if [ -f /etc/vpnctl/authorized_keys ]; then
+  install -d -m 0700 /root/.ssh
+  touch /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+  tmp=$(mktemp /root/.ssh/.vpnctl-XXXXXX)
+  awk 'BEGIN { skip = 0 }
+       /^# BEGIN vpnctl devices$/ { skip = 1; next }
+       /^# END vpnctl devices$/ { skip = 0; next }
+       skip == 0' /root/.ssh/authorized_keys > "$tmp"
+  cat /etc/vpnctl/authorized_keys >> "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" /root/.ssh/authorized_keys
+fi
 systemctl daemon-reload
 sysctl --system >/dev/null
 nft -f /etc/nftables.conf

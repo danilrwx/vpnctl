@@ -253,6 +253,27 @@ func (a *App) save(msg string) error {
 	return nil
 }
 
+// RegisterDevice writes this phone into devices.yaml: the OpenSSH key the
+// hosts accept and the age recipient the laptop adds to age.yaml with
+// `vpnctl device sync`. The app commits; Push publishes it.
+func (a *App) RegisterDevice(name, ageRecipient string) (string, error) {
+	key, err := AuthorizedKey()
+	if err != nil {
+		return "", err
+	}
+
+	msg, err := ops.DeviceSet(a.st, name, key, ageRecipient)
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.save(msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
 // SetEnabled turns a user on or off without touching its credentials.
 func (a *App) SetEnabled(name string, on bool) (string, error) {
 	u, ok := a.st.Users[name]

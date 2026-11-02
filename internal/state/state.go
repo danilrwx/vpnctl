@@ -306,6 +306,32 @@ type Pin struct {
 	SHA256  string `yaml:"sha256,omitempty"`
 }
 
+// Device is a phone or laptop that reaches the hosts through the agent. SSH is
+// the OpenSSH authorized_keys line; Age is the same device's age recipient, so
+// one record carries both keys and the device name names both files.
+type Device struct {
+	SSH string `yaml:"ssh"`
+	Age string `yaml:"age,omitempty"`
+}
+
+// ValidDeviceName reports whether a name can be a file name under
+// /etc/vpnctl/agents and a comment token in authorized_keys.
+func ValidDeviceName(name string) error {
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("device name %q is not a file name", name)
+	}
+
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return fmt.Errorf("device name %q: only letters, digits, '-' and '_' are allowed", name)
+		}
+	}
+
+	return nil
+}
+
 type State struct {
 	Dir string
 	// AcceptNewHostKey allows the first contact with a host whose key is not
@@ -320,6 +346,7 @@ type State struct {
 	Sets             map[string]Set
 	Versions         map[string]Pin
 	Alerts           Alerts
+	Devices          map[string]Device
 	Secrets          Secrets
 	Encrypted        bool
 }
@@ -350,6 +377,7 @@ func Load(dir string) (*State, error) {
 		Routing:  map[string]Routing{},
 		Sets:     map[string]Set{},
 		Versions: map[string]Pin{},
+		Devices:  map[string]Device{},
 	}
 
 	var hosts struct {
@@ -387,6 +415,17 @@ func Load(dir string) (*State, error) {
 	}
 
 	st.Inbounds = proto.Inbounds
+
+	var dev struct {
+		Devices map[string]Device `yaml:"devices"`
+	}
+	if err := read(dir, "devices.yaml", &dev); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+	} else if dev.Devices != nil {
+		st.Devices = dev.Devices
+	}
 
 	for _, name := range sortedKeys(st.Hosts) {
 		var r Routing

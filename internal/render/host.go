@@ -441,6 +441,15 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 		}
 	}
 
+	devices, err := deviceFiles(st)
+	if err != nil {
+		return nil, err
+	}
+
+	for path, body := range devices {
+		f[path] = body
+	}
+
 	return f, nil
 }
 

@@ -163,6 +163,73 @@ func App() *ucli.Command {
 				},
 			},
 			{
+				Name:  "device",
+				Usage: "phones and laptops the agent accepts",
+				Commands: []*ucli.Command{
+					{
+						Name:      "add",
+						Usage:     "record a device's ssh key and age recipient",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.StringFlag{Name: "ssh", Usage: "the OpenSSH public key line"},
+							&ucli.StringFlag{Name: "age", Usage: "the device's age recipient"},
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+
+							name := c.Args().First()
+							if name == "" || c.String("ssh") == "" {
+								return Usage(errors.New("usage: device add <name> --ssh <line> [--age age1…]"))
+							}
+
+							return DeviceAdd(c.String("dir"), name, c.String("ssh"), c.String("age"), c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:      "rm",
+						Usage:     "drop a device; the next apply removes its key",
+						ArgsUsage: "<name>",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+
+							name := c.Args().First()
+							if name == "" {
+								return Usage(errors.New("the device name is required"))
+							}
+
+							return DeviceRemove(c.String("dir"), name, c.Bool("nocommit"))
+						},
+					},
+					{
+						Name:  "list",
+						Usage: "list devices and their age recipients",
+						Flags: []ucli.Flag{dirFlag(), jsonFlag()},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return DeviceList(c.String("dir"))
+						},
+					},
+					{
+						Name:  "sync",
+						Usage: "add the devices' age recipients to age.yaml",
+						Flags: []ucli.Flag{
+							dirFlag(), jsonFlag(),
+							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
+						},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+							return DeviceSync(c.String("dir"), c.Bool("nocommit"))
+						},
+					},
+				},
+			},
+			{
 				Name:    "check",
 				Aliases: []string{"validate"},
 				Usage:   "validate the state statically",

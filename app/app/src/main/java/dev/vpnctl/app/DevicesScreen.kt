@@ -81,6 +81,10 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     var deviceKey by remember { mutableStateOf("") }
     var addDeviceErr by remember { mutableStateOf("") }
 
+    var registering by remember { mutableStateOf(false) }
+    var registerName by remember { mutableStateOf("") }
+    var registerErr by remember { mutableStateOf("") }
+
     var replacing by remember { mutableStateOf(false) }
     var backupPass by remember { mutableStateOf("") }
     var backupErr by remember { mutableStateOf("") }
@@ -165,6 +169,11 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                         deviceKey = ""
                         addDeviceErr = ""
                         addingDevice = true
+                    },
+                    onRegister = {
+                        registerName = defaultDeviceName()
+                        registerErr = ""
+                        registering = true
                     },
                 )
             }
@@ -592,6 +601,53 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
         )
     }
 
+    if (registering) {
+        AppDialog(
+            title = "Register this phone",
+            onDismiss = { registering = false },
+            confirmLabel = "Register",
+            confirmEnabled = !busy && registerName.isNotBlank(),
+            onConfirm = {
+                busy = true
+                registerErr = ""
+
+                scope.launch {
+                    val out = onIo { Core.registerDevice(ctx, registerName.trim()) }
+
+                    if (out.startsWith("devices:")) {
+                        status = "$out · push to publish"
+                        registering = false
+                        version++
+                    } else {
+                        registerErr = out
+                    }
+
+                    busy = false
+                }
+            },
+            content = {
+                Text(
+                    "The ssh key and the age recipient go into devices.yaml. Push, then on the laptop run `vpnctl device sync` and `vpnctl apply`; the key reaches every host from the state.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                OutlinedTextField(
+                    value = registerName,
+                    onValueChange = { registerName = it },
+                    label = { Text("device name, e.g. phone") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+
+                if (registerErr.isNotEmpty()) {
+                    Text(registerErr, style = MaterialTheme.typography.bodySmall, color = DangerText)
+                }
+            },
+        )
+    }
+
     if (replacing) {
         AppDialog(
             title = "Replace the offline backup",
@@ -682,6 +738,7 @@ fun ThisDeviceCard(
     onExport: () -> Unit,
     onRestore: () -> Unit,
     onAddDevice: () -> Unit,
+    onRegister: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -736,6 +793,9 @@ fun ThisDeviceCard(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onRegister) {
+                Text("Register this phone", color = Link, style = MaterialTheme.typography.bodySmall)
+            }
             TextButton(onClick = onAddDevice) {
                 Text("Add a device", color = Link, style = MaterialTheme.typography.bodySmall)
             }
@@ -931,3 +991,11 @@ fun revokeDevice(app: mobile.App?, name: String): String {
         "error: ${e.message}"
     }
 }
+
+
+/** defaultDeviceName is a valid device name from the phone's model. */
+fun defaultDeviceName(): String =
+    android.os.Build.MODEL.lowercase()
+        .replace(Regex("[^a-z0-9_-]+"), "-")
+        .trim('-', '_')
+        .ifEmpty { "phone" }

@@ -149,6 +149,18 @@ object Core {
     }
 
     /**
+     * registerDevice writes this phone into devices.yaml: its OpenSSH key and
+     * its age recipient. Push publishes the commit; the laptop's device sync
+     * adds the recipient to age.yaml and apply puts the key on the hosts.
+     */
+    fun registerDevice(ctx: Context, name: String): String = try {
+        val app = current() ?: return "no state to register in"
+        app.registerDevice(name, identity(ctx))
+    } catch (e: Exception) {
+        "register: ${e.message}"
+    }
+
+    /**
      * sync clones the state repository with the device key. The first call takes
      * a while and must not run on the UI thread; the caller does that part.
      */
