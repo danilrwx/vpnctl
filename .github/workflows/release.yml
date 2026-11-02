@@ -61,7 +61,7 @@ jobs:
           VPNCTL_VERSION_CODE: ${{ inputs.version_code }}
         run: gradle assembleRelease
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vpnctl-${{ inputs.version_name }}.apk
           path: app/app/build/outputs/apk/release/app-release.apk
