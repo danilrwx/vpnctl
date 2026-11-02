@@ -192,4 +192,20 @@ object Core {
     }
 
     fun current(): App? = app
+
+    /**
+     * reopen drops the opened state and opens it again. A restored identity
+     * replaces the key file the core read at startup, so the handle it holds
+     * points at the old key until this runs.
+     */
+    fun reopen(ctx: Context): App? {
+        app = null
+
+        val dir = File(ctx.filesDir, "state")
+        if (!dir.exists()) {
+            return null
+        }
+
+        return open(dir.absolutePath, ageKeyFile(ctx) ?: "")
+    }
 }
