@@ -156,6 +156,8 @@ func main() {
 		res = agent.Mark(&req)
 	case "read":
 		res = agent.Read(&req, plan.Manifest)
+	case "metrics":
+		res = agent.ReadMetrics(agent.MetricsDir, 288)
 	case "probe":
 		body, err := os.ReadFile("/etc/vpnctl/probe.json")
 		if err != nil {

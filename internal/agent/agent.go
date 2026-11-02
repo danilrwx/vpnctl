@@ -71,12 +71,14 @@ type Response struct {
 	Bootstrapped bool              `json:"bootstrapped,omitempty"`
 	Hashes       map[string]string `json:"hashes,omitempty"`
 	// Bodies is the content of the files a read op asked for, base64.
-	Bodies     map[string]string `json:"bodies,omitempty"`
-	Changes    []Change          `json:"changes,omitempty"`
-	Probe      string            `json:"probe,omitempty"`
-	Matrix     []ProbeResult     `json:"matrix,omitempty"`
-	RolledBack bool              `json:"rolled_back,omitempty"`
-	Log        []string          `json:"log,omitempty"`
+	Bodies map[string]string `json:"bodies,omitempty"`
+	// Samples are the metrics lines the host collected, newest last.
+	Samples    []string      `json:"samples,omitempty"`
+	Changes    []Change      `json:"changes,omitempty"`
+	Probe      string        `json:"probe,omitempty"`
+	Matrix     []ProbeResult `json:"matrix,omitempty"`
+	RolledBack bool          `json:"rolled_back,omitempty"`
+	Log        []string      `json:"log,omitempty"`
 }
 
 // Change is one path the apply touched.
@@ -551,6 +553,60 @@ func Read(r *Request, manifestPath string) Response {
 		}
 
 		res.Bodies[path] = base64.StdEncoding.EncodeToString(body)
+	}
+
+	return res
+}
+
+// MetricsDir is where the host timer writes one JSON line every five minutes.
+const MetricsDir = "/var/lib/vpnctl/metrics"
+
+// MaxSamples caps one metrics answer: a month of five-minute samples is under
+// ten thousand lines, and the screen shows the newest handful.
+const MaxSamples = 500
+
+// ReadMetrics returns the newest sample lines the host collected. The files are
+// the host's own log, not a rendered one, so they are not in applied.sha256 and
+// the read op cannot serve them.
+func ReadMetrics(dir string, last int) Response {
+	res := Response{V: Version, OK: true}
+
+	if last <= 0 || last > MaxSamples {
+		last = 288
+	}
+
+	files, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	if err != nil {
+		return fail(res, "metrics", err)
+	}
+
+	sort.Strings(files)
+
+	var lines []string
+
+	for _, f := range files {
+		body, err := os.ReadFile(f)
+		if err != nil {
+			return fail(res, "metrics", err)
+		}
+
+		if len(body) > 4<<20 {
+			body = body[len(body)-(4<<20):]
+		}
+
+		lines = append(lines, strings.Split(strings.TrimSpace(string(body)), "\n")...)
+	}
+
+	if len(lines) > last {
+		lines = lines[len(lines)-last:]
+	}
+
+	res.Samples = make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			res.Samples = append(res.Samples, line)
+		}
 	}
 
 	return res

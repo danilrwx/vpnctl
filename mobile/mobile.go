@@ -4,6 +4,7 @@ package mobile
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,10 +16,12 @@ import (
 	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/ageio"
+	"github.com/danilrwx/vpnctl-go/internal/agent"
 	"github.com/danilrwx/vpnctl-go/internal/apply"
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/ops"
 	"github.com/danilrwx/vpnctl-go/internal/plan"
+	"github.com/danilrwx/vpnctl-go/internal/remote"
 	"github.com/danilrwx/vpnctl-go/internal/render"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 	"github.com/danilrwx/vpnctl-go/internal/validate"
@@ -821,6 +824,38 @@ func (a *App) AddLink(from, to, protocols, active, policy string) (string, error
 	}
 
 	return msg, nil
+}
+
+// Metrics returns the newest machine samples a host collected, as JSON. The
+// agent reads its own log; the phone has no shell to cat it.
+func (a *App) Metrics(host string) (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("no signer: the device cannot ask the agent")
+	}
+
+	c, err := remote.Dial(a.st, host)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = c.Close() }()
+
+	req := &agent.Request{V: agent.Version, Op: "metrics", Host: host, TS: time.Now().Unix(), Nonce: nonce()}
+	req.TreeHash = agent.TreeHash(nil)
+
+	sig, err := SignMessage([]byte(agent.Message(req)))
+	if err != nil {
+		return "", err
+	}
+
+	req.Sig = base64.StdEncoding.EncodeToString(sig)
+
+	resp, err := agent.Call(c, req)
+	if err != nil {
+		return "", err
+	}
+
+	return mustJSON(resp.Samples), nil
 }
 
 // Alerts returns the notification setup: the public topic URL and the entry

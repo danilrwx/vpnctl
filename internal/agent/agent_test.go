@@ -330,3 +330,30 @@ func TestReadOnlyServesTheManifest(t *testing.T) {
 		t.Fatal("a file outside the manifest was readable")
 	}
 }
+
+// TestReadMetricsTakesTheNewest: the op exists so the phone can show a machine
+// card, and the answer is capped to the newest lines across all month files.
+func TestReadMetricsTakesTheNewest(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(dir, "2026-10.jsonl"), []byte("{\"ts\":1}\n{\"ts\":2}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "2026-11.jsonl"), []byte("{\"ts\":3}\n{\"ts\":4}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res := ReadMetrics(dir, 3)
+	if !res.OK {
+		t.Fatalf("metrics refused: %s: %s", res.Code, res.Error)
+	}
+
+	if len(res.Samples) != 3 {
+		t.Fatalf("samples %+v", res.Samples)
+	}
+
+	if res.Samples[2] != "{\"ts\":4}" {
+		t.Fatalf("newest first? %+v", res.Samples)
+	}
+}
