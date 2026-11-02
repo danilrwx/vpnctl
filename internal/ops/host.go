@@ -207,3 +207,61 @@ func HostRemove(st *state.State, name string) (string, error) {
 
 	return fmt.Sprintf("hosts: - %s", name), nil
 }
+
+// HostEdit changes what the operator can change without touching the host's
+// inbounds or keys: the address it is reached at, its domain and its engine.
+// Renaming and role changes rewrite every link and secret, so they stay a
+// deliberate `host rm` + `host add` job.
+func HostEdit(st *state.State, name string, o HostOptions) (string, error) {
+	h, ok := st.Hosts[name]
+	if !ok {
+		return "", fmt.Errorf("host %q is not described", name)
+	}
+
+	if o.SSH != "" {
+		h.SSH = o.SSH
+	}
+
+	if o.IP != "" {
+		if net.ParseIP(o.IP) == nil {
+			return "", fmt.Errorf("ip %q is not an address", o.IP)
+		}
+
+		h.IP = o.IP
+	}
+
+	if o.Domain != "" && h.Role == state.Exit {
+		return "", fmt.Errorf("host %q is an exit: a domain belongs to an entry", name)
+	}
+
+	// an empty domain is a request to clear it, which an entry cannot survive
+	if o.Domain == "" && h.Role == state.Entry && h.Domain != "" {
+		return "", fmt.Errorf("host %q is an entry: it needs a domain", name)
+	}
+
+	h.Domain = o.Domain
+
+	if o.Engine != "" {
+		if o.Engine != "sing-box" && o.Engine != "xray" {
+			return "", fmt.Errorf("engine %q: expected sing-box or xray", o.Engine)
+		}
+
+		h.Engine = o.Engine
+	}
+
+	if o.Via != "" {
+		if o.Via == name {
+			return "", fmt.Errorf("host %q cannot be reached through itself", name)
+		}
+
+		if _, ok := st.Hosts[o.Via]; !ok {
+			return "", fmt.Errorf("host %q is not described", o.Via)
+		}
+
+		h.Via = o.Via
+	}
+
+	st.Hosts[name] = h
+
+	return fmt.Sprintf("hosts: %s: edited", name), nil
+}

@@ -403,3 +403,43 @@ func TestSetLinkEditsTransports(t *testing.T) {
 		t.Fatal("removing a protocol that is gone was reported as a change")
 	}
 }
+
+// TestEditHost: the fields an operator can change without touching the host's
+// keys and links. A role or a rename is not among them, and an exit cannot grow
+// a domain.
+func TestEditHost(t *testing.T) {
+	app := openFixture(t)
+
+	msg, err := app.EditHost("ru-msk-1", "", "", "new.example.ru", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "ru-msk-1") {
+		t.Fatalf("message %q", msg)
+	}
+
+	if app.st.Hosts["ru-msk-1"].Domain != "new.example.ru" {
+		t.Fatalf("domain %q", app.st.Hosts["ru-msk-1"].Domain)
+	}
+
+	if _, err := app.EditHost("ghost", "", "", "", "", ""); err == nil {
+		t.Fatal("an unknown host was edited")
+	}
+
+	if _, err := app.EditHost("ru-msk-1", "", "not-an-ip", "", "", ""); err == nil {
+		t.Fatal("a bogus address was accepted")
+	}
+
+	if _, err := app.EditHost("ru-msk-1", "", "", "", "ghost", ""); err == nil {
+		t.Fatal("a via to an unknown host was accepted")
+	}
+
+	if _, err := app.EditHost("fi-hel-1", "", "", "example.ru", "", ""); err == nil {
+		t.Fatal("an exit was given a domain")
+	}
+
+	if _, err := app.EditHost("ru-msk-1", "", "", "", "", "haproxy"); err == nil {
+		t.Fatal("an unknown engine was accepted")
+	}
+}

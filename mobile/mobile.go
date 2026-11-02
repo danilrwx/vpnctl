@@ -906,3 +906,28 @@ func (a *App) SetLink(from, to, add, rm, active, policy string) (string, error) 
 
 	return msg, nil
 }
+
+// EditHost changes the address, domain, via or engine of a host. Everything
+// that rewrites links and keys — rename, role — stays a remove-and-add job.
+func (a *App) EditHost(name, ssh, ip, domain, via, engine string) (string, error) {
+	msg, err := ops.HostEdit(a.st, name, ops.HostOptions{SSH: ssh, IP: ip, Domain: domain, Via: via, Engine: engine})
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveHosts(a.dir, a.st.Hosts); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
