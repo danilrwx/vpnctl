@@ -60,6 +60,37 @@ func SignedBy() (string, error) {
 	return signer.PublicKeyPEM()
 }
 
+// AuthorizedKey is the device key as an authorized_keys line: what sshd reads,
+// and what GitHub's deploy key field accepts. The PEM SignedBy returns is the
+// agent registry's format; neither of those two reads it.
+func AuthorizedKey() (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("no signer: this device cannot sign requests yet")
+	}
+
+	raw, err := signer.PublicKeyDER()
+	if err != nil {
+		return "", err
+	}
+
+	parsed, err := x509.ParsePKIXPublicKey(raw)
+	if err != nil {
+		return "", fmt.Errorf("public key is not PKIX DER: %w", err)
+	}
+
+	ec, ok := parsed.(*ecdsa.PublicKey)
+	if !ok {
+		return "", fmt.Errorf("public key is not ECDSA")
+	}
+
+	pub, err := ssh.NewPublicKey(ec)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))) + " vpnctl@android", nil
+}
+
 // SignMessage is the one place that turns a request payload into a signature, so
 // the SHA-256 is applied exactly once and the Kotlin side only does the raw
 // ECDSA operation.

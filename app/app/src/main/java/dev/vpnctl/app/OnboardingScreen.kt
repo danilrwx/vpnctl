@@ -45,19 +45,22 @@ fun OnboardingScreen(ctx: android.content.Context, onDone: () -> Unit) {
     var users by remember { mutableStateOf(0) }
 
     val recipient = remember { localRecipient(ctx) }
-    val sshKey = remember { Core.identityPEM(ctx) }
+    val sshKey = remember { Core.identityKey(ctx) }
+    val sshReady = sshKey.startsWith("ecdsa-") || sshKey.startsWith("ssh-")
 
     fun connect() {
-        if (busy || repo.isBlank()) {
+        val url = normalizeRepo(repo)
+        if (busy || url.isBlank()) {
             return
         }
 
+        repo = url
         busy = true
         status = "…"
 
         scope.launch {
-            Prefs.setRepo(ctx, repo)
-            status = onIo { Core.connect(ctx, repo) }
+            Prefs.setRepo(ctx, url)
+            status = onIo { Core.connect(ctx, url) }
             busy = false
 
             if (status.startsWith("synced at")) {
@@ -92,16 +95,16 @@ fun OnboardingScreen(ctx: android.content.Context, onDone: () -> Unit) {
 
                             Text("ssh key", style = MaterialTheme.typography.labelMedium, color = Muted)
                             Text(
-                                if (sshKey.isEmpty()) "none yet" else "ecdsa P-256 · held by the Keystore",
+                                if (sshReady) "ecdsa P-256 · held by the Keystore" else "none yet",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Link,
                             )
-                            TextButton(onClick = { copyToClipboard(ctx, sshKey) }, enabled = sshKey.isNotEmpty()) {
+                            TextButton(onClick = { copyToClipboard(ctx, sshKey) }, enabled = sshReady) {
                                 Text("Copy key", color = Link, style = MaterialTheme.typography.bodySmall)
                             }
 
                             Text(
-                                "Add the recipient with `vpnctl key add phone <age1…>` and the ssh key with `vpnctl host agent-install` from the laptop. Both are one-time.",
+                                "Add the recipient with `vpnctl key add phone <age1…>`; add the ssh key as a deploy key on the state repository, or with `vpnctl host agent-install` for a host. Both are one-time.",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Muted,
                                 modifier = Modifier.padding(top = 8.dp),
@@ -122,7 +125,7 @@ fun OnboardingScreen(ctx: android.content.Context, onDone: () -> Unit) {
                             OutlinedTextField(
                                 value = repo,
                                 onValueChange = { repo = it },
-                                label = { Text("git@github.com:owner/state.git") },
+                                label = { Text("owner/repo or a GitHub URL") },
                                 singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyMedium,
                                 colors = appFieldColors(),

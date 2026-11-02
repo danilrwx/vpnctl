@@ -109,16 +109,18 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     }
 
     fun connect() {
-        if (busy || repo.isBlank()) {
+        val url = normalizeRepo(repo)
+        if (busy || url.isBlank()) {
             return
         }
 
+        repo = url
         busy = true
         status = "…"
 
         scope.launch {
-            Prefs.setRepo(ctx, repo)
-            status = onIo { Core.connect(ctx, repo) }
+            Prefs.setRepo(ctx, url)
+            status = onIo { Core.connect(ctx, url) }
             version++
             busy = false
         }
@@ -261,7 +263,7 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                         OutlinedTextField(
                             value = repo,
                             onValueChange = { repo = it },
-                            label = { Text("git@github.com:owner/state.git") },
+                            label = { Text("owner/repo or a GitHub URL") },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium,
                             colors = appFieldColors(),

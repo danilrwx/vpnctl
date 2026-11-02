@@ -249,6 +249,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Core.installSigner(applicationContext)
+        // the age identity is minted once: the recipient has to be on screen
+        // before the state is connected, so it cannot wait for the first screen
+        Core.identity(applicationContext)
 
         // the app draws behind the system bars: the mockups are edge to edge and
         // the canvas is the background, so the icons have to stay light

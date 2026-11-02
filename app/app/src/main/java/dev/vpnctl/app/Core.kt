@@ -79,12 +79,13 @@ object Core {
     }
 
     /**
-     * identityPEM is the whole public key, also written to filesDir/identity.pub:
-     * the phone has to hand it to the host, and copying from a screen is the
-     * worst way to do that.
+     * identityKey is the device key as an authorized_keys line, which is also
+     * what GitHub's deploy key field accepts. It is written to
+     * filesDir/identity.pub: the phone has to hand it to a host or a repository,
+     * and copying from a screen is the worst way to do that.
      */
-    fun identityPEM(ctx: Context): String {
-        val key = signedBy()
+    fun identityKey(ctx: Context): String {
+        val key = sshKey()
         File(ctx.filesDir, "identity.pub").writeText(key)
         return key
     }
@@ -99,18 +100,17 @@ object Core {
             Mobile.setSigner(KeystoreSigner().ensure())
             // the public half is written every start: a reinstall changes the
             // key, and a stale file here is a key the host does not know
-            File(ctx.filesDir, "identity.pub").writeText(Mobile.signedBy())
+            File(ctx.filesDir, "identity.pub").writeText(Mobile.authorizedKey())
         } catch (e: Exception) {
             // a device without a Keystore key can still read the state; it just
             // cannot sign, and the screens that need a signature say so
         }
     }
 
-    /** signedBy is what the host would receive: the device's public key. */
-    fun signedBy(): String = try {
-        val signer = KeystoreSigner().ensure()
-        Mobile.setSigner(signer)
-        Mobile.signedBy()
+    /** sshKey is the device's public key in the form sshd and GitHub read. */
+    fun sshKey(): String = try {
+        Mobile.setSigner(KeystoreSigner().ensure())
+        Mobile.authorizedKey()
     } catch (e: Exception) {
         "no signer: ${e.message}"
     }

@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
+	"golang.org/x/crypto/ssh"
 )
 
 // keystoreLike is the Kotlin side in miniature: it holds the key, signs the
@@ -88,6 +90,41 @@ func TestSignatureMatchesTheAgent(t *testing.T) {
 
 	if err := verifyWith(sig, []byte(agent.Message(req))); err != nil {
 		t.Fatalf("the signature does not match the request: %v", err)
+	}
+}
+
+// TestAuthorizedKeyIsAnOpenSSHLine: GitHub's deploy key field and a host's
+// authorized_keys read the ssh line, not the PKIX PEM the agent registry uses.
+func TestAuthorizedKeyIsAnOpenSSHLine(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	SetSigner(&keystoreLike{key: key})
+	t.Cleanup(func() { SetSigner(nil) })
+
+	line, err := AuthorizedKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.HasPrefix(line, "ecdsa-sha2-nistp256 ") {
+		t.Fatalf("the line is not an ssh key: %q", line)
+	}
+
+	parsed, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+	if err != nil {
+		t.Fatalf("ssh cannot parse the key: %v", err)
+	}
+
+	want, err := ssh.NewPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(parsed.Marshal(), want.Marshal()) {
+		t.Fatal("the ssh line carries a different key")
 	}
 }
 
