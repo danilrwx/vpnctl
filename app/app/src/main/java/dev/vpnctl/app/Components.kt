@@ -36,7 +36,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -547,4 +549,65 @@ fun InfoChip(text: String, color: Color = Ink) {
             Text(text, style = MaterialTheme.typography.bodyMedium, color = color, maxLines = 1)
         }
     }
+}
+
+/** Badge is the action pill on a routing rule: direct, block, or a link. */
+@Composable
+fun Badge(text: String, background: Color, foreground: Color) {
+    Box(
+        modifier = Modifier
+            .height(30.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(background)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = foreground, maxLines = 1)
+    }
+}
+
+/** UnderlineTabs is the mockup's underlined switch: For all, split, full. */
+@Composable
+fun UnderlineTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Column {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            labels.forEachIndexed { index, label ->
+                val on = index == selected
+
+                Column(
+                    modifier = Modifier.weight(1f).clickable { onSelect(index) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (on) Link else Muted,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .background(if (on) Accent else Color.Transparent),
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = Edge)
+    }
+}
+
+/** dashedBorder marks what is not ready: a node the state describes but the
+ * host does not answer for yet. */
+fun Modifier.dashedBorder(color: Color, radius: Dp = 12.dp, width: Dp = 1.dp): Modifier = drawBehind {
+    val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
+        width = width.toPx(),
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f)),
+    )
+
+    drawRoundRect(
+        color = color,
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.toPx()),
+        style = stroke,
+    )
 }

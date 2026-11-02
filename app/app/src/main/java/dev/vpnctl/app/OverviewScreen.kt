@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.PlaylistPlay
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -50,6 +51,7 @@ fun OverviewScreen(
     modifier: Modifier,
     onBack: () -> Unit,
     onPlan: () -> Unit,
+    onDevices: () -> Unit,
 ) {
     val app = remember { Core.current() }
     var users by remember { mutableStateOf(emptyList<UserRow>()) }
@@ -91,7 +93,10 @@ fun OverviewScreen(
                 ScreenHeader(
                     title = "vpnctl",
                     subtitle = if (head.isEmpty()) "no commit" else "state $head",
-                    actions = { IconAction(Icons.Outlined.Refresh, { epoch++ }, "Reload") },
+                    actions = {
+                        IconAction(Icons.Outlined.VpnKey, onDevices, "Devices and keys")
+                        IconAction(Icons.Outlined.Refresh, { epoch++ }, "Reload")
+                    },
                 )
             }
 

@@ -18,10 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AltRoute
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -264,12 +265,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** The four surfaces that exist today; Topology and Routing wait for their data. */
+/** The five surfaces of the mockups, in their order. Devices is not a tab: it
+ * is one screen about this installation, opened from the Overview header. */
 val TABS = listOf(
     NavItem("Overview", Icons.Outlined.Dashboard),
     NavItem("Users", Icons.Outlined.People),
     NavItem("Hosts", Icons.Outlined.Dns),
-    NavItem("Devices", Icons.Outlined.Smartphone),
+    NavItem("Topology", Icons.Outlined.Hub),
+    NavItem("Routing", Icons.Outlined.AltRoute),
 )
 
 @Composable
@@ -282,8 +285,9 @@ fun App(modifier: Modifier = Modifier) {
     var user by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
     var planOpen by remember { mutableStateOf(false) }
+    var devicesOpen by remember { mutableStateOf(false) }
 
-    val overlay = user != null || adding || planOpen
+    val overlay = user != null || adding || planOpen || devicesOpen
 
     // The card, the plan and the new-user form are overlays over one activity:
     // without this, the system Back finishes the app instead of closing them.
@@ -291,6 +295,7 @@ fun App(modifier: Modifier = Modifier) {
         user = null
         adding = false
         planOpen = false
+        devicesOpen = false
     }
 
     Scaffold(
@@ -308,6 +313,7 @@ fun App(modifier: Modifier = Modifier) {
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 planOpen -> PlanScreen(ctx, Modifier, onBack = { planOpen = false })
+                devicesOpen -> DevicesScreen(ctx, Modifier, onBack = { devicesOpen = false })
                 adding -> AddUserScreen(
                     ctx,
                     Modifier,
@@ -327,7 +333,13 @@ fun App(modifier: Modifier = Modifier) {
                         user = null
                     },
                 )
-                tab == 0 -> OverviewScreen(ctx, Modifier, onBack = { tab = 1 }, onPlan = { planOpen = true })
+                tab == 0 -> OverviewScreen(
+                    ctx,
+                    Modifier,
+                    onBack = { tab = 1 },
+                    onPlan = { planOpen = true },
+                    onDevices = { devicesOpen = true },
+                )
                 tab == 1 -> UsersScreen(
                     ctx,
                     Modifier,
@@ -337,7 +349,8 @@ fun App(modifier: Modifier = Modifier) {
                     onPlan = { planOpen = true },
                 )
                 tab == 2 -> HostsScreen(ctx, Modifier, onBack = { tab = 1 })
-                else -> DevicesScreen(ctx, Modifier, onBack = { tab = 1 })
+                tab == 3 -> TopologyScreen(ctx, Modifier, onBack = { tab = 1 })
+                else -> RoutingScreen(ctx, Modifier, onBack = { tab = 1 })
             }
         }
     }
