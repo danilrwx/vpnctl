@@ -4,6 +4,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// A release build needs a keystore, and a keystore does not belong in the tree.
+// The settings come from the environment; without them the release build is
+// signed with the debug key, which is fine for a local check and nothing else.
+val releaseKeystore = System.getenv("VPNCTL_KEYSTORE")
+val appVersionCode = System.getenv("VPNCTL_VERSION_CODE")?.toIntOrNull() ?: 1
+val appVersionName = System.getenv("VPNCTL_VERSION_NAME") ?: "0.1.0"
+
 android {
     namespace = "dev.vpnctl.app"
     compileSdk = 35
@@ -12,8 +19,28 @@ android {
         applicationId = "dev.vpnctl.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("VPNCTL_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("VPNCTL_KEY_ALIAS")
+                keyPassword = System.getenv("VPNCTL_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // the core is a gomobile AAR and the UI is Compose: R8 has nothing
+            // to strip here, and a rule file nobody wrote is worse than none
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
     }
 
     buildFeatures {

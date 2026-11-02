@@ -1,0 +1,67 @@
+name: release
+
+# A signed APK is built by hand: the keystore lives in secrets, and a tag does
+# not have one. Dispatch it with the two numbers the app ships with.
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: versionName, e.g. 0.2.0
+        required: true
+      version_code:
+        description: versionCode, a positive integer
+        required: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: android-actions/setup-android@v3
+
+      - name: SDK pieces the build needs
+        run: sdkmanager --install "platforms;android-35" "build-tools;34.0.0" "ndk;26.1.10909125"
+
+      - name: gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - run: gomobile init
+
+      - name: keystore
+        env:
+          KEYSTORE: ${{ secrets.VPNCTL_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE" || { echo "VPNCTL_KEYSTORE_BASE64 is not set" >&2; exit 1; }
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: assemble the signed APK
+        working-directory: app
+        env:
+          VPNCTL_KEYSTORE: ${{ runner.temp }}/release.jks
+          VPNCTL_KEYSTORE_PASSWORD: ${{ secrets.VPNCTL_KEYSTORE_PASSWORD }}
+          VPNCTL_KEY_ALIAS: ${{ secrets.VPNCTL_KEY_ALIAS }}
+          VPNCTL_KEY_PASSWORD: ${{ secrets.VPNCTL_KEY_PASSWORD }}
+          VPNCTL_VERSION_NAME: ${{ inputs.version_name }}
+          VPNCTL_VERSION_CODE: ${{ inputs.version_code }}
+        run: gradle assembleRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vpnctl-${{ inputs.version_name }}.apk
+          path: app/app/build/outputs/apk/release/app-release.apk
