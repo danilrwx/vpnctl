@@ -50,4 +50,33 @@ class UsersTest {
         assertEquals(setOf("reality", "ws"), defaultProtocols(listOf("reality", "ws", "hy2")))
         assertEquals(setOf("reality"), defaultProtocols(listOf("reality")))
     }
+
+    @Test
+    fun `the estate and its links parse as the core writes them`() {
+        val hosts = parseHosts(
+            """[{"name":"ru-msk-1","role":"entry","engine":"sing-box","domain":"gw.example.ru","via":""}]""",
+        )
+
+        assertEquals(1, hosts.size)
+        assertEquals("entry", hosts[0].role)
+        assertEquals("gw.example.ru", hosts[0].domain)
+
+        val links = parseHostLinks("""[{"from":"ru-msk-1","to":"nl-ams-1","protocols":["hy2"],"active":"hy2"}]""")
+
+        assertEquals(1, links.size)
+        assertEquals("hy2", links[0].protocols)
+        assertEquals("hy2", links[0].active)
+    }
+
+    @Test
+    fun `devices parse with the recipient that marks this phone`() {
+        val devices = parseDevices(
+            """[{"name":"phone","recipient":"age1abc","added":"2026-11-01"},{"name":"laptop","recipient":"age1def"}]""",
+        )
+
+        assertEquals(2, devices.size)
+        assertEquals("age1abc", devices[0].recipient)
+        assertEquals("2026-11-01", devices[0].added)
+        assertEquals("", devices[1].added)
+    }
 }

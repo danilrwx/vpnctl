@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danilrwx/vpnctl-go/internal/ageio"
 	"github.com/danilrwx/vpnctl-go/internal/apply"
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/ops"
@@ -268,6 +269,32 @@ type HostInfo struct {
 	IP       string `json:"ip,omitempty"`
 	Via      string `json:"via,omitempty"`
 	Retiring bool   `json:"retiring,omitempty"`
+}
+
+// Device is one recipient of secrets.age.yaml: a phone, a laptop or the backup.
+type Device struct {
+	Name      string `json:"name"`
+	Recipient string `json:"recipient"`
+	Added     string `json:"added,omitempty"`
+}
+
+// Devices returns who can read the secrets, as JSON. It is the state file, not
+// a live query: the phone cannot know which of those devices still answer.
+func (a *App) Devices() (string, error) {
+	recs, err := ageio.LoadRecipients(a.dir)
+	if err != nil {
+		return "", err
+	}
+
+	out := make([]Device, 0, 8)
+
+	if recs != nil {
+		for _, r := range recs.Recipients {
+			out = append(out, Device{Name: r.Name, Recipient: r.Key, Added: r.Added})
+		}
+	}
+
+	return mustJSON(out), nil
 }
 
 // HostLink is one node-to-node link, as the state describes it.

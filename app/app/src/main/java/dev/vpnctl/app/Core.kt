@@ -174,5 +174,22 @@ object Core {
         "sync: ${e.message}"
     }
 
+    /**
+     * connect replaces the local copy with a clone of url. The fixture and any
+     * previous clone go first: a repository that already exists would make sync
+     * answer "already cloned" and silently keep the old state.
+     */
+    fun connect(ctx: Context, url: String): String {
+        val dir = File(ctx.filesDir, "state")
+
+        if (dir.exists()) {
+            dir.deleteRecursively()
+        }
+
+        app = null
+
+        return sync(ctx, url)
+    }
+
     fun current(): App? = app
 }

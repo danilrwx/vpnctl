@@ -61,6 +61,20 @@ data class UserRow(
 /** One copyable line of a user card. */
 data class UserLink(val label: String, val url: String)
 
+/** One recipient of secrets.age.yaml. */
+data class DeviceRow(val name: String, val recipient: String, val added: String)
+
+/** parseDevices reads who can read the secrets. */
+fun parseDevices(json: String): List<DeviceRow> = try {
+    val arr = JSONArray(json)
+    (0 until arr.length()).map { i ->
+        val o = arr.getJSONObject(i)
+        DeviceRow(o.getString("name"), o.getString("recipient"), o.optString("added"))
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
 /** One link between two hosts, as the state describes it. */
 data class LinkRow(val from: String, val to: String, val active: String, val protocols: String)
 
@@ -245,6 +259,7 @@ fun App(modifier: Modifier = Modifier) {
         PLAN -> PlanScreen(ctx, modifier, onBack = { selected = null })
         HOSTS -> HostsScreen(ctx, modifier, onBack = { selected = null })
         OVERVIEW -> OverviewScreen(ctx, modifier, onBack = { selected = null })
+        DEVICES -> DevicesScreen(ctx, modifier, onBack = { selected = null })
         ADD -> AddUserScreen(
             ctx,
             modifier,
@@ -287,9 +302,14 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
             epoch++
         }
 
+        val repo = Prefs.repo(ctx)
         if (Core.current() != null && !File(ctx.filesDir, "state/.git").exists()) {
-            status = withContext(Dispatchers.IO) { Core.sync(ctx, REPO) }
-            epoch++
+            if (repo.isEmpty()) {
+                status = "not connected · open Devices to point the app at a repository"
+            } else {
+                status = withContext(Dispatchers.IO) { Core.sync(ctx, repo) }
+                epoch++
+            }
         }
     }
 
@@ -310,6 +330,7 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
         Row {
             Button(onClick = { onPick(HOSTS) }) { Text("Hosts") }
             Button(onClick = { onPick(ADD) }, modifier = Modifier.padding(start = 8.dp)) { Text("New") }
+            Button(onClick = { onPick(DEVICES) }, modifier = Modifier.padding(start = 8.dp)) { Text("Devices") }
         }
 
         LazyColumn {
@@ -751,6 +772,129 @@ fun qrMatrix(text: String): BitMatrix = QRCodeWriter().encode(
 )
 
 /**
+ * DevicesScreen is both halves of onboarding: where the state comes from, and
+ * who can read it. The repository field replaces a constant that was compiled
+ * in, and the keys below are what have to be filed on the forge and the hosts
+ * before either works.
+ */
+@Composable
+fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+    val app = remember { Core.current() }
+    var devices by remember { mutableStateOf(emptyList<DeviceRow>()) }
+    var repo by remember { mutableStateOf(Prefs.repo(ctx).ifEmpty { REPO }) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+    val recipient = remember { localRecipient(ctx) }
+    val sshKey = remember { File(ctx.filesDir, "identity.pub").takeIf { it.exists() }?.readText()?.trim().orEmpty() }
+
+    LaunchedEffect(Unit) {
+        devices = withContext(Dispatchers.IO) {
+            app?.let { parseDevices(it.devices()) } ?: emptyList()
+        }
+    }
+
+    fun connect() {
+        if (busy || repo.isBlank()) {
+            return
+        }
+
+        busy = true
+        status = "…"
+
+        scope.launch {
+            Prefs.setRepo(ctx, repo)
+            status = onIo { Core.connect(ctx, repo) }
+            devices = withContext(Dispatchers.IO) {
+                Core.current()?.let { parseDevices(it.devices()) } ?: emptyList()
+            }
+            busy = false
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        Text("Devices and keys", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("Back") }
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            item {
+                Text("Repository", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+                Text(
+                    "the phone clones with its own deploy key; connecting replaces the local copy",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = repo,
+                    onValueChange = { repo = it },
+                    label = { Text("git@github.com:owner/state.git") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            item {
+                Button(onClick = { connect() }, enabled = !busy && repo.isNotBlank()) { Text("Connect") }
+            }
+
+            item {
+                Text("This device", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp))
+                Text("age recipient", style = MaterialTheme.typography.bodySmall)
+                Text(recipient.ifEmpty { "none yet" }, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { copyToClipboard(ctx, recipient) }, enabled = recipient.isNotEmpty()) { Text("Copy recipient") }
+                Text("ssh key for the agent", style = MaterialTheme.typography.bodySmall)
+                Text(sshKey.ifEmpty { "none yet" }, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { copyToClipboard(ctx, sshKey) }, enabled = sshKey.isNotEmpty()) { Text("Copy key") }
+            }
+
+            item {
+                Text(
+                    "Recipients · ${devices.size}",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+
+            items(devices) { d ->
+                Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                    Row {
+                        Text(d.name, style = MaterialTheme.typography.titleSmall)
+
+                        if (d.recipient == recipient) {
+                            Text("  this phone", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    Text(d.recipient, style = MaterialTheme.typography.bodySmall)
+                    if (d.added.isNotEmpty()) {
+                        Text("added ${d.added}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    "every recipient can read secrets.age.yaml; private keys never leave their device",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+        }
+
+        if (status.isNotEmpty()) {
+            Text(status, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** localRecipient is the age recipient this phone minted on first launch. */
+fun localRecipient(ctx: android.content.Context): String =
+    File(ctx.filesDir, "age.recipient").takeIf { it.exists() }?.readText()?.trim().orEmpty()
+
+/**
  * OverviewScreen is the state at a glance: users, hosts, links and whether every
  * host runs the same commit. No traffic and no latency — the core measures
  * neither, and an empty slot is better than an invented number.
@@ -1059,5 +1203,6 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
 const val PLAN = "@plan"
 const val HOSTS = "@hosts"
 const val OVERVIEW = "@overview"
+const val DEVICES = "@devices"
 const val ADD = "@new"
 const val REPO = "git@github.com:danilrwx/vpn.git"
