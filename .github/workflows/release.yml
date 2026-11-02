@@ -66,14 +66,16 @@ jobs:
           VPNCTL_KEY_PASSWORD: ${{ secrets.VPNCTL_KEY_PASSWORD }}
           VPNCTL_VERSION_NAME: ${{ inputs.version_name }}
           VPNCTL_VERSION_CODE: ${{ inputs.version_code }}
+          VPNCTL_SPLIT_ABI: "1"
         run: gradle assembleRelease
 
-      - name: the APK is signed with the release key
+      - name: the APKs are signed with the release key
         run: |
           apksigner="$ANDROID_HOME/build-tools/34.0.0/apksigner"
-          "$apksigner" verify --print-certs app/app/build/outputs/apk/release/app-release.apk
-          "$apksigner" verify --print-certs app/app/build/outputs/apk/release/app-release.apk \
-            | grep -F "CN=vpnctl"
+          for apk in app/app/build/outputs/apk/release/app-*-release.apk; do
+            "$apksigner" verify --print-certs "$apk"
+            "$apksigner" verify --print-certs "$apk" | grep -F "CN=vpnctl"
+          done
 
       - name: the binaries and the tarballs
         run: |
@@ -92,7 +94,8 @@ jobs:
             tar -czf "dist/vpnctl-agent_linux_${arch}.tar.gz" -C dist vpnctl-agent
           done
           rm -f dist/vpnctl-agent
-          cp app/app/build/outputs/apk/release/app-release.apk dist/vpnctl.apk
+          cp app/app/build/outputs/apk/release/app-arm64-v8a-release.apk dist/vpnctl.apk
+          cp app/app/build/outputs/apk/release/app-armeabi-v7a-release.apk dist/vpnctl-armv7.apk
           (cd dist && sha256sum vpnctl* > sha256sums.txt)
           ls -lh dist
 
@@ -122,7 +125,8 @@ jobs:
 
           | asset | what it is |
           |---|---|
-          | `vpnctl.apk` | the Android app, signed with the release key |
+          | `vpnctl.apk` | the Android app, 64-bit ARM, signed with the release key |
+          | `vpnctl-armv7.apk` | the Android app, 32-bit ARM |
           | `vpnctl_linux_amd64.tar.gz` | the CLI, Linux amd64 |
           | `vpnctl_linux_arm64.tar.gz` | the CLI, Linux arm64 |
           | `vpnctl_darwin_amd64.tar.gz` | the CLI, macOS Intel |
@@ -132,6 +136,7 @@ jobs:
           EOF
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --title "vpnctl $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
           else
             gh release create "$TAG" dist/* \
               --target "$GITHUB_SHA" \

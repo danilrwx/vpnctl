@@ -34,6 +34,18 @@ android {
         }
     }
 
+    // The Go core ships as a native library per ABI, so a universal APK carries
+    // four copies of it. The release splits the two phone ABIs; the debug build
+    // stays universal because the emulator is x86_64.
+    splits {
+        abi {
+            isEnable = System.getenv("VPNCTL_SPLIT_ABI") == "1"
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
+    }
+
     buildTypes {
         release {
             // the core is a gomobile AAR and the UI is Compose: R8 has nothing

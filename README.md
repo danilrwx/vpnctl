@@ -199,9 +199,9 @@ tar xzf vpnctl-agent_linux_amd64.tar.gz
 install -m0755 vpnctl-agent /usr/local/bin/
 ```
 
-The APK is `vpnctl.apk`; the same release key signs every update, so an
-installed app updates in place. Verify an asset against `sha256sums.txt` before
-installing it.
+The APK is `vpnctl.apk` (64-bit ARM) or `vpnctl-armv7.apk` (32-bit ARM); the
+same release key signs every update, so an installed app updates in place.
+Verify an asset against `sha256sums.txt` before installing it.
 
 ## Commands
 
