@@ -3,12 +3,14 @@ package dev.vpnctl.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -26,8 +28,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.common.BitMatrix
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -242,6 +256,7 @@ fun UserScreen(
     var busy by remember { mutableStateOf(false) }
     var links by remember { mutableStateOf(emptyList<UserLink>()) }
     var message by remember { mutableStateOf("") }
+    var qr by remember { mutableStateOf("") }
     var mode by remember { mutableStateOf(setOf("split")) }
     var protos by remember { mutableStateOf(emptySet<String>()) }
     var tg by remember { mutableStateOf(false) }
@@ -296,8 +311,19 @@ fun UserScreen(
         // one list: a fixed column pushed the last buttons off the screen.
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(links) { link ->
-                Text(link.label, style = MaterialTheme.typography.labelSmall)
-                Text(link.url, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(link.label, style = MaterialTheme.typography.labelSmall)
+                        Text(link.url, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    TextButton(onClick = {
+                        copyToClipboard(ctx, link.url)
+                        status = "${link.label}: copied"
+                    }) { Text("Copy") }
+
+                    TextButton(onClick = { qr = link.url }) { Text("QR") }
+                }
             }
 
             if (message.isNotEmpty()) {
@@ -410,6 +436,10 @@ fun UserScreen(
         if (status.isNotEmpty()) {
             Text(status, style = MaterialTheme.typography.bodySmall)
         }
+    }
+
+    if (qr.isNotEmpty()) {
+        QrDialog(links.firstOrNull { it.url == qr }?.label ?: "QR", qr, onDismiss = { qr = "" })
     }
 
     if (deleting) {
@@ -588,6 +618,60 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
         Text(status, style = MaterialTheme.typography.bodySmall)
     }
 }
+
+/** QrDialog shows a link as a QR: the phone is where a link is handed over. */
+@Composable
+fun QrDialog(label: String, url: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(label) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                QrCode(url, 220.dp)
+                Text(url, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 12.dp))
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+/** QrCode draws the matrix the encoder returns, one square per module. */
+@Composable
+fun QrCode(text: String, size: Dp) {
+    val matrix = remember(text) { qrMatrix(text) }
+
+    Canvas(modifier = Modifier.size(size)) {
+        val n = matrix.width
+        val step = this.size.minDimension / n
+
+        drawRect(Color.White)
+
+        for (x in 0 until n) {
+            for (y in 0 until n) {
+                if (!matrix.get(x, y)) {
+                    continue
+                }
+                // snapped edges that overlap by a fraction of a pixel: a shared
+                // edge drawn twice is invisible, a gap between modules is not
+                val left = floor(x * step)
+                val top = floor(y * step)
+
+                drawRect(Color.Black, Offset(left, top), Size(ceil((x + 1) * step) - left, ceil((y + 1) * step) - top))
+            }
+        }
+    }
+}
+
+/** qrMatrix asks for one pixel per module (0 means "the natural size"): asking
+ * for a big matrix makes the encoder scale it up, and then the canvas draws a
+ * rectangle per *pixel* — 660² of them, which is an ANR, not a QR code. */
+fun qrMatrix(text: String): BitMatrix = QRCodeWriter().encode(
+    text,
+    BarcodeFormat.QR_CODE,
+    0,
+    0,
+    mapOf<EncodeHintType, Any>(EncodeHintType.MARGIN to 1, EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M),
+)
 
 /**
  * DeleteDialog asks for the name before removing a user. The keys go with it and

@@ -67,6 +67,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // QR for the subscription link: the card is the handoff, and a link someone
+    // retypes from a phone screen is how a token leaks into a chat
+    implementation("com.google.zxing:core:3.5.3")
+
     // JVM unit tests: no emulator, no device. org.json ships as a stub in
     // android.jar, so the real implementation goes on the test classpath.
     testImplementation(kotlin("test"))
