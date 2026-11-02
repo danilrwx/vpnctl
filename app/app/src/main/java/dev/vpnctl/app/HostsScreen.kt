@@ -32,7 +32,12 @@ import kotlinx.coroutines.withContext
  * reachability come from a plan; latency and traffic do not exist in the core.
  */
 @Composable
-fun HostsScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+fun HostsScreen(
+    ctx: android.content.Context,
+    modifier: Modifier,
+    onBack: () -> Unit,
+    onPick: (String) -> Unit,
+) {
     val app = remember { Core.current() }
     var hosts by remember { mutableStateOf(emptyList<HostRow>()) }
     var links by remember { mutableStateOf(emptyList<LinkRow>()) }
@@ -76,7 +81,7 @@ fun HostsScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> 
                                 HorizontalDivider(color = Edge)
                             }
 
-                            HostRowView(host, plans[host.name], head)
+                            HostRowView(host, plans[host.name], head, onClick = { onPick(host.name) })
                         }
                     }
                 }
@@ -91,7 +96,7 @@ fun HostsScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> 
                                 HorizontalDivider(color = Edge)
                             }
 
-                            HostRowView(host, plans[host.name], head)
+                            HostRowView(host, plans[host.name], head, onClick = { onPick(host.name) })
                         }
                     }
                 }

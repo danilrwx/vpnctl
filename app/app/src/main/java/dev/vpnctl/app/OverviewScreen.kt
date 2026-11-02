@@ -307,9 +307,9 @@ fun hostTone(plan: PlanHost?, head: String): Color = when {
 }
 
 @Composable
-fun HostRowView(host: HostRow, plan: PlanHost?, head: String) {
+fun HostRowView(host: HostRow, plan: PlanHost?, head: String, onClick: () -> Unit = {}) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatusDot(hostTone(plan, head), size = 10.dp)
