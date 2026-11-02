@@ -14,12 +14,12 @@
   <text x="155" y="118" text-anchor="middle" fill="#8b949e" font-size="12" letter-spacing="1">PHONE · LAPTOP</text>
   <text x="155" y="148" text-anchor="middle" fill="#e6edf3" font-weight="700" font-size="16">vpnctl</text>
   <text x="155" y="172" text-anchor="middle" fill="#c9d1d9">state in git</text>
-  <text x="155" y="192" text-anchor="middle" fill="#c9d1d9">metrics.sqlite</text>
+  <text x="155" y="192" text-anchor="middle" fill="#c9d1d9">metrics · jsonl</text>
   <text x="155" y="218" text-anchor="middle" fill="#8b949e" font-size="12">age key on each device</text>
 
   <!-- entry -->
   <rect x="370" y="60" width="250" height="210" rx="10" fill="#161b22" stroke="#30363d"/>
-  <text x="495" y="88" text-anchor="middle" fill="#8b949e" font-size="12" letter-spacing="1">ENTRY · RUSSIA · gw.example.ru</text>
+  <text x="495" y="88" text-anchor="middle" fill="#8b949e" font-size="12" letter-spacing="1">ENTRY · gw.example.ru</text>
   <text x="495" y="118" text-anchor="middle" fill="#e6edf3" font-weight="700" font-size="16">sing-box</text>
   <text x="495" y="142" text-anchor="middle" fill="#c9d1d9">reality · ws · hysteria2 · awg · mtg</text>
   <line x1="390" y1="158" x2="600" y2="158" stroke="#30363d"/>
