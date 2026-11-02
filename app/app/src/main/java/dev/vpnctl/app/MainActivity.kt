@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -244,9 +246,10 @@ fun UserScreen(
     var protos by remember { mutableStateOf(emptySet<String>()) }
     var tg by remember { mutableStateOf(false) }
     var expires by remember { mutableStateOf("") }
+    var enabled by remember { mutableStateOf(true) }
     var lang by remember { mutableStateOf("ru") }
-    // the second tap really deletes: the first one only says what it will do
-    var confirming by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var typed by remember { mutableStateOf("") }
     var reload by remember { mutableStateOf(0) }
 
     val scope = rememberCoroutineScope()
@@ -281,6 +284,7 @@ fun UserScreen(
             protos = row.protocols.toSet()
             tg = row.tg
             expires = row.expires
+            enabled = row.enabled
         }
     }
 
@@ -350,7 +354,21 @@ fun UserScreen(
             }
 
             item {
-                Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("Disable") }
+                // the same button both ways: an account turned off by mistake has
+                // to come back from the phone, not from a terminal
+                Button(
+                    onClick = {
+                        act {
+                            val out = setUserEnabled(app, name, !enabled)
+                            if (out.startsWith("ok")) {
+                                reload++
+                            }
+
+                            out
+                        }
+                    },
+                    enabled = !busy,
+                ) { Text(if (enabled) "Disable" else "Enable") }
             }
 
             item {
@@ -378,24 +396,11 @@ fun UserScreen(
             item {
                 Button(
                     onClick = {
-                        if (!confirming) {
-                            confirming = true
-                            status = "tap again: the user and its keys leave the state"
-
-                            return@Button
-                        }
-
-                        act {
-                            val out = removeUser(app, name)
-                            if (out.startsWith("ok")) {
-                                onDeleted()
-                            }
-
-                            out
-                        }
+                        typed = ""
+                        deleting = true
                     },
                     enabled = !busy,
-                ) { Text(if (confirming) "Delete for good" else "Delete") }
+                ) { Text("Delete") }
             }
 
         }
@@ -405,6 +410,43 @@ fun UserScreen(
         if (status.isNotEmpty()) {
             Text(status, style = MaterialTheme.typography.bodySmall)
         }
+    }
+
+    if (deleting) {
+        DeleteDialog(
+            name = name,
+            accounts = mode.size * protos.size,
+            subs = mode.size,
+            enabled = enabled,
+            busy = busy,
+            typed = typed,
+            onTyped = { typed = it },
+            onDismiss = { deleting = false },
+            onDisable = {
+                deleting = false
+
+                act {
+                    val out = setUserEnabled(app, name, false)
+                    if (out.startsWith("ok")) {
+                        reload++
+                    }
+
+                    out
+                }
+            },
+            onDelete = {
+                deleting = false
+
+                act {
+                    val out = removeUser(app, name)
+                    if (out.startsWith("ok")) {
+                        onDeleted()
+                    }
+
+                    out
+                }
+            },
+        )
     }
 }
 
@@ -427,8 +469,8 @@ fun renewUser(app: mobile.App?, name: String): String {
     return "ok: $msg"
 }
 
-fun disableUser(app: mobile.App?, name: String): String {
-    val msg = app?.setEnabled(name, false) ?: return "no state"
+fun setUserEnabled(app: mobile.App?, name: String, on: Boolean): String {
+    val msg = app?.setEnabled(name, on) ?: return "no state"
     return "ok: $msg"
 }
 
@@ -545,6 +587,59 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
         Button(onClick = { create() }, enabled = !busy && name.isNotBlank() && protos.isNotEmpty()) { Text("Create") }
         Text(status, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/**
+ * DeleteDialog asks for the name before removing a user. The keys go with it and
+ * the next apply takes the accounts off the hosts, so a second tap is too cheap.
+ */
+@Composable
+fun DeleteDialog(
+    name: String,
+    accounts: Int,
+    subs: Int,
+    enabled: Boolean,
+    busy: Boolean,
+    typed: String,
+    onTyped: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onDisable: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete user $name?") },
+        text = {
+            Column {
+                Text("After the next apply:")
+                Text("· $accounts engine accounts and $subs subscription${if (subs == 1) "" else "s"} go away")
+                Text("· secrets leave secrets.age.yaml; the UUID stays in git history")
+                Text(
+                    "Type the name to confirm",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                )
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = onTyped,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDelete, enabled = !busy && typed.trim() == name) { Text("Delete") }
+        },
+        dismissButton = {
+            Row {
+                if (enabled) {
+                    TextButton(onClick = onDisable, enabled = !busy) { Text("Disable") }
+                }
+
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 /** PlanScreen shows what apply would change on every host. */
