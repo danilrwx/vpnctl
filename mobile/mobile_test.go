@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/danilrwx/vpnctl-go/internal/ageio"
 	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
@@ -18,6 +19,21 @@ import (
 // use, so it is tested as plain Go even though it is built with gomobile.
 func openFixture(t *testing.T) *App {
 	t.Helper()
+
+	// the fixture has no age.yaml, so saving secrets falls back to the device
+	// key: give the test its own, or it reads the developer's ~/.config and
+	// fails on a runner that has no key at all
+	keyPath := filepath.Join(t.TempDir(), "age.txt")
+	id, err := ageio.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ageio.WriteIdentity(keyPath, id); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("VPNCTL_AGE_KEY", keyPath)
 
 	src := filepath.Join("..", "testdata", "basic")
 	dir := t.TempDir()
