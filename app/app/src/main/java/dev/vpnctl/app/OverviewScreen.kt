@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.PlaylistPlay
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -31,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +40,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** RepoStateRow is what the git repository says about the state on screen. */
+data class RepoStateRow(val branch: String = "", val clean: Boolean = true, val head: String = "")
+
+/** parseRepoState reads mobile.RepoState; a state without a repository is empty. */
+fun parseRepoState(json: String): RepoStateRow = try {
+    val o = org.json.JSONObject(json)
+    RepoStateRow(o.optString("branch"), o.optBoolean("clean", true), o.optString("head"))
+} catch (e: Exception) {
+    RepoStateRow()
+}
 
 /**
  * Overview is the estate at a glance: what the state says, what the probe found,
@@ -54,17 +68,22 @@ fun OverviewScreen(
     onDevices: () -> Unit,
 ) {
     val app = remember { Core.current() }
+    val scope = rememberCoroutineScope()
     var users by remember { mutableStateOf(emptyList<UserRow>()) }
     var hosts by remember { mutableStateOf(emptyList<HostRow>()) }
     var links by remember { mutableStateOf(emptyList<LinkRow>()) }
     var plans by remember { mutableStateOf(mapOf<String, PlanHost>()) }
     var status by remember { mutableStateOf("") }
     var probing by remember { mutableStateOf(false) }
+    var pulling by remember { mutableStateOf(false) }
+    var repo by remember { mutableStateOf(RepoStateRow()) }
     var epoch by remember { mutableStateOf(0) }
 
-    val head = remember(epoch) { app?.head().orEmpty() }
+    val head = repo.head
 
     LaunchedEffect(epoch) {
+        repo = withContext(Dispatchers.IO) { parseRepoState(app?.repoState() ?: "{}") }
+
         users = withContext(Dispatchers.IO) { app?.let { parseUsers(it.users()) } ?: emptyList() }
         hosts = withContext(Dispatchers.IO) { app?.let { parseHosts(it.hosts()) } ?: emptyList() }
         links = withContext(Dispatchers.IO) { app?.let { parseHostLinks(it.hostLinks()) } ?: emptyList() }
@@ -94,6 +113,23 @@ fun OverviewScreen(
                     title = "vpnctl",
                     subtitle = if (head.isEmpty()) "no commit" else "state $head",
                     actions = {
+                        IconAction(
+                            Icons.Outlined.CloudDownload,
+                            {
+                                if (!pulling) {
+                                    pulling = true
+                                    status = "pulling…"
+
+                                    scope.launch {
+                                        status = onIo { app?.pull()?.let { "pulled $it" } ?: "no repository" }
+                                        pulling = false
+                                        epoch++
+                                    }
+                                }
+                            },
+                            "Pull",
+                            tint = if (pulling) Muted else Link,
+                        )
                         IconAction(Icons.Outlined.VpnKey, onDevices, "Devices and keys")
                         IconAction(Icons.Outlined.Refresh, { epoch++ }, "Reload")
                     },
@@ -105,8 +141,11 @@ fun OverviewScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    InfoChip(
+                        if (repo.branch.isEmpty()) "no repository" else "${repo.branch} · ${if (repo.clean) "clean" else "dirty"}",
+                        color = if (repo.clean) Muted else Warn,
+                    )
                     InfoChip("HEAD ${head.ifEmpty { "—" }}", color = Muted)
-                    InfoChip("${hosts.size} hosts", color = Muted)
                     InfoChip(
                         when {
                             probing -> "probing…"
@@ -211,12 +250,25 @@ fun OverviewScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     StatCard("Users", "$active", "${users.size} total", modifier = Modifier.weight(1f))
-                    StatCard("Hosts", "${hosts.size}", if (unreachable > 0) "$unreachable unreachable" else "all answer", modifier = Modifier.weight(1f))
+                    StatCard(
+                        "Hosts",
+                        if (probing) "—" else "${hosts.size}",
+                        when {
+                            probing -> "probing…"
+                            unreachable > 0 -> "$unreachable unreachable"
+                            else -> "all answer"
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
                     StatCard(
                         "Changes",
-                        "$changes",
-                        if (behind > 0) "$behind behind" else "on apply",
-                        valueColor = if (changes > 0) Warn else Ink,
+                        if (probing) "—" else "$changes",
+                        when {
+                            probing -> "probing…"
+                            behind > 0 -> "$behind behind"
+                            else -> "on apply"
+                        },
+                        valueColor = if (!probing && changes > 0) Warn else Ink,
                         modifier = Modifier.weight(1f),
                     )
                 }
