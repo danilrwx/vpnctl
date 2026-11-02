@@ -1,6 +1,7 @@
 package dev.vpnctl.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +58,12 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var metrics by remember { mutableStateOf<MetricsRow?>(null) }
     var inbounds by remember { mutableStateOf(emptyList<InboundRow>()) }
     var toggling by remember { mutableStateOf("") }
+    var editingInbound by remember { mutableStateOf("") }
+    var newInbound by remember { mutableStateOf(false) }
+    var inboundPort by remember { mutableStateOf("") }
+    var inboundPath by remember { mutableStateOf("") }
+    var inboundSNI by remember { mutableStateOf("") }
+    var inboundBusy by remember { mutableStateOf(false) }
     var certs by remember { mutableStateOf(emptyList<CertRow>()) }
     var certNote by remember { mutableStateOf("") }
     var series by remember { mutableStateOf(emptyList<MetricsRow>()) }
@@ -288,7 +295,16 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    editingInbound = inbound.name
+                                    newInbound = false
+                                    inboundPort = inbound.port.toString()
+                                    inboundPath = inbound.path
+                                    inboundSNI = inbound.sni
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -325,6 +341,22 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                                 ),
                             )
                         }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                editingInbound = ""
+                                newInbound = true
+                                inboundPort = ""
+                                inboundPath = ""
+                                inboundSNI = ""
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("+ Inbound", style = MaterialTheme.typography.bodyMedium, color = Link)
                     }
                 }
             }
@@ -429,6 +461,81 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
         }
     }
 
+    if (editingInbound.isNotEmpty() || newInbound) {
+        var inboundName by remember { mutableStateOf(editingInbound) }
+
+        AppDialog(
+            title = if (newInbound) "New inbound" else "Inbound $editingInbound",
+            onDismiss = {
+                newInbound = false
+                editingInbound = ""
+            },
+            confirmLabel = "Save",
+            confirmEnabled = !inboundBusy && inboundName.isNotEmpty() && inboundPort.isNotBlank(),
+            onConfirm = {
+                inboundBusy = true
+
+                scope.launch {
+                    status = onIo {
+                        saveInboundText(
+                            Core.current(), name, inboundName,
+                            inboundPort.toIntOrNull() ?: 0, inboundPath.trim(), inboundSNI.trim(),
+                        )
+                    }
+                    inboundBusy = false
+
+                    if (status.startsWith("ok")) {
+                        newInbound = false
+                        editingInbound = ""
+                        epoch++
+                    }
+                }
+            },
+            content = {
+                if (newInbound) {
+                    Text("name", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("reality", "ws", "hy2", "awg", "mtg").chunked(3).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                row.forEach { n ->
+                                    Chip(n, { inboundName = n }, selected = inboundName == n)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = inboundPort,
+                    onValueChange = { inboundPort = it },
+                    label = { Text("port") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                OutlinedTextField(
+                    value = inboundPath,
+                    onValueChange = { inboundPath = it },
+                    label = { Text("path, ws only") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = inboundSNI,
+                    onValueChange = { inboundSNI = it },
+                    label = { Text("sni, reality only") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            },
+        )
+    }
+
     if (editing) {
         AppDialog(
             title = "Edit $name",
@@ -507,14 +614,33 @@ data class MetricsRow(
 )
 
 /** InboundRow is one inbound of a host with its switch state. */
-data class InboundRow(val name: String, val port: Int, val enabled: Boolean)
+data class InboundRow(val name: String, val port: Int, val path: String, val sni: String, val enabled: Boolean)
+
+/** saveInboundText creates or edits one inbound; apply makes it real. */
+fun saveInboundText(app: mobile.App?, host: String, name: String, port: Int, path: String, sni: String): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.saveInbound(host, name, port.toLong(), path, sni)} · applied on the next apply"
+    } catch (e: Exception) {
+        "error: ${e.message}"
+    }
+}
 
 /** parseInbounds reads mobile.Inbounds. */
 fun parseInbounds(json: String): List<InboundRow> = try {
     val arr = org.json.JSONArray(json)
     (0 until arr.length()).map { i ->
         val o = org.json.JSONObject(arr.getString(i))
-        InboundRow(o.optString("name"), o.optInt("port"), o.optBoolean("enabled", true))
+        InboundRow(
+            o.optString("name"),
+            o.optInt("port"),
+            o.optString("path"),
+            o.optString("sni"),
+            o.optBoolean("enabled", true),
+        )
     }
 } catch (e: Exception) {
     emptyList()

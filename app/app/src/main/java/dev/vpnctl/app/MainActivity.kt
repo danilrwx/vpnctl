@@ -288,11 +288,12 @@ fun App(modifier: Modifier = Modifier) {
     var devicesOpen by remember { mutableStateOf(false) }
     var hostOpen by remember { mutableStateOf<String?>(null) }
     var hostAddOpen by remember { mutableStateOf(false) }
+    var setsOpen by remember { mutableStateOf(false) }
     // the first launch has nothing to show: point it at a repository before the
     // tabs make sense, and let it be skipped to look at the fixture
     var onboarding by remember { mutableStateOf(needsOnboarding(ctx)) }
 
-    val overlay = user != null || adding || planOpen || devicesOpen || hostOpen != null || hostAddOpen
+    val overlay = user != null || adding || planOpen || devicesOpen || hostOpen != null || hostAddOpen || setsOpen
 
     if (onboarding) {
         Scaffold(containerColor = Canvas, contentWindowInsets = WindowInsets.safeDrawing) { padding ->
@@ -313,6 +314,7 @@ fun App(modifier: Modifier = Modifier) {
         devicesOpen = false
         hostOpen = null
         hostAddOpen = false
+        setsOpen = false
     }
 
     Scaffold(
@@ -332,6 +334,7 @@ fun App(modifier: Modifier = Modifier) {
                 planOpen -> PlanScreen(ctx, Modifier, onBack = { planOpen = false })
                 devicesOpen -> DevicesScreen(ctx, Modifier, onBack = { devicesOpen = false })
                 hostOpen != null -> HostScreen(ctx, Modifier, name = hostOpen!!, onBack = { hostOpen = null })
+                setsOpen -> SetsScreen(ctx, Modifier, onBack = { setsOpen = false })
                 hostAddOpen -> AddHostScreen(
                     ctx,
                     Modifier,
@@ -383,7 +386,7 @@ fun App(modifier: Modifier = Modifier) {
                     onAddHost = { hostAddOpen = true },
                 )
                 tab == 3 -> TopologyScreen(ctx, Modifier, onBack = { tab = 1 })
-                else -> RoutingScreen(ctx, Modifier, onBack = { tab = 1 })
+                else -> RoutingScreen(ctx, Modifier, onBack = { tab = 1 }, onSets = { setsOpen = true })
             }
         }
     }

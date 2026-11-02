@@ -2,6 +2,7 @@ package dev.vpnctl.app
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -135,7 +136,12 @@ fun parseRouteAnswer(json: String): RouteAnswerRow = try {
  * phone holds: explicit domains; geosite and addresses stop the walk.
  */
 @Composable
-fun RoutingScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+fun RoutingScreen(
+    ctx: android.content.Context,
+    modifier: Modifier,
+    onBack: () -> Unit,
+    onSets: () -> Unit,
+) {
     val app = remember { Core.current() }
     val scope = rememberCoroutineScope()
 
@@ -155,6 +161,10 @@ fun RoutingScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     var testDomain by remember { mutableStateOf("") }
     var answer by remember { mutableStateOf<RouteAnswerRow?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var editingExit by remember { mutableStateOf(false) }
+    var exitPolicy by remember { mutableStateOf("auto") }
+    var exitPrefer by remember { mutableStateOf("") }
+    var exitBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(epoch) {
         status = onIo {
@@ -217,7 +227,13 @@ fun RoutingScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
 
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             if (!host?.exit.isNullOrEmpty()) {
-                InfoChip("exit · ${host.exit}", color = Muted)
+                Box(modifier = Modifier.clickable {
+                    exitPolicy = if (host.exit.startsWith("fixed")) "fixed" else "auto"
+                    exitPrefer = host.exit.substringAfter("prefer ", "").trim()
+                    editingExit = true
+                }) {
+                    InfoChip("exit · ${host.exit}", color = Muted)
+                }
             }
         }
 
@@ -328,6 +344,20 @@ fun RoutingScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
             }
 
             item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onSets)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Address sets", style = MaterialTheme.typography.bodyMedium, color = Link)
+                    Spacer(Modifier.weight(1f))
+                    Text("domains and IPs the rules match", style = MaterialTheme.typography.labelMedium, color = Muted)
+                }
+            }
+
+            item {
                 Text(
                     "the order is the routing · rules are applied on the hosts",
                     style = MaterialTheme.typography.labelMedium,
@@ -352,6 +382,51 @@ fun RoutingScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     }
 
     val chain = active?.name ?: "split"
+
+    if (editingExit) {
+        val exits = hosts.filter { it.role != "entry" }
+
+        AppDialog(
+            title = "Exit for $picked",
+            onDismiss = { editingExit = false },
+            confirmLabel = "Save",
+            confirmEnabled = !exitBusy && (exitPolicy == "auto" || exitPrefer.isNotEmpty()),
+            onConfirm = {
+                exitBusy = true
+
+                scope.launch {
+                    status = onIo { setExitText(Core.current(), picked, exitPolicy, exitPrefer) }
+                    exitBusy = false
+
+                    if (status.startsWith("ok")) {
+                        editingExit = false
+                        epoch++
+                    }
+                }
+            },
+            content = {
+                Text(
+                    "auto lets the engine pick the fastest exit; fixed pins every connection to one",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+
+                Row(modifier = Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Chip("auto", { exitPolicy = "auto" }, selected = exitPolicy == "auto")
+                    Chip("fixed", { exitPolicy = "fixed" }, selected = exitPolicy == "fixed")
+                }
+
+                if (exitPolicy == "fixed") {
+                    Text("exit", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        exits.forEach { e ->
+                            Chip(e.name, { exitPrefer = e.name }, selected = exitPrefer == e.name)
+                        }
+                    }
+                }
+            },
+        )
+    }
 
     editing?.let { index ->
         val rule = active?.rules?.getOrNull(index)
@@ -538,6 +613,19 @@ fun RouteRuleView(number: Int, rule: RouteRuleRow, onClick: () -> Unit = {}) {
 }
 
 // ── the mutating calls ─────────────────────────────────────────────────────
+
+/** setExitText pins or frees the exit of one host. */
+fun setExitText(app: mobile.App?, host: String, policy: String, prefer: String): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.setExit(host, policy, prefer)} · applied on the next apply"
+    } catch (e: Exception) {
+        "error: ${e.message}"
+    }
+}
 
 fun ruleAddText(app: mobile.App?, host: String, chain: String, kind: String, value: String, action: String, note: String): String {
     if (app == null) {
