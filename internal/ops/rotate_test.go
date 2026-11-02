@@ -2,6 +2,7 @@ package ops
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/danilrwx/vpnctl-go/internal/ageio"
@@ -145,5 +146,48 @@ func TestKeyBackupRotates(t *testing.T) {
 
 	if _, _, err := KeyBackup(st, ""); err == nil {
 		t.Fatal("an empty passphrase was accepted")
+	}
+}
+
+// TestLinkAddAndSet: a new link names two existing hosts; adding a protocol to
+// it and then removing all of them is refused, because a link with no transport
+// is not a link.
+func TestLinkAddAndSet(t *testing.T) {
+	st := fixture(t)
+
+	st.Hosts["c"] = state.Host{Role: state.Exit, IP: "203.0.113.3", SSH: "root@203.0.113.3"}
+
+	if _, err := LinkAdd(st, "a", "ghost", []string{"awg"}, "", ""); err == nil {
+		t.Fatal("a link to an unknown host was accepted")
+	}
+
+	if _, err := LinkAdd(st, "a", "a", []string{"awg"}, "", ""); err == nil {
+		t.Fatal("a link to itself was accepted")
+	}
+
+	msg, err := LinkAdd(st, "a", "c", []string{"awg"}, "awg", "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "a->c") {
+		t.Fatalf("message %q", msg)
+	}
+
+	if _, err := LinkAdd(st, "a", "c", []string{"hy2"}, "", ""); err == nil {
+		t.Fatal("a duplicate link was accepted")
+	}
+
+	if _, err := LinkAdd(st, "a", "c", []string{"quic"}, "", ""); err == nil {
+		t.Fatal("an unknown protocol was accepted")
+	}
+
+	// the fixture already carries a->b: extend it and then empty it
+	if _, err := LinkSet(st, "a", "b", []string{"hy2"}, nil, "hy2", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := LinkSet(st, "a", "b", nil, []string{"reality", "hy2"}, "", ""); err == nil {
+		t.Fatal("a link with no protocols left was accepted")
 	}
 }

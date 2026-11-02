@@ -296,3 +296,53 @@ func TestRoutingDescribesRules(t *testing.T) {
 		t.Fatalf("all rules: %+v", hosts[0].Groups[0].Rules)
 	}
 }
+
+// TestAddHostAndLink: the phone creates a host the way the command line does —
+// files, keys, routing — and then a link to it. Bootstrap is deliberately not
+// part of this: it needs a host that answers.
+func TestAddHostAndLink(t *testing.T) {
+	app := openFixture(t)
+
+	// an exit that carries a link needs the transports that link names
+	msg, err := app.AddHost("nl-ams-1", "exit", "root@203.0.113.9", "203.0.113.9", "", "ru-msk-1", "sing-box", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "nl-ams-1") {
+		t.Fatalf("message %q", msg)
+	}
+
+	if _, ok := app.st.Hosts["nl-ams-1"]; !ok {
+		t.Fatal("the host is not in the state")
+	}
+
+	if _, ok := app.st.Secrets.Hosts["nl-ams-1"]; !ok {
+		t.Fatal("the host has no secrets")
+	}
+
+	if _, err := app.AddHost("nl-ams-1", "exit", "root@203.0.113.9", "", "", "", "", false); err == nil {
+		t.Fatal("a duplicate host was accepted")
+	}
+
+	if _, err := app.AddHost("bad", "router", "root@203.0.113.10", "", "", "", "", false); err == nil {
+		t.Fatal("an unknown role was accepted")
+	}
+
+	linkMsg, err := app.AddLink("ru-msk-1", "nl-ams-1", "reality", "reality", "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(linkMsg, "nl-ams-1") {
+		t.Fatalf("link message %q", linkMsg)
+	}
+
+	if _, err := app.AddLink("ru-msk-1", "nl-ams-1", "awg", "", ""); err == nil {
+		t.Fatal("a duplicate link was accepted")
+	}
+
+	if _, err := app.AddLink("ru-msk-1", "ghost", "awg", "", ""); err == nil {
+		t.Fatal("a link to an unknown host was accepted")
+	}
+}

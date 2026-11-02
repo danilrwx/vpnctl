@@ -765,3 +765,60 @@ func (a *App) NewBackup(passphrase string) (string, error) {
 
 	return blob, nil
 }
+
+// AddHost creates a host with its inbound, keys and routing, the way `host add`
+// does. The caller still has to bootstrap it: that needs the host to answer, and
+// a phone can only reach hosts through the agent the bootstrap installs.
+func (a *App) AddHost(name, role, ssh, ip, domain, via, engine string, awg bool) (string, error) {
+	msg, err := ops.HostAdd(a.st, ops.HostOptions{
+		Name: name, Role: role, SSH: ssh, IP: ip, Domain: domain, Via: via, Engine: engine, AWG: awg,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if err := ops.HostFiles(a.st, name); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
+
+// AddLink appends a link between two hosts, with the transports it may carry.
+func (a *App) AddLink(from, to, protocols, active, policy string) (string, error) {
+	msg, err := ops.LinkAdd(a.st, from, to, splitList(protocols), active, policy)
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveLinks(a.dir, a.st.Links); err != nil {
+		return "", err
+	}
+
+	// the link brought its own key material
+	if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
