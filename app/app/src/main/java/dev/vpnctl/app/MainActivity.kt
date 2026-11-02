@@ -187,7 +187,7 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
         if (Core.current() == null) {
             val opened = withContext(Dispatchers.IO) { Core.openBundled(ctx) }
             if (opened == null) {
-                status = "нет состояния"
+                status = "no state"
             }
 
             epoch++
@@ -207,10 +207,10 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
             Text(status, style = MaterialTheme.typography.bodySmall)
         }
 
-        Text("users: ${users.size}", style = MaterialTheme.typography.titleMedium)
+        Text("Users ${users.size} · ${users.count { it.enabled }} active", style = MaterialTheme.typography.titleMedium)
         Row {
-            Button(onClick = { onPick(PLAN) }) { Text("план") }
-            Button(onClick = { onPick(ADD) }, modifier = Modifier.padding(start = 8.dp)) { Text("новый") }
+            Button(onClick = { onPick(PLAN) }) { Text("Plan") }
+            Button(onClick = { onPick(ADD) }, modifier = Modifier.padding(start = 8.dp)) { Text("New") }
         }
 
         LazyColumn {
@@ -286,7 +286,7 @@ fun UserScreen(
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text(name, style = MaterialTheme.typography.headlineSmall)
-        Button(onClick = onBack) { Text("назад") }
+        Button(onClick = onBack) { Text("Back") }
 
         // The card holds the links, the form and the actions. It all scrolls as
         // one list: a fixed column pushed the last buttons off the screen.
@@ -303,11 +303,11 @@ fun UserScreen(
             }
 
             item {
-                SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
+                SelectRow("Modes", listOf("split", "full"), mode) { mode = setOf(it) }
             }
 
             item {
-                SelectRow("протоколы", served, protos) {
+                SelectRow("Protocols", served, protos) {
                     protos = if (it in protos) protos - it else protos + it
                 }
             }
@@ -315,7 +315,7 @@ fun UserScreen(
             item {
                 Row {
                     Checkbox(checked = tg, onCheckedChange = { tg = it })
-                    Text("телеграм", modifier = Modifier.padding(top = 12.dp))
+                    Text("Telegram proxy", modifier = Modifier.padding(top = 12.dp))
                 }
             }
 
@@ -323,7 +323,7 @@ fun UserScreen(
                 OutlinedTextField(
                     value = expires,
                     onValueChange = { expires = it },
-                    label = { Text("срок YYYY-MM-DD, пусто — без срока") },
+                    label = { Text("Expiry YYYY-MM-DD, empty — none") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -342,37 +342,37 @@ fun UserScreen(
                         }
                     },
                     enabled = !busy && protos.isNotEmpty(),
-                ) { Text("сохранить") }
+                ) { Text("Save") }
             }
 
             item {
-                Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("продлить 30 дней") }
+                Button(onClick = { act { renewUser(app, name) } }, enabled = !busy) { Text("Renew 30 days") }
             }
 
             item {
-                Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("выключить") }
+                Button(onClick = { act { disableUser(app, name) } }, enabled = !busy) { Text("Disable") }
             }
 
             item {
-                SelectRow("язык сообщения", listOf("ru", "en"), setOf(lang)) { lang = it }
+                SelectRow("Message language", listOf("ru", "en"), setOf(lang)) { lang = it }
             }
 
             item {
                 Button(
                     onClick = {
                         act {
-                            val text = app?.message(name, lang, false) ?: return@act "нет состояния"
+                            val text = app?.message(name, lang, false) ?: return@act "no state"
                             message = text
                             copyToClipboard(ctx, text)
-                            "сообщение в буфере"
+                            "message copied"
                         }
                     },
                     enabled = !busy,
-                ) { Text("сообщение") }
+                ) { Text("Message") }
             }
 
             item {
-                Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("отправить в git") }
+                Button(onClick = { act { pushState(app) } }, enabled = !busy) { Text("Push") }
             }
 
             item {
@@ -380,7 +380,7 @@ fun UserScreen(
                     onClick = {
                         if (!confirming) {
                             confirming = true
-                            status = "нажмите ещё раз: пользователь и его ключи удаляются из состояния"
+                            status = "tap again: the user and its keys leave the state"
 
                             return@Button
                         }
@@ -395,7 +395,7 @@ fun UserScreen(
                         }
                     },
                     enabled = !busy,
-                ) { Text(if (confirming) "точно удалить" else "удалить") }
+                ) { Text(if (confirming) "Delete for good" else "Delete") }
             }
 
         }
@@ -418,29 +418,29 @@ suspend fun onIo(block: suspend () -> String): String = withContext(Dispatchers.
     try {
         block()
     } catch (e: Exception) {
-        "ошибка: ${e.message}"
+        "error: ${e.message}"
     }
 }
 
 fun renewUser(app: mobile.App?, name: String): String {
-    val msg = app?.renew(name, 30L) ?: return "нет состояния"
+    val msg = app?.renew(name, 30L) ?: return "no state"
     return "ok: $msg"
 }
 
 fun disableUser(app: mobile.App?, name: String): String {
-    val msg = app?.setEnabled(name, false) ?: return "нет состояния"
+    val msg = app?.setEnabled(name, false) ?: return "no state"
     return "ok: $msg"
 }
 
 fun applyAll(app: mobile.App?): String {
     // an empty host means every host, leaves first: the same order apply uses
-    val result = app?.apply("") ?: return "нет состояния"
-    return if (result.contains("\"failed\"")) "ошибка: $result" else "применено"
+    val result = app?.apply("") ?: return "no state"
+    return if (result.contains("\"failed\"")) "error: $result" else "applied"
 }
 
 /** addUser joins the sets the way the shell does: comma separated lists. */
 fun addUser(app: mobile.App?, name: String, modes: Set<String>, protocols: Set<String>, tg: Boolean): String {
-    val msg = app?.addUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "нет состояния"
+    val msg = app?.addUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "no state"
     return "ok: $msg"
 }
 
@@ -460,18 +460,18 @@ fun saveUser(
     expires: String,
 ): String {
     val msg = app?.editUser(name, modes.joinToString(","), protocols.joinToString(","), tg, expires.trim())
-        ?: return "нет состояния"
+        ?: return "no state"
 
     return "ok: $msg"
 }
 
 fun removeUser(app: mobile.App?, name: String): String {
-    val msg = app?.rmUser(name) ?: return "нет состояния"
+    val msg = app?.rmUser(name) ?: return "no state"
     return "ok: $msg"
 }
 
 fun pushState(app: mobile.App?): String {
-    val head = app?.push() ?: return "нет репозитория"
+    val head = app?.push() ?: return "no repository"
     return "pushed $head"
 }
 
@@ -529,20 +529,20 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        Text("новый пользователь", style = MaterialTheme.typography.headlineSmall)
-        Button(onClick = onBack) { Text("назад") }
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("имя") }, singleLine = true)
-        SelectRow("режим", listOf("split", "full"), mode) { mode = setOf(it) }
-        SelectRow("протоколы", served, protos) {
+        Text("New user", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("Back") }
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
+        SelectRow("Modes", listOf("split", "full"), mode) { mode = setOf(it) }
+        SelectRow("Protocols", served, protos) {
             protos = if (it in protos) protos - it else protos + it
         }
 
         Row {
             Checkbox(checked = tg, onCheckedChange = { tg = it })
-            Text("телеграм", modifier = Modifier.padding(top = 12.dp))
+            Text("Telegram proxy", modifier = Modifier.padding(top = 12.dp))
         }
 
-        Button(onClick = { create() }, enabled = !busy && name.isNotBlank() && protos.isNotEmpty()) { Text("создать") }
+        Button(onClick = { create() }, enabled = !busy && name.isNotBlank() && protos.isNotEmpty()) { Text("Create") }
         Text(status, style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -561,9 +561,9 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
         busy = true
         status = "…"
         status = onIo {
-            val json = app?.plan("") ?: return@onIo "нет состояния"
+            val json = app?.plan("") ?: return@onIo "no state"
             hosts = parsePlan(json)
-            "hosts: ${hosts.size}"
+            "${hosts.size} hosts"
         }
         busy = false
     }
@@ -587,14 +587,14 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     LaunchedEffect(Unit) { load() }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        Text("план", style = MaterialTheme.typography.headlineSmall)
-        Button(onClick = onBack) { Text("назад") }
+        Text("Plan", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("Back") }
         Button(
             onClick = {
                 act {
                     val out = applyAll(app)
                     // the hosts just changed: show what is left, not what was
-                    if (out == "применено") {
+                    if (out == "applied") {
                         load()
                     }
 
@@ -602,12 +602,12 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
                 }
             },
             enabled = !busy,
-        ) { Text("применить") }
+        ) { Text("Apply") }
         Text(status, style = MaterialTheme.typography.bodySmall)
 
         LazyColumn {
             items(hosts) { h ->
-                Text("${h.name}: ${h.changes} изменений", modifier = Modifier.padding(vertical = 4.dp))
+                Text("${h.name} · ${h.changes} changes", modifier = Modifier.padding(vertical = 4.dp))
                 if (h.unreachable.isNotEmpty()) {
                     Text(h.unreachable, style = MaterialTheme.typography.bodySmall)
                 }
@@ -616,6 +616,6 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     }
 }
 
-const val PLAN = "план"
-const val ADD = "новый"
+const val PLAN = "@plan"
+const val ADD = "@new"
 const val REPO = "git@github.com:danilrwx/vpn.git"
