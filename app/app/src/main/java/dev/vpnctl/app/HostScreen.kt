@@ -192,7 +192,11 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                         val m = metrics
 
                         if (m == null) {
-                            Text(metricsNote.ifEmpty { "reading…" }, style = MaterialTheme.typography.bodySmall, color = Muted)
+                            if (metricsNote.isEmpty()) {
+                                SkeletonLines(5)
+                            } else {
+                                Text(metricsNote, style = MaterialTheme.typography.bodySmall, color = Muted)
+                            }
                         } else {
                             MetricRow("load", String.format("%.2f", m.load1))
                             MetricRow("memory", "${m.memUsed} / ${m.memTotal} MB")
@@ -238,7 +242,11 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                 SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                         if (certs.isEmpty()) {
-                            Text(certNote.ifEmpty { "reading…" }, style = MaterialTheme.typography.bodySmall, color = Muted)
+                            if (certNote.isEmpty()) {
+                                SkeletonLines(2)
+                            } else {
+                                Text(certNote, style = MaterialTheme.typography.bodySmall, color = Muted)
+                            }
                         } else {
                             certs.forEach { cert ->
                                 val days = (cert.notAfter - System.currentTimeMillis() / 1000) / 86400

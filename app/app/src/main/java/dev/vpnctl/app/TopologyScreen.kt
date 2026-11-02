@@ -74,6 +74,17 @@ fun TopologyScreen(ctx: android.content.Context, modifier: Modifier, onBack: () 
         )
 
         LazyColumn(modifier = Modifier.weight(1f)) {
+            if (hosts.isEmpty()) {
+                item {
+                    Text(
+                        "no hosts described: the diagram has nothing to draw until a host is added",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+
             item {
                 SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Column(

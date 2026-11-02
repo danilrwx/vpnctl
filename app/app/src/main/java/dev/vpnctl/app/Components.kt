@@ -1,5 +1,10 @@
 package dev.vpnctl.app
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -610,4 +616,30 @@ fun Modifier.dashedBorder(color: Color, radius: Dp = 12.dp, width: Dp = 1.dp): M
         cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.toPx()),
         style = stroke,
     )
+}
+
+/** SkeletonLines is what a card shows while the answer is still on its way: the
+ * shape of the rows, not a spinner that looks the same as a hang. */
+@Composable
+fun SkeletonLines(rows: Int = 3) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "alpha",
+    )
+
+    Column {
+        repeat(rows) { i ->
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .fillMaxWidth(if (i == rows - 1) 0.45f else 0.7f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Surface2.copy(alpha = alpha)),
+            )
+        }
+    }
 }
