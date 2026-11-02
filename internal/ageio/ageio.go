@@ -97,6 +97,12 @@ func Decrypt(path, keyPath string) ([]byte, error) {
 		return nil, err
 	}
 
+	return DecryptWith(path, id)
+}
+
+// DecryptWith decrypts a file with an identity the caller already holds. A key
+// that is being restored is checked this way, without writing it to disk first.
+func DecryptWith(path string, id age.Identity) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
