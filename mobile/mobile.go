@@ -3,6 +3,7 @@
 package mobile
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -257,6 +258,40 @@ func (a *App) SetEnabled(name string, on bool) (string, error) {
 	return msg, nil
 }
 
+// HostInfo is one row of the hosts screen: what the state says, not what the
+// host answers. The marker and reachability come from a plan, which probes.
+type HostInfo struct {
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	Engine   string `json:"engine"`
+	Domain   string `json:"domain,omitempty"`
+	IP       string `json:"ip,omitempty"`
+	Via      string `json:"via,omitempty"`
+	Retiring bool   `json:"retiring,omitempty"`
+}
+
+// Hosts returns the estate as JSON, sorted by name.
+func (a *App) Hosts() string {
+	names := make([]string, 0, len(a.st.Hosts))
+	for n := range a.st.Hosts {
+		names = append(names, n)
+	}
+
+	sort.Strings(names)
+
+	out := make([]HostInfo, 0, len(names))
+
+	for _, n := range names {
+		h := a.st.Hosts[n]
+		out = append(out, HostInfo{
+			Name: n, Role: string(h.Role), Engine: h.Engine,
+			Domain: h.Domain, IP: h.IP, Via: h.Via, Retiring: h.Retiring,
+		})
+	}
+
+	return mustJSON(out)
+}
+
 // Protocols returns the protocols the entry actually serves, as JSON. The screen
 // offers only these: choosing one the entry has no inbound for passes nothing
 // until save, and the refusal looks like the app's mistake, not the state's.
@@ -424,8 +459,51 @@ func (a *App) Plan(host string) (string, error) {
 	return string(b), nil
 }
 
+// Progress receives the lines apply prints while it works. A series over three
+// hosts takes long enough that a single spinner is indistinguishable from a
+// hang, so the phone shows the same lines the command line does.
+type Progress interface {
+	Update(line string)
+}
+
+// progressWriter cuts the apply's output into lines for the UI.
+type progressWriter struct {
+	p   Progress
+	buf []byte
+}
+
+func (w *progressWriter) Write(b []byte) (int, error) {
+	w.buf = append(w.buf, b...)
+
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+
+		line := strings.TrimRight(string(w.buf[:i]), "\r")
+		w.buf = w.buf[i+1:]
+
+		if line != "" {
+			w.p.Update(line)
+		}
+	}
+
+	return len(b), nil
+}
+
 // Apply installs the state on the hosts and returns the result as JSON.
-func (a *App) Apply(host string) (string, error) {
+func (a *App) Apply(host string) (string, error) { return a.apply(host, nil) }
+
+// ApplyProgress is Apply with the progress lines going to the caller.
+func (a *App) ApplyProgress(host string, p Progress) (string, error) { return a.apply(host, p) }
+
+func (a *App) apply(host string, p Progress) (string, error) {
+	out := io.Writer(io.Discard)
+	if p != nil {
+		out = &progressWriter{p: p}
+	}
+
 	opts := &apply.Opts{Host: host}
 
 	if signer != nil {
@@ -444,7 +522,7 @@ func (a *App) Apply(host string) (string, error) {
 		opts.AgentMark = agentMark
 	}
 
-	res, err := apply.Apply(a.st, opts, io.Discard)
+	res, err := apply.Apply(a.st, opts, out)
 	if err != nil {
 		var ge *apply.GuardError
 		if errors.As(err, &ge) {

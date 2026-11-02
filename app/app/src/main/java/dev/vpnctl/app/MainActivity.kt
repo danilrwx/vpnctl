@@ -61,6 +61,36 @@ data class UserRow(
 /** One copyable line of a user card. */
 data class UserLink(val label: String, val url: String)
 
+/** One host of the estate: what the state says, before anything answers. */
+data class HostRow(
+    val name: String,
+    val role: String,
+    val engine: String,
+    val domain: String,
+    val ip: String,
+    val via: String,
+    val retiring: Boolean,
+)
+
+/** parseHosts reads the estate the core returns. */
+fun parseHosts(json: String): List<HostRow> = try {
+    val arr = JSONArray(json)
+    (0 until arr.length()).map { i ->
+        val o = arr.getJSONObject(i)
+        HostRow(
+            name = o.getString("name"),
+            role = o.getString("role"),
+            engine = o.getString("engine"),
+            domain = o.optString("domain"),
+            ip = o.optString("ip"),
+            via = o.optString("via"),
+            retiring = o.optBoolean("retiring"),
+        )
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
 /** One file of the plan, with the mark the core gives it: ~ changed, + new, - removed. */
 data class PlanFile(val path: String, val status: String)
 
@@ -192,6 +222,7 @@ fun App(modifier: Modifier = Modifier) {
     when (selected) {
         null -> UsersScreen(ctx, modifier, version, onPick = { selected = it })
         PLAN -> PlanScreen(ctx, modifier, onBack = { selected = null })
+        HOSTS -> HostsScreen(ctx, modifier, onBack = { selected = null })
         ADD -> AddUserScreen(
             ctx,
             modifier,
@@ -251,6 +282,7 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
         Text("Users ${users.size} · ${users.count { it.enabled }} active", style = MaterialTheme.typography.titleMedium)
         Row {
             Button(onClick = { onPick(PLAN) }) { Text("Plan") }
+            Button(onClick = { onPick(HOSTS) }, modifier = Modifier.padding(start = 8.dp)) { Text("Hosts") }
             Button(onClick = { onPick(ADD) }, modifier = Modifier.padding(start = 8.dp)) { Text("New") }
         }
 
@@ -529,12 +561,6 @@ fun setUserEnabled(app: mobile.App?, name: String, on: Boolean): String {
     return "ok: $msg"
 }
 
-fun applyAll(app: mobile.App?): String {
-    // an empty host means every host, leaves first: the same order apply uses
-    val result = app?.apply("") ?: return "no state"
-    return if (result.contains("\"failed\"")) "error: $result" else "applied"
-}
-
 /** addUser joins the sets the way the shell does: comma separated lists. */
 fun addUser(app: mobile.App?, name: String, modes: Set<String>, protocols: Set<String>, tg: Boolean): String {
     val msg = app?.addUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "no state"
@@ -699,6 +725,80 @@ fun qrMatrix(text: String): BitMatrix = QRCodeWriter().encode(
 )
 
 /**
+ * HostsScreen is the estate as the state describes it, with the marker and
+ * reachability a plan adds. It does not show latency or traffic: the core has
+ * neither, and a dash is better than a number nobody measured.
+ */
+@Composable
+fun HostsScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+    val app = remember { Core.current() }
+    var status by remember { mutableStateOf("") }
+    var rows by remember { mutableStateOf(emptyList<HostRow>()) }
+    var plans by remember { mutableStateOf(mapOf<String, PlanHost>()) }
+
+    LaunchedEffect(Unit) {
+        rows = withContext(Dispatchers.IO) {
+            app?.let { parseHosts(it.hosts()) } ?: emptyList()
+        }
+
+        status = withContext(Dispatchers.IO) {
+            val json = app?.plan("") ?: return@withContext "no state"
+
+            plans = parsePlan(json).associateBy { it.name }
+            "${plans.size} probed"
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        Text("Hosts", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("Back") }
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(rows) { h ->
+                val plan = plans[h.name]
+
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Row {
+                        Text(h.name, style = MaterialTheme.typography.titleSmall)
+                        Text("  ${h.role} · ${h.engine}", style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    if (h.domain.isNotEmpty()) {
+                        Text(h.domain, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    if (h.via.isNotEmpty()) {
+                        Text("via ${h.via}", style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    if (h.retiring) {
+                        Text("retiring", style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    when {
+                        plan == null -> {}
+                        plan.unreachable.isNotEmpty() -> Text(
+                            plan.unreachable,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        !plan.bootstrapped -> Text("new · bootstrap not done", style = MaterialTheme.typography.bodySmall)
+                        else -> Text(
+                            "applied ${plan.marker.ifEmpty { "—" }} · ${plan.changes} changes",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (status.isNotEmpty()) {
+            Text(status, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
  * DeleteDialog asks for the name before removing a user. The keys go with it and
  * the next apply takes the accounts off the hosts, so a second tap is too cheap.
  */
@@ -758,6 +858,7 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     var status by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var hosts by remember { mutableStateOf(emptyList<PlanHost>()) }
+    var log by remember { mutableStateOf(emptyList<String>()) }
 
     val scope = rememberCoroutineScope()
 
@@ -796,7 +897,10 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
         Button(
             onClick = {
                 act {
-                    val out = applyAll(app)
+                    log = emptyList()
+
+                    val out = applyWithProgress(app, "") { line -> log = log + line }
+
                     // the hosts just changed: show what is left, not what was
                     if (out == "applied") {
                         load()
@@ -841,10 +945,21 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
                     }
                 }
             }
+
+            if (log.isNotEmpty()) {
+                item {
+                    Text(
+                        log.takeLast(40).joinToString("\n"),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
         }
     }
 }
 
 const val PLAN = "@plan"
+const val HOSTS = "@hosts"
 const val ADD = "@new"
 const val REPO = "git@github.com:danilrwx/vpn.git"
