@@ -245,3 +245,54 @@ func TestAddUserExpiry(t *testing.T) {
 		t.Fatal("a rejected date still created the user")
 	}
 }
+
+// TestRoutingDescribesRules: the screen names what a rule matches without
+// inventing an evaluator; the set expansion is the state's own data.
+func TestRoutingDescribesRules(t *testing.T) {
+	app := openFixture(t)
+
+	app.st.Routing = map[string]state.Routing{
+		"a": {
+			Exit: state.ExitPolicy{Policy: "fixed", Prefer: "b"},
+			DNS:  state.DNS{Direct: []string{"1.1.1.1"}, Remote: "https://dns"},
+			Groups: state.Groups{
+				All: []state.Rule{{Match: state.Match{Sets: []string{"ads"}}, Action: state.Action{Kind: state.ActionBlock}, Note: "ads"}},
+				Split: []state.Rule{
+					{Match: state.Match{Sets: []string{"ru"}}, Action: state.Action{Kind: state.ActionDirect}},
+					{Action: state.Action{Kind: state.ActionLink, Link: "auto"}, Note: "the rest"},
+				},
+			},
+		},
+	}
+	app.st.Sets["ru"] = state.Set{Geosite: []string{"category-ru"}, Domains: []string{"gosuslugi.ru"}}
+
+	var hosts []RouteHost
+	if err := json.Unmarshal([]byte(app.Routing()), &hosts); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(hosts) != 1 || hosts[0].Name != "a" {
+		t.Fatalf("hosts: %+v", hosts)
+	}
+
+	if hosts[0].Exit != "fixed · prefer b" {
+		t.Fatalf("exit %q", hosts[0].Exit)
+	}
+
+	split := hosts[0].Groups[1].Rules
+	if len(split) != 2 || split[0].Title != "set ru" || split[0].Action != "direct" {
+		t.Fatalf("split rules: %+v", split)
+	}
+
+	if !strings.Contains(split[0].Detail, "category-ru") || !strings.Contains(split[0].Detail, "1 own") {
+		t.Fatalf("detail %q", split[0].Detail)
+	}
+
+	if split[1].Title != "everything else" || split[1].Action != "→ link auto" {
+		t.Fatalf("catch-all: %+v", split[1])
+	}
+
+	if hosts[0].Groups[0].Rules[0].Action != "block" {
+		t.Fatalf("all rules: %+v", hosts[0].Groups[0].Rules)
+	}
+}
