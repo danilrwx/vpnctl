@@ -1,5 +1,6 @@
 package dev.vpnctl.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -37,6 +40,7 @@ fun HostsScreen(
     modifier: Modifier,
     onBack: () -> Unit,
     onPick: (String) -> Unit,
+    onAddHost: () -> Unit,
 ) {
     val app = remember { Core.current() }
     var hosts by remember { mutableStateOf(emptyList<HostRow>()) }
@@ -44,6 +48,12 @@ fun HostsScreen(
     var plans by remember { mutableStateOf(mapOf<String, PlanHost>()) }
     var status by remember { mutableStateOf("") }
     var epoch by remember { mutableStateOf(0) }
+    var linking by remember { mutableStateOf(false) }
+    var linkFrom by remember { mutableStateOf("") }
+    var linkTo by remember { mutableStateOf("") }
+    var linkProtos by remember { mutableStateOf(setOf("awg")) }
+    var linkingBusy by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     val head = remember(epoch) { app?.head().orEmpty() }
 
@@ -68,7 +78,10 @@ fun HostsScreen(
             subtitle = "${hosts.size} · ${entries.size} ${plural(entries.size, "entry", "entries")}, " +
                 "${exits.size} ${plural(exits.size, "exit", "exits")}",
             onBack = onBack,
-            actions = { IconAction(Icons.Outlined.Refresh, { epoch++ }, "Reload") },
+            actions = {
+                IconAction(Icons.Outlined.Add, onAddHost, "Add host")
+                IconAction(Icons.Outlined.Refresh, { epoch++ }, "Reload")
+            },
         )
 
         LazyColumn(modifier = Modifier.weight(1f)) {
@@ -128,6 +141,21 @@ fun HostsScreen(
                             }
                         }
                     }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                linkFrom = ""
+                                linkTo = ""
+                                linkProtos = setOf("awg")
+                                linking = true
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("+ New link", style = MaterialTheme.typography.bodyMedium, color = Link)
+                    }
                 }
             }
 
@@ -142,5 +170,93 @@ fun HostsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
         }
+    }
+
+    if (linking) {
+        AppDialog(
+            title = "New link",
+            onDismiss = { linking = false },
+            confirmLabel = if (linkingBusy) "adding…" else "Add",
+            confirmEnabled = !linkingBusy && linkFrom.isNotEmpty() && linkTo.isNotEmpty() &&
+                linkFrom != linkTo && linkProtos.isNotEmpty(),
+            onConfirm = {
+                linkingBusy = true
+
+                scope.launch {
+                    status = onIo {
+                        addLinkText(
+                            Core.current(),
+                            linkFrom,
+                            linkTo,
+                            linkProtos.sorted().joinToString(","),
+                        )
+                    }
+                    linkingBusy = false
+
+                    if (status.startsWith("ok")) {
+                        linking = false
+                        epoch++
+                    }
+                }
+            },
+            content = {
+                Text(
+                    "the chain the exits use; protocols are the transports both sides will run",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+
+                // a link runs from an entry to an exit: offering the other
+                // direction is offering a state the render rejects
+                val fromHosts = hosts.filter { it.role == "entry" }.ifEmpty { hosts }
+                val toHosts = hosts.filter { it.role != "entry" }.ifEmpty { hosts }
+
+                Text("from", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                fromHosts.chunked(2).forEach { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 6.dp)) {
+                        pair.forEach { host ->
+                            Chip(host.name, { linkFrom = host.name }, selected = linkFrom == host.name)
+                        }
+                    }
+                }
+
+                Text("to", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
+                toHosts.chunked(2).forEach { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 6.dp)) {
+                        pair.forEach { host ->
+                            Chip(host.name, { linkTo = host.name }, selected = linkTo == host.name)
+                        }
+                    }
+                }
+
+                Text("protocols", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("awg", "reality", "hy2").forEach { proto ->
+                        Chip(
+                            proto,
+                            onClick = {
+                                linkProtos = if (proto in linkProtos) linkProtos - proto else linkProtos + proto
+                            },
+                            selected = proto in linkProtos,
+                        )
+                    }
+                }
+            },
+        )
+    }
+}
+
+/** addLinkText appends a link with fresh link secrets. */
+fun addLinkText(app: mobile.App?, from: String, to: String, protocols: String): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    val first = protocols.substringBefore(",")
+
+    return try {
+        "ok: ${app.addLink(from, to, protocols, first, "auto")} · push when the forge is reachable"
+    } catch (e: Exception) {
+        "error: ${e.message}"
     }
 }

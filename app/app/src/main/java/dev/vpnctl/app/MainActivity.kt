@@ -287,8 +287,9 @@ fun App(modifier: Modifier = Modifier) {
     var planOpen by remember { mutableStateOf(false) }
     var devicesOpen by remember { mutableStateOf(false) }
     var hostOpen by remember { mutableStateOf<String?>(null) }
+    var hostAddOpen by remember { mutableStateOf(false) }
 
-    val overlay = user != null || adding || planOpen || devicesOpen || hostOpen != null
+    val overlay = user != null || adding || planOpen || devicesOpen || hostOpen != null || hostAddOpen
 
     // The card, the plan and the new-user form are overlays over one activity:
     // without this, the system Back finishes the app instead of closing them.
@@ -298,6 +299,7 @@ fun App(modifier: Modifier = Modifier) {
         planOpen = false
         devicesOpen = false
         hostOpen = null
+        hostAddOpen = false
     }
 
     Scaffold(
@@ -317,6 +319,15 @@ fun App(modifier: Modifier = Modifier) {
                 planOpen -> PlanScreen(ctx, Modifier, onBack = { planOpen = false })
                 devicesOpen -> DevicesScreen(ctx, Modifier, onBack = { devicesOpen = false })
                 hostOpen != null -> HostScreen(ctx, Modifier, name = hostOpen!!, onBack = { hostOpen = null })
+                hostAddOpen -> AddHostScreen(
+                    ctx,
+                    Modifier,
+                    onBack = { hostAddOpen = false },
+                    onCreated = {
+                        hostAddOpen = false
+                        tab = 2
+                    },
+                )
                 adding -> AddUserScreen(
                     ctx,
                     Modifier,
@@ -351,7 +362,13 @@ fun App(modifier: Modifier = Modifier) {
                     onNew = { adding = true },
                     onPlan = { planOpen = true },
                 )
-                tab == 2 -> HostsScreen(ctx, Modifier, onBack = { tab = 1 }, onPick = { hostOpen = it })
+                tab == 2 -> HostsScreen(
+                    ctx,
+                    Modifier,
+                    onBack = { tab = 1 },
+                    onPick = { hostOpen = it },
+                    onAddHost = { hostAddOpen = true },
+                )
                 tab == 3 -> TopologyScreen(ctx, Modifier, onBack = { tab = 1 })
                 else -> RoutingScreen(ctx, Modifier, onBack = { tab = 1 })
             }
