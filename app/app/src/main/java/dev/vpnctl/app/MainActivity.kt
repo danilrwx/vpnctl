@@ -61,6 +61,27 @@ data class UserRow(
 /** One copyable line of a user card. */
 data class UserLink(val label: String, val url: String)
 
+/** One link between two hosts, as the state describes it. */
+data class LinkRow(val from: String, val to: String, val active: String, val protocols: String)
+
+/** parseHostLinks reads the node-to-node links. */
+fun parseHostLinks(json: String): List<LinkRow> = try {
+    val arr = JSONArray(json)
+    (0 until arr.length()).map { i ->
+        val o = arr.getJSONObject(i)
+        val protos = o.optJSONArray("protocols")
+
+        LinkRow(
+            from = o.getString("from"),
+            to = o.getString("to"),
+            active = o.optString("active"),
+            protocols = if (protos == null) "" else (0 until protos.length()).joinToString(" ") { protos.getString(it) },
+        )
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
 /** One host of the estate: what the state says, before anything answers. */
 data class HostRow(
     val name: String,
@@ -223,6 +244,7 @@ fun App(modifier: Modifier = Modifier) {
         null -> UsersScreen(ctx, modifier, version, onPick = { selected = it })
         PLAN -> PlanScreen(ctx, modifier, onBack = { selected = null })
         HOSTS -> HostsScreen(ctx, modifier, onBack = { selected = null })
+        OVERVIEW -> OverviewScreen(ctx, modifier, onBack = { selected = null })
         ADD -> AddUserScreen(
             ctx,
             modifier,
@@ -281,8 +303,12 @@ fun UsersScreen(ctx: android.content.Context, modifier: Modifier, version: Int, 
 
         Text("Users ${users.size} · ${users.count { it.enabled }} active", style = MaterialTheme.typography.titleMedium)
         Row {
-            Button(onClick = { onPick(PLAN) }) { Text("Plan") }
-            Button(onClick = { onPick(HOSTS) }, modifier = Modifier.padding(start = 8.dp)) { Text("Hosts") }
+            Button(onClick = { onPick(OVERVIEW) }) { Text("Overview") }
+            Button(onClick = { onPick(PLAN) }, modifier = Modifier.padding(start = 8.dp)) { Text("Plan") }
+        }
+
+        Row {
+            Button(onClick = { onPick(HOSTS) }) { Text("Hosts") }
             Button(onClick = { onPick(ADD) }, modifier = Modifier.padding(start = 8.dp)) { Text("New") }
         }
 
@@ -725,6 +751,77 @@ fun qrMatrix(text: String): BitMatrix = QRCodeWriter().encode(
 )
 
 /**
+ * OverviewScreen is the state at a glance: users, hosts, links and whether every
+ * host runs the same commit. No traffic and no latency — the core measures
+ * neither, and an empty slot is better than an invented number.
+ */
+@Composable
+fun OverviewScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+    val app = remember { Core.current() }
+    var users by remember { mutableStateOf(emptyList<UserRow>()) }
+    var hosts by remember { mutableStateOf(emptyList<HostRow>()) }
+    var links by remember { mutableStateOf(emptyList<LinkRow>()) }
+    var plans by remember { mutableStateOf(mapOf<String, PlanHost>()) }
+    var status by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        users = withContext(Dispatchers.IO) { app?.let { parseUsers(it.users()) } ?: emptyList() }
+        hosts = withContext(Dispatchers.IO) { app?.let { parseHosts(it.hosts()) } ?: emptyList() }
+        links = withContext(Dispatchers.IO) { app?.let { parseHostLinks(it.hostLinks()) } ?: emptyList() }
+
+        status = withContext(Dispatchers.IO) {
+            val json = app?.plan("") ?: return@withContext "no state"
+
+            plans = parsePlan(json).associateBy { it.name }
+            "probed ${plans.size}"
+        }
+    }
+
+    val active = users.count { it.enabled }
+    val expiring = users.count { it.expires.isNotEmpty() }
+    val entries = hosts.count { it.role == "entry" }
+    val unreachable = plans.values.count { it.unreachable.isNotEmpty() }
+    val markers = plans.values.map { it.marker }.filter { it.isNotEmpty() }.distinct()
+
+    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        Text("Overview", style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = onBack) { Text("Back") }
+
+        Text("$active of ${users.size} active · $expiring with an expiry", modifier = Modifier.padding(top = 12.dp))
+        Text(
+            "${hosts.size} hosts · $entries ${if (entries == 1) "entry" else "entries"} · " +
+                "${hosts.size - entries} ${if (hosts.size - entries == 1) "exit" else "exits"} · $unreachable unreachable",
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Text(
+            if (markers.isEmpty()) {
+                "no markers read"
+            } else {
+                "markers: ${markers.joinToString(", ")} · ${plans.values.count { it.changes > 0 }} hosts with changes"
+            },
+            modifier = Modifier.padding(top = 6.dp),
+        )
+
+        LazyColumn(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
+            items(links) { l ->
+                // active is one of the protocols when the link is healthy: say it once
+                val what = if (l.active.isNotEmpty() && l.active != l.protocols) {
+                    "${l.protocols} · ${l.active}"
+                } else {
+                    l.protocols
+                }
+
+                Text("${l.from} → ${l.to}  $what", modifier = Modifier.padding(vertical = 4.dp))
+            }
+        }
+
+        if (status.isNotEmpty()) {
+            Text(status, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
  * HostsScreen is the estate as the state describes it, with the marker and
  * reachability a plan adds. It does not show latency or traffic: the core has
  * neither, and a dash is better than a number nobody measured.
@@ -961,5 +1058,6 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
 
 const val PLAN = "@plan"
 const val HOSTS = "@hosts"
+const val OVERVIEW = "@overview"
 const val ADD = "@new"
 const val REPO = "git@github.com:danilrwx/vpn.git"

@@ -270,6 +270,36 @@ type HostInfo struct {
 	Retiring bool   `json:"retiring,omitempty"`
 }
 
+// HostLink is one node-to-node link, as the state describes it.
+type HostLink struct {
+	From      string   `json:"from"`
+	To        string   `json:"to"`
+	Protocols []string `json:"protocols,omitempty"`
+	Active    string   `json:"active,omitempty"`
+	Policy    string   `json:"policy,omitempty"`
+}
+
+// HostLinks returns the links between hosts, sorted, as JSON.
+func (a *App) HostLinks() string {
+	out := make([]HostLink, 0, len(a.st.Links))
+
+	for _, l := range a.st.Links {
+		out = append(out, HostLink{
+			From: l.From, To: l.To, Protocols: l.Protocols, Active: l.Active, Policy: l.Policy,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].From != out[j].From {
+			return out[i].From < out[j].From
+		}
+
+		return out[i].To < out[j].To
+	})
+
+	return mustJSON(out)
+}
+
 // Hosts returns the estate as JSON, sorted by name.
 func (a *App) Hosts() string {
 	names := make([]string, 0, len(a.st.Hosts))
@@ -499,7 +529,7 @@ func (a *App) Apply(host string) (string, error) { return a.apply(host, nil) }
 func (a *App) ApplyProgress(host string, p Progress) (string, error) { return a.apply(host, p) }
 
 func (a *App) apply(host string, p Progress) (string, error) {
-	out := io.Writer(io.Discard)
+	out := io.Discard
 	if p != nil {
 		out = &progressWriter{p: p}
 	}
