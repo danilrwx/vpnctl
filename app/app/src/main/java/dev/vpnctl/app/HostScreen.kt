@@ -1,6 +1,7 @@
 package dev.vpnctl.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var status by remember { mutableStateOf("") }
     var epoch by remember { mutableStateOf(0) }
     var metrics by remember { mutableStateOf<MetricsRow?>(null) }
+    var series by remember { mutableStateOf(emptyList<MetricsRow>()) }
     var metricsNote by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf(false) }
     var editSSH by remember { mutableStateOf("") }
@@ -82,7 +84,8 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
         if (lines.startsWith("error")) {
             metricsNote = lines
         } else {
-            metrics = parseMetrics(lines)
+            series = parseMetricsSeries(lines)
+            metrics = series.lastOrNull()
 
             if (metrics == null) {
                 metricsNote = "no samples yet: the timer writes one every 5 minutes"
@@ -157,6 +160,22 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                             MetricRow("disk", "${m.disk}%")
                             MetricRow("uptime", uptimeText(m.uptime))
                             MetricRow("connections", "${m.conns}")
+
+                            if (series.size > 1) {
+                                Text(
+                                    "memory · last ${series.size} samples",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Muted,
+                                    modifier = Modifier.padding(top = 12.dp),
+                                )
+                                MetricBars(series.map { if (it.memTotal == 0) 0.0 else it.memUsed.toDouble() / it.memTotal })
+
+                                Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                                    Text(timeText(series.first().ts), style = MaterialTheme.typography.labelSmall, color = Muted)
+                                    Spacer(Modifier.weight(1f))
+                                    Text(timeText(series.last().ts), style = MaterialTheme.typography.labelSmall, color = Muted)
+                                }
+                            }
 
                             val age = (System.currentTimeMillis() / 1000) - m.ts
 
@@ -379,25 +398,50 @@ data class MetricsRow(
     val conns: Int,
 )
 
-/** parseMetrics reads the newest line of the samples array. */
-fun parseMetrics(json: String): MetricsRow? = try {
+/** parseMetricsSeries reads every sample the agent returned, oldest first. */
+fun parseMetricsSeries(json: String): List<MetricsRow> = try {
     val arr = org.json.JSONArray(json)
-    if (arr.length() == 0) {
-        null
-    } else {
-        val o = org.json.JSONObject(arr.getString(arr.length() - 1))
-        MetricsRow(
-            ts = o.optLong("ts"),
-            load1 = o.optDouble("load1", 0.0),
-            memUsed = o.optInt("mem_used_mb"),
-            memTotal = o.optInt("mem_total_mb"),
-            disk = o.optInt("disk_pct"),
-            uptime = o.optLong("uptime_s"),
-            conns = o.optInt("conns"),
-        )
+    (0 until arr.length()).mapNotNull { i ->
+        val o = org.json.JSONObject(arr.optString(i))
+        if (o.optLong("ts") == 0L) {
+            null
+        } else {
+            MetricsRow(
+                ts = o.optLong("ts"),
+                load1 = o.optDouble("load1", 0.0),
+                memUsed = o.optInt("mem_used_mb"),
+                memTotal = o.optInt("mem_total_mb"),
+                disk = o.optInt("disk_pct"),
+                uptime = o.optLong("uptime_s"),
+                conns = o.optInt("conns"),
+            )
+        }
     }
 } catch (e: Exception) {
-    null
+    emptyList()
+}
+
+/** MetricBars draws memory use over the samples: one bar per five minutes. */
+@Composable
+fun MetricBars(values: List<Double>) {
+    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp)) {
+        if (values.isEmpty()) {
+            return@Canvas
+        }
+
+        val step = size.width / values.size
+
+        values.forEachIndexed { index, value ->
+            val high = value * 100 > 85
+            val h = (value * size.height).toFloat().coerceAtLeast(1f)
+
+            drawRect(
+                color = if (high) Warn else Ok,
+                topLeft = androidx.compose.ui.geometry.Offset(index * step, size.height - h),
+                size = androidx.compose.ui.geometry.Size(step * 0.75f, h),
+            )
+        }
+    }
 }
 
 /** uptimeText is days and hours, the shape an operator reads. */
