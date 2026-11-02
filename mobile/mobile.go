@@ -822,3 +822,87 @@ func (a *App) AddLink(from, to, protocols, active, policy string) (string, error
 
 	return msg, nil
 }
+
+// Alerts returns the notification setup: the public topic URL and the entry
+// that serves it. The token stays in the secrets file and is only reported as
+// present or not.
+func (a *App) Alerts() string {
+	out := struct {
+		URL   string `json:"url"`
+		Serve string `json:"serve"`
+		Token bool   `json:"token"`
+	}{URL: a.st.Alerts.Ntfy, Serve: a.st.Alerts.Serve, Token: a.st.Secrets.Alerts.Token != ""}
+
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "{}"
+	}
+
+	return string(b)
+}
+
+// SetAlerts points notifications at the entry's own ntfy server, or turns them
+// off with an empty topic. The token is left alone: a phone cannot mint it, and
+// an empty one still delivers to a topic that needs no auth.
+func (a *App) SetAlerts(serve, topic string) (string, error) {
+	var (
+		msg string
+		err error
+	)
+
+	if topic == "" {
+		msg, err = ops.AlertsSet(a.st, "", "")
+	} else {
+		msg, err = ops.AlertsServe(a.st, serve, topic, a.st.Secrets.Alerts.Token)
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveAlerts(a.dir, a.st.Alerts); err != nil {
+		return "", err
+	}
+
+	if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
+
+// SetLink adds or removes transports on an existing link and can move the
+// active one. The link secrets are untouched: a removed transport keeps its keys
+// for the day it comes back.
+func (a *App) SetLink(from, to, add, rm, active, policy string) (string, error) {
+	msg, err := ops.LinkSet(a.st, from, to, splitList(add), splitList(rm), active, policy)
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveLinks(a.dir, a.st.Links); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}

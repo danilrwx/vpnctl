@@ -346,3 +346,60 @@ func TestAddHostAndLink(t *testing.T) {
 		t.Fatal("a link to an unknown host was accepted")
 	}
 }
+
+// TestAlertsSetup: notifications can be pointed at the entry's own ntfy from the
+// phone, and turned off again. The topic lives in alerts.yaml, the token in the
+// secrets file.
+func TestAlertsSetup(t *testing.T) {
+	app := openFixture(t)
+
+	app.st.Versions["ntfy"] = state.Pin{Version: "2.11.0"}
+
+	msg, err := app.SetAlerts("ru-msk-1", "vpnctl-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "vpnctl-test") {
+		t.Fatalf("message %q", msg)
+	}
+
+	if !strings.Contains(app.st.Alerts.Ntfy, "vpnctl-test") {
+		t.Fatalf("alerts url %q", app.st.Alerts.Ntfy)
+	}
+
+	if app.st.Alerts.Serve != "ru-msk-1" {
+		t.Fatalf("serve %q", app.st.Alerts.Serve)
+	}
+
+	if _, err := app.SetAlerts("fi-hel-1", "vpnctl-test"); err == nil {
+		t.Fatal("a non-entry host was accepted as the notification server")
+	}
+
+	if msg, err := app.SetAlerts("", ""); err != nil || !strings.Contains(msg, "off") {
+		t.Fatalf("turning alerts off: %q %v", msg, err)
+	}
+
+	if app.st.Alerts.Ntfy != "" || app.st.Alerts.Serve != "" {
+		t.Fatalf("alerts stayed: %+v", app.st.Alerts)
+	}
+}
+
+// TestSetLinkEditsTransports: the link edit dialog sends the whole protocol set;
+// the wrapper turns it into add/remove operations.
+func TestSetLinkEditsTransports(t *testing.T) {
+	app := openFixture(t)
+
+	msg, err := app.SetLink("ru-msk-1", "fi-hel-1", "hy2", "reality", "hy2", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "-reality") || !strings.Contains(msg, "active hy2") {
+		t.Fatalf("message %q", msg)
+	}
+
+	if _, err := app.SetLink("ru-msk-1", "fi-hel-1", "", "reality", "", ""); err == nil {
+		t.Fatal("removing a protocol that is gone was reported as a change")
+	}
+}
