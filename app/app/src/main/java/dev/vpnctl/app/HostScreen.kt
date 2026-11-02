@@ -50,6 +50,8 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var served by remember { mutableStateOf(emptyList<String>()) }
     var status by remember { mutableStateOf("") }
     var epoch by remember { mutableStateOf(0) }
+    var metrics by remember { mutableStateOf<MetricsRow?>(null) }
+    var metricsNote by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf(false) }
     var editSSH by remember { mutableStateOf("") }
     var editIP by remember { mutableStateOf("") }
@@ -73,6 +75,18 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
             val json = app?.plan(name) ?: return@onIo "no state"
             plan = parsePlan(json).firstOrNull { it.name == name }
             ""
+        }
+
+        val lines = onIo { app?.metrics(name) ?: "no state" }
+
+        if (lines.startsWith("error")) {
+            metricsNote = lines
+        } else {
+            metrics = parseMetrics(lines)
+
+            if (metrics == null) {
+                metricsNote = "no samples yet: the timer writes one every 5 minutes"
+            }
         }
     }
 
@@ -124,6 +138,38 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
 
                     if (!h?.engine.isNullOrEmpty()) {
                         InfoChip(h!!.engine, color = Muted)
+                    }
+                }
+            }
+
+            item {
+                SectionLabel("Machine")
+
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        val m = metrics
+
+                        if (m == null) {
+                            Text(metricsNote.ifEmpty { "reading…" }, style = MaterialTheme.typography.bodySmall, color = Muted)
+                        } else {
+                            MetricRow("load", String.format("%.2f", m.load1))
+                            MetricRow("memory", "${m.memUsed} / ${m.memTotal} MB")
+                            MetricRow("disk", "${m.disk}%")
+                            MetricRow("uptime", uptimeText(m.uptime))
+                            MetricRow("connections", "${m.conns}")
+
+                            val age = (System.currentTimeMillis() / 1000) - m.ts
+
+                            Text(
+                                when {
+                                    age > 1800 -> "stale: the last sample is ${age / 60} min old"
+                                    else -> "as of ${timeText(m.ts)}"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (age > 1800) Warn else Muted,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -319,6 +365,64 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                 }
             },
         )
+    }
+}
+
+/** MetricsRow is the newest machine sample the host collected. */
+data class MetricsRow(
+    val ts: Long,
+    val load1: Double,
+    val memUsed: Int,
+    val memTotal: Int,
+    val disk: Int,
+    val uptime: Long,
+    val conns: Int,
+)
+
+/** parseMetrics reads the newest line of the samples array. */
+fun parseMetrics(json: String): MetricsRow? = try {
+    val arr = org.json.JSONArray(json)
+    if (arr.length() == 0) {
+        null
+    } else {
+        val o = org.json.JSONObject(arr.getString(arr.length() - 1))
+        MetricsRow(
+            ts = o.optLong("ts"),
+            load1 = o.optDouble("load1", 0.0),
+            memUsed = o.optInt("mem_used_mb"),
+            memTotal = o.optInt("mem_total_mb"),
+            disk = o.optInt("disk_pct"),
+            uptime = o.optLong("uptime_s"),
+            conns = o.optInt("conns"),
+        )
+    }
+} catch (e: Exception) {
+    null
+}
+
+/** uptimeText is days and hours, the shape an operator reads. */
+fun uptimeText(seconds: Long): String {
+    val days = seconds / 86400
+    val hours = (seconds % 86400) / 3600
+
+    return when {
+        days > 0 -> "${days}d ${hours}h"
+        hours > 0 -> "${hours}h"
+        else -> "${seconds / 60}m"
+    }
+}
+
+/** timeText is the sample time in the phone's zone. */
+fun timeText(ts: Long): String =
+    java.time.Instant.ofEpochSecond(ts).atZone(java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+
+/** MetricRow is one line of the machine card. */
+@Composable
+fun MetricRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.width(96.dp))
+        MonoText(value, color = Ink, style = MaterialTheme.typography.bodySmall)
     }
 }
 
