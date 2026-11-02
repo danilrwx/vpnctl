@@ -104,3 +104,9 @@ Nothing outside the module can import `internal/`; `mobile` stays public because
 ## License
 
 Apache 2.0, see [LICENSE](LICENSE). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+The Android app bundles two fonts, both under the SIL Open Font License 1.1:
+Inter (© The Inter Project Authors) and JetBrains Mono (© The JetBrains Mono
+Project Authors). The license texts ship inside the APK in
+`app/app/src/main/assets/licenses/`; the fonts are unmodified, so the reserved
+names and the copyright notices are left as they are.

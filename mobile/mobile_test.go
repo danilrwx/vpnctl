@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/danilrwx/vpnctl-go/internal/gitsync"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
@@ -182,5 +183,38 @@ func TestRenewAndDisable(t *testing.T) {
 
 	if _, err := app.Renew("ghost", 30); err == nil {
 		t.Fatal("renewing an unknown user was accepted")
+	}
+}
+
+// TestHeadIsTheShortCommit: the user card's footer names the revision on screen,
+// so the value has to be the short hash git shows. A state that is not a
+// repository has nothing to name, and the footer falls back to a dash.
+func TestHeadIsTheShortCommit(t *testing.T) {
+	dir := t.TempDir()
+
+	repo, err := gitsync.Init(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Commit writes nothing for a clean tree, so the repository needs a file
+	if err := os.WriteFile(filepath.Join(dir, "users.yaml"), []byte("users: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Commit("state"); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{repo: repo}
+
+	head := app.Head()
+	if len(head) != 7 {
+		t.Fatalf("head %q is not a short hash", head)
+	}
+
+	empty := &App{}
+	if empty.Head() != "" {
+		t.Fatalf("a state without a repository named a commit: %q", empty.Head())
 	}
 }

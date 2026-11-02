@@ -605,3 +605,18 @@ func (a *App) Sync() error {
 
 	return a.repo.Push()
 }
+
+// Head is the commit the app is looking at. The user card's footer names it, so
+// a screen can say which revision of the state it shows after every change.
+func (a *App) Head() string {
+	if a.repo == nil {
+		return ""
+	}
+
+	head, err := a.repo.Head()
+	if err != nil {
+		return ""
+	}
+
+	return head
+}

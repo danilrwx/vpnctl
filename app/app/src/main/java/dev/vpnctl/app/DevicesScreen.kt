@@ -1,0 +1,599 @@
+package dev.vpnctl.app
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.LaptopMac
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import mobile.Mobile
+import java.io.File
+
+/**
+ * DevicesScreen is who can read the secrets and what this phone holds: the age
+ * recipient, the ssh key the hosts know, and the backup that survives a wipe.
+ * The repository lives here too, because a fresh install has no other screen to
+ * say where the state comes from.
+ */
+@Composable
+fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> Unit) {
+    var devices by remember { mutableStateOf(emptyList<DeviceRow>()) }
+    var repo by remember { mutableStateOf(Prefs.repo(ctx).ifEmpty { REPO }) }
+    var status by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    // the core is reopened after a restore, and the recipient file changes with
+    // it: this counter is what makes the screen read both again
+    var version by remember { mutableStateOf(0) }
+
+    var exporting by remember { mutableStateOf(false) }
+    var exportPass by remember { mutableStateOf("") }
+    var exportErr by remember { mutableStateOf("") }
+
+    var restoring by remember { mutableStateOf(false) }
+    var restoreBlob by remember { mutableStateOf("") }
+    var restorePass by remember { mutableStateOf("") }
+    var restoreErr by remember { mutableStateOf("") }
+
+    var revoking by remember { mutableStateOf<DeviceRow?>(null) }
+    var revokeTyped by remember { mutableStateOf("") }
+
+    val scope = rememberCoroutineScope()
+    val recipient = remember(version) { localRecipient(ctx) }
+    val sshKey = remember { File(ctx.filesDir, "identity.pub").takeIf { it.exists() }?.readText()?.trim().orEmpty() }
+
+    LaunchedEffect(version) {
+        devices = withContext(Dispatchers.IO) {
+            Core.current()?.let { parseDevices(it.devices()) } ?: emptyList()
+        }
+    }
+
+    fun connect() {
+        if (busy || repo.isBlank()) {
+            return
+        }
+
+        busy = true
+        status = "…"
+
+        scope.launch {
+            Prefs.setRepo(ctx, repo)
+            status = onIo { Core.connect(ctx, repo) }
+            version++
+            busy = false
+        }
+    }
+
+    val others = devices.filter { it.recipient != recipient }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        ScreenHeader(
+            title = "Devices and keys",
+            subtitle = "age.yaml · ${devices.size} ${plural(devices.size, "recipient", "recipients")}",
+            onBack = onBack,
+            stacked = true,
+        )
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            item {
+                ThisDeviceCard(
+                    recipient = recipient,
+                    sshKey = sshKey,
+                    onCopyRecipient = {
+                        copyToClipboard(ctx, recipient)
+                        status = "recipient copied"
+                    },
+                    onCopyKey = {
+                        copyToClipboard(ctx, sshKey)
+                        status = "ssh key copied"
+                    },
+                    onExport = {
+                        exportPass = ""
+                        exportErr = ""
+                        exporting = true
+                    },
+                    onRestore = {
+                        restoreBlob = ""
+                        restorePass = ""
+                        restoreErr = ""
+                        restoring = true
+                    },
+                )
+            }
+
+            if (others.isNotEmpty()) {
+                item { SectionLabel("Recipients", "${others.size}") }
+
+                item {
+                    SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        others.forEachIndexed { index, device ->
+                            if (index > 0) {
+                                HorizontalDivider(color = Edge)
+                            }
+
+                            RecipientRow(
+                                device = device,
+                                onRevoke = {
+                                    revokeTyped = ""
+                                    revoking = device
+                                },
+                                enabled = !busy,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionLabel("State repository")
+
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text(
+                            "the phone clones with its own deploy key; connecting replaces the local copy",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted,
+                        )
+
+                        OutlinedTextField(
+                            value = repo,
+                            onValueChange = { repo = it },
+                            label = { Text("git@github.com:owner/state.git") },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            colors = appFieldColors(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            PrimaryButton("Connect", { connect() }, enabled = !busy && repo.isNotBlank())
+                            OutlineButton(
+                                "Push",
+                                onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        status = onIo { pushState(Core.current()) }
+                                        busy = false
+                                    }
+                                },
+                                enabled = !busy,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionLabel("What this means")
+
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        listOf(
+                            "every recipient can read secrets.age.yaml · private keys never leave their device",
+                            "revoking re-encrypts for the rest; old commits stay readable by the revoked key",
+                            "host access keys live in authorized_keys with a forced command for the agent",
+                        ).forEach { line ->
+                            Text(
+                                "· $line",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+
+        if (status.isNotEmpty()) {
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (status.startsWith("error")) DangerText else Muted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+        }
+    }
+
+    if (exporting) {
+        AppDialog(
+            title = "Export this identity",
+            onDismiss = { exporting = false },
+            confirmLabel = "Seal and copy",
+            confirmEnabled = !busy && exportPass.length >= 8,
+            onConfirm = {
+                busy = true
+
+                scope.launch {
+                    val (blob, err) = withContext(Dispatchers.IO) { sealIdentityText(exportPass) }
+
+                    if (err.isEmpty()) {
+                        copyToClipboard(ctx, blob)
+                        status = "sealed and copied · store it off this phone"
+                        exporting = false
+                    } else {
+                        exportErr = err
+                    }
+
+                    busy = false
+                }
+            },
+            content = {
+                Text(
+                    "The text is the age key under this password. Anyone holding both reads every secret, and nothing ties it to this phone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                Text(
+                    "At least 8 characters. Store it away from the repository.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Muted,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                OutlinedTextField(
+                    value = exportPass,
+                    onValueChange = { exportPass = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+
+                if (busy) {
+                    Text("sealing…", style = MaterialTheme.typography.bodySmall, color = Muted)
+                }
+
+                if (exportErr.isNotEmpty()) {
+                    Text(exportErr, style = MaterialTheme.typography.bodySmall, color = DangerText)
+                }
+            },
+        )
+    }
+
+    if (restoring) {
+        AppDialog(
+            title = "Restore with a password",
+            onDismiss = { restoring = false },
+            confirmLabel = "Restore",
+            confirmEnabled = !busy && restoreBlob.isNotBlank() && restorePass.isNotEmpty(),
+            onConfirm = {
+                busy = true
+
+                scope.launch {
+                    val (msg, err) = withContext(Dispatchers.IO) {
+                        restoreIdentityText(ctx, restoreBlob, restorePass)
+                    }
+
+                    if (err.isEmpty()) {
+                        status = msg
+                        version++
+                        restoring = false
+                    } else {
+                        restoreErr = err
+                    }
+
+                    busy = false
+                }
+            },
+            content = {
+                Text(
+                    "Paste the backup you stored at setup. The identity replaces this phone's own; a key that does not decrypt the secrets here is refused.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                OutlinedTextField(
+                    value = restoreBlob,
+                    onValueChange = { restoreBlob = it },
+                    label = { Text("-----BEGIN AGE ENCRYPTED FILE-----") },
+                    minLines = 3,
+                    maxLines = 6,
+                    textStyle = MaterialTheme.typography.labelMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                OutlinedTextField(
+                    value = restorePass,
+                    onValueChange = { restorePass = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+
+                if (busy) {
+                    Text("unlocking…", style = MaterialTheme.typography.bodySmall, color = Muted)
+                }
+
+                if (restoreErr.isNotEmpty()) {
+                    Text(restoreErr, style = MaterialTheme.typography.bodySmall, color = DangerText)
+                }
+            },
+        )
+    }
+
+    revoking?.let { device ->
+        AppDialog(
+            title = "Revoke ${device.name}?",
+            onDismiss = { revoking = null },
+            confirmLabel = "Revoke",
+            destructive = true,
+            confirmEnabled = !busy && revokeTyped.trim() == device.name,
+            onConfirm = {
+                busy = true
+
+                scope.launch {
+                    status = onIo { revokeDevice(Core.current(), device.name) }
+                    version++
+                    revoking = null
+                    busy = false
+                }
+            },
+            content = {
+                listOf(
+                    "age.yaml loses this recipient and secrets.age.yaml is re-encrypted for the rest",
+                    "this phone keeps its own access",
+                    "old commits stay readable with this key: assume it has read them",
+                    "its ssh key stays in authorized_keys on the hosts until it is removed there by hand",
+                ).forEach { line ->
+                    Text(
+                        "· $line",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+
+                Text(
+                    "Type the name to confirm",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Muted,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                )
+                OutlinedTextField(
+                    value = revokeTyped,
+                    onValueChange = { revokeTyped = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+fun ThisDeviceCard(
+    recipient: String,
+    sshKey: String,
+    onCopyRecipient: () -> Unit,
+    onCopyKey: () -> Unit,
+    onExport: () -> Unit,
+    onRestore: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface1)
+            .border(1.dp, Accent, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(36.dp).clip(CircleShape).background(AccentSoft),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Smartphone, contentDescription = null, tint = OnAccentSoft, modifier = Modifier.size(20.dp))
+            }
+
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("this phone", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Pill("keystore", PillKind.OK)
+                }
+                Text(
+                    "the age key and the agent key are wrapped by the Keystore",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+            }
+        }
+
+        DeviceFact("secrets", shortKey(recipient), "wrapped", Warn)
+        DeviceFact("agent", if (sshKey.isEmpty()) "none" else "ecdsa P-256", "keystore", OkText)
+
+        Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onCopyRecipient, enabled = recipient.isNotEmpty()) {
+                Text("Copy recipient", color = Link, style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = onCopyKey, enabled = sshKey.isNotEmpty()) {
+                Text("Copy key", color = Link, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onExport) {
+                Text("Export under password", color = Link, style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = onRestore) {
+                Text("Restore or transfer", color = Link, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeviceFact(label: String, value: String, state: String, stateColor: Color) {
+    Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.width(64.dp))
+        MonoText(value, color = Ink, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+        Text(state, style = MaterialTheme.typography.labelSmall, color = stateColor)
+    }
+}
+
+@Composable
+private fun RecipientRow(device: DeviceRow, onRevoke: () -> Unit, enabled: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(36.dp).clip(CircleShape).background(Surface2),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (device.name == "backup") Icons.Outlined.Lock else Icons.Outlined.LaptopMac,
+                contentDescription = null,
+                tint = Muted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(device.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                if (device.added.isNotEmpty()) {
+                    Text(
+                        "  added ${device.added}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                }
+            }
+
+            MonoText(
+                shortKey(device.recipient),
+                color = Muted,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+
+        TextButton(onClick = onRevoke, enabled = enabled) {
+            Text("Revoke", color = DangerText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** shortKey keeps a key recognisable without filling the row: age1abc…f2k0. */
+fun shortKey(key: String): String {
+    val clean = key.trim()
+
+    if (clean.length <= 16) {
+        return clean
+    }
+
+    return "${clean.take(10)}…${clean.takeLast(4)}"
+}
+
+/** localRecipient is the age recipient this phone minted on first launch. */
+fun localRecipient(ctx: android.content.Context): String =
+    File(ctx.filesDir, "age.recipient").takeIf { it.exists() }?.readText()?.trim().orEmpty()
+
+/** sealIdentityText returns the armored blob and an error line, never both. */
+fun sealIdentityText(pass: String): Pair<String, String> = try {
+    Mobile.sealIdentity(pass) to ""
+} catch (e: Exception) {
+    "" to "error: ${e.message}"
+}
+
+/**
+ * restoreIdentityText swaps the phone's key for the one in the blob. The Vault
+ * write happens only after the core has proven the key decrypts the state, so a
+ * wrong backup cannot leave the app with a key that opens nothing.
+ */
+fun restoreIdentityText(ctx: android.content.Context, blob: String, pass: String): Pair<String, String> {
+    val dir = File(ctx.filesDir, "state").absolutePath
+
+    return try {
+        val id = Mobile.unsealIdentity(blob, pass, dir)
+        Vault(ctx.filesDir).put("age.key", id.secret)
+        File(ctx.filesDir, "age.recipient").writeText(id.recipient)
+
+        // unseal refuses a key that cannot decrypt the local secrets, so getting
+        // here means the check passed; say which check, because the state may
+        // also not be here yet
+        val checked = if (File(dir, "secrets.age.yaml").exists()) " · decrypts secrets.age.yaml" else " · no secrets here to check yet"
+        val opened = Core.reopen(ctx)
+
+        if (opened == null) {
+            "restored ${id.recipient}$checked, but the state did not open" to ""
+        } else {
+            "restored ${id.recipient}$checked" to ""
+        }
+    } catch (e: Exception) {
+        "" to "error: ${restoreFailure(e.message.orEmpty())}"
+    }
+}
+
+/**
+ * restoreFailure keeps the age library's error chain out of the dialog: it names
+ * the same thing three times ("incorrect passphrase" twice), and what the user
+ * has to act on is whether the password or the backup is wrong.
+ */
+fun restoreFailure(message: String): String = when {
+    message.contains("wrong passphrase") -> "wrong password, or the backup is damaged"
+    message.contains("does not decrypt") -> "this key does not read the secrets here: it is not a recipient of age.yaml"
+    else -> message.substringAfter("error: ").trim()
+}
+
+/** revokeDevice drops a recipient and re-encrypts the secrets for the rest. */
+fun revokeDevice(app: mobile.App?, name: String): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.removeDevice(name)} · push when the forge is reachable"
+    } catch (e: Exception) {
+        "error: ${e.message}"
+    }
+}
