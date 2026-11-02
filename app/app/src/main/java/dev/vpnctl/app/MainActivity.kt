@@ -2,6 +2,7 @@ package dev.vpnctl.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -283,6 +284,14 @@ fun App(modifier: Modifier = Modifier) {
     var planOpen by remember { mutableStateOf(false) }
 
     val overlay = user != null || adding || planOpen
+
+    // The card, the plan and the new-user form are overlays over one activity:
+    // without this, the system Back finishes the app instead of closing them.
+    BackHandler(enabled = overlay) {
+        user = null
+        adding = false
+        planOpen = false
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
