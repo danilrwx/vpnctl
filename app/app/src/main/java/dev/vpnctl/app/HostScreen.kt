@@ -52,6 +52,8 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var status by remember { mutableStateOf("") }
     var epoch by remember { mutableStateOf(0) }
     var metrics by remember { mutableStateOf<MetricsRow?>(null) }
+    var certs by remember { mutableStateOf(emptyList<CertRow>()) }
+    var certNote by remember { mutableStateOf("") }
     var series by remember { mutableStateOf(emptyList<MetricsRow>()) }
     var metricsNote by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf(false) }
@@ -73,22 +75,41 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
         users = withContext(Dispatchers.IO) { app?.let { parseUsers(it.users()) } ?: emptyList() }
         served = withContext(Dispatchers.IO) { servedProtocols(app) }
 
-        status = onIo {
-            val json = app?.plan(name) ?: return@onIo "no state"
-            plan = parsePlan(json).firstOrNull { it.name == name }
-            ""
-        }
+        // three questions to the same host, each its own signed request: run
+        // them together, or the screen spends a handshake per card
+        kotlinx.coroutines.coroutineScope {
+            launch {
+                status = onIo {
+                    val json = app?.plan(name) ?: return@onIo "no state"
+                    plan = parsePlan(json).firstOrNull { it.name == name }
+                    ""
+                }
+            }
 
-        val lines = onIo { app?.metrics(name) ?: "no state" }
+            launch {
+                val certJSON = onIo { app?.certs(name) ?: "no state" }
+                certs = if (certJSON.startsWith("error")) emptyList() else parseCerts(certJSON)
 
-        if (lines.startsWith("error")) {
-            metricsNote = lines
-        } else {
-            series = parseMetricsSeries(lines)
-            metrics = series.lastOrNull()
+                if (certJSON.startsWith("error")) {
+                    certNote = certJSON
+                } else if (certs.isEmpty()) {
+                    certNote = "no certificates on this host: only the entry runs Caddy"
+                }
+            }
 
-            if (metrics == null) {
-                metricsNote = "no samples yet: the timer writes one every 5 minutes"
+            launch {
+                val lines = onIo { app?.metrics(name) ?: "no state" }
+
+                if (lines.startsWith("error")) {
+                    metricsNote = lines
+                } else {
+                    series = parseMetricsSeries(lines)
+                    metrics = series.lastOrNull()
+
+                    if (metrics == null) {
+                        metricsNote = "no samples yet: the timer writes one every 5 minutes"
+                    }
+                }
             }
         }
     }
@@ -188,6 +209,50 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                                 color = if (age > 1800) Warn else Muted,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionLabel("Certificate")
+
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        if (certs.isEmpty()) {
+                            Text(certNote.ifEmpty { "reading…" }, style = MaterialTheme.typography.bodySmall, color = Muted)
+                        } else {
+                            certs.forEach { cert ->
+                                val days = (cert.notAfter - System.currentTimeMillis() / 1000) / 86400
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    MonoText(cert.name, color = Ink, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                    Text(
+                                        when {
+                                            days < 0 -> "expired"
+                                            days == 0L -> "today"
+                                            else -> "in ${days} d"
+                                        },
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = when {
+                                            days < 0 -> DangerText
+                                            days < 14 -> Warn
+                                            else -> OkText
+                                        },
+                                    )
+                                }
+
+                                if (cert.names.isNotEmpty()) {
+                                    Text(
+                                        cert.names.joinToString(", "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Muted,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -397,6 +462,26 @@ data class MetricsRow(
     val uptime: Long,
     val conns: Int,
 )
+
+/** CertRow is one certificate the host holds. */
+data class CertRow(val name: String, val notAfter: Long, val names: List<String>)
+
+/** parseCerts reads the agent's certificate list. */
+fun parseCerts(json: String): List<CertRow> = try {
+    val arr = org.json.JSONArray(json)
+    (0 until arr.length()).map { i ->
+        val o = org.json.JSONObject(arr.getString(i))
+        val names = o.optJSONArray("names")
+
+        CertRow(
+            name = o.optString("name"),
+            notAfter = o.optLong("not_after"),
+            names = if (names == null) emptyList() else (0 until names.length()).map { names.getString(it) },
+        )
+    }
+} catch (e: Exception) {
+    emptyList()
+}
 
 /** parseMetricsSeries reads every sample the agent returned, oldest first. */
 fun parseMetricsSeries(json: String): List<MetricsRow> = try {
