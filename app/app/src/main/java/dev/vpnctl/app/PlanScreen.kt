@@ -22,7 +22,10 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +58,9 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     var roles by remember { mutableStateOf(mapOf<String, String>()) }
     var log by remember { mutableStateOf(emptyList<String>()) }
     var probing by remember { mutableStateOf(true) }
+    var drift by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var diffText by remember { mutableStateOf("") }
+    var diffErr by remember { mutableStateOf("") }
 
     val head = remember { app?.head().orEmpty() }
     val files = hosts.sumOf { h -> h.files.count { it.status != "=" } }
@@ -149,7 +155,39 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
             }
 
             itemsIndexed(hosts) { index, host ->
-                HostPlanCard(index + 1, host, roles[host.name].orEmpty(), head)
+                HostPlanCard(
+                    number = index + 1,
+                    host = host,
+                    role = roles[host.name].orEmpty(),
+                    head = head,
+                    onDiff = { path ->
+                        drift = host.name to path
+                        diffText = ""
+                        diffErr = "reading the host…"
+
+                        scope.launch {
+                            val out = onIo { app?.diff(host.name, path) ?: "no state" }
+
+                            if (out.startsWith("error")) {
+                                diffErr = out
+                            } else {
+                                diffText = out
+                                diffErr = ""
+                            }
+                        }
+                    },
+                    onAdopt = { path ->
+                        act {
+                            val out = onIo { app?.adopt(host.name, path)?.let { "ok: $it" } ?: "no state" }
+                            if (out.startsWith("ok")) {
+                                drift = null
+                                load()
+                            }
+
+                            out
+                        }
+                    },
+                )
             }
 
             if (log.isNotEmpty()) {
@@ -214,11 +252,65 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
             }
         }
     }
+
+    drift?.let { (host, path) ->
+        AppDialog(
+            title = "Drift · $path",
+            onDismiss = { drift = null },
+            confirmLabel = "Adopt into repo",
+            confirmEnabled = !busy && diffText.isNotEmpty(),
+            onConfirm = {
+                act {
+                    val out = onIo { app?.adopt(host, path)?.let { "ok: $it" } ?: "no state" }
+                    if (out.startsWith("ok")) {
+                        drift = null
+                        load()
+                    }
+
+                    out
+                }
+            },
+            dismissLabel = "Close",
+            content = {
+                Text(
+                    "the host's copy against what the render wants; adopting keeps the host's version",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+
+                if (diffErr.isNotEmpty()) {
+                    Text(diffErr, style = MaterialTheme.typography.bodySmall, color = DangerText, modifier = Modifier.padding(top = 8.dp))
+                }
+
+                if (diffText.isNotEmpty()) {
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp)
+                            .padding(top = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Canvas)
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp),
+                    ) {
+                        Text(diffText, style = monoStyle(MaterialTheme.typography.labelMedium), color = Ink)
+                    }
+                }
+            },
+        )
+    }
 }
 
 /** HostPlanCard is one numbered host: what changes, and what the probe said. */
 @Composable
-fun HostPlanCard(number: Int, host: PlanHost, role: String, head: String) {
+fun HostPlanCard(
+    number: Int,
+    host: PlanHost,
+    role: String,
+    head: String,
+    onDiff: (String) -> Unit,
+    onAdopt: (String) -> Unit,
+) {
     SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -275,7 +367,34 @@ fun HostPlanCard(number: Int, host: PlanHost, role: String, head: String) {
             }
         }
 
-        host.files.filter { it.status != "=" }.forEach { file ->
+        host.files.filter { it.status == "!" }.forEach { file ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(WarnSoft)
+                    .padding(12.dp),
+            ) {
+                Text("Drift · ${file.path}", style = MaterialTheme.typography.titleSmall, color = Warn)
+                Text(
+                    "edited on the host by hand; the next apply overwrites it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Row {
+                    TextButton(onClick = { onDiff(file.path) }) {
+                        Text("Show diff", color = Warn, style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { onAdopt(file.path) }) {
+                        Text("Adopt into repo", color = Warn, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        host.files.filter { it.status != "=" && it.status != "!" }.forEach { file ->
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
                 Text(
                     file.status,
