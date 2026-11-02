@@ -61,6 +61,9 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     var drift by remember { mutableStateOf<Pair<String, String>?>(null) }
     var diffText by remember { mutableStateOf("") }
     var diffErr by remember { mutableStateOf("") }
+    var applying by remember { mutableStateOf(false) }
+    var applyLines by remember { mutableStateOf(emptyList<String>()) }
+    var applyDone by remember { mutableStateOf(false) }
 
     val head = remember { app?.head().orEmpty() }
     val files = hosts.sumOf { h -> h.files.count { it.status != "=" } }
@@ -98,6 +101,21 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
         }
 
         load()
+    }
+
+    if (applying) {
+        ApplyScreen(
+            lines = applyLines,
+            done = applyDone,
+            busy = busy,
+            expected = hosts.map { it.name },
+            onClose = {
+                applying = false
+                applyLines = emptyList()
+            },
+        )
+
+        return
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -233,17 +251,29 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
                 PrimaryButton(
                     text = if (busy) "applying…" else "Apply ${hosts.size} hosts",
                     onClick = {
-                        act {
-                            log = emptyList()
+                        if (busy) {
+                            return@PrimaryButton
+                        }
 
-                            val out = applyWithProgress(app, "") { line -> log = log + line }
+                        applying = true
+                        applyDone = false
+                        applyLines = emptyList()
+                        busy = true
+                        status = "applying…"
+
+                        scope.launch {
+                            val out = onIo {
+                                applyWithProgress(app, "") { line -> applyLines = applyLines + line }
+                            }
+
+                            busy = false
+                            applyDone = true
+                            status = out
 
                             // the hosts just changed: show what is left, not what was
                             if (out == "applied") {
                                 load()
                             }
-
-                            out
                         }
                     },
                     enabled = !busy && hosts.isNotEmpty(),
@@ -298,6 +328,163 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
                 }
             },
         )
+    }
+}
+
+/** One host of a running apply: its name, the lines it printed, its state. */
+data class ApplySection(val name: String, val lines: List<String>, val state: String)
+
+/**
+ * parseApply groups the apply output by host. The lines are the command line's
+ * own: "▸ host" opens a section, a line with ✗ marks it failed, and everything
+ * after the next "▸" or the final "done" belongs to the host above.
+ */
+fun parseApply(lines: List<String>, done: Boolean, expected: List<String> = emptyList()): List<ApplySection> {
+    val bodies = mutableMapOf<String, MutableList<String>>()
+    val order = mutableListOf<String>()
+
+    // the series names its own order in the first line; until that line arrives
+    // the screen already knows which hosts the plan covers
+    val preamble = lines.firstOrNull { it.startsWith("plan for ") }.orEmpty()
+    val declared = preamble.substringAfter("order: ", "").split(" → ").map { it.trim() }.filter { it.isNotEmpty() }
+
+    (if (declared.isNotEmpty()) declared else expected).forEach {
+        order += it
+        bodies[it] = mutableListOf()
+    }
+
+    var current = ""
+
+    for (line in lines) {
+        when {
+            line.startsWith("▸ ") -> {
+                current = line.removePrefix("▸ ").trim()
+
+                if (current !in bodies) {
+                    order += current
+                    bodies[current] = mutableListOf()
+                }
+            }
+            current.isNotEmpty() -> bodies.getValue(current).add(line)
+        }
+    }
+
+    return order.mapIndexed { index, name ->
+        val body = bodies[name].orEmpty()
+        val failed = body.any { it.contains("✗") }
+
+        val state = when {
+            failed -> "failed"
+            body.isEmpty() && !done -> "pending"
+            body.isEmpty() && done -> "skipped"
+            index < order.lastIndex || done -> "done"
+            else -> "running"
+        }
+
+        ApplySection(name, body, state)
+    }
+}
+
+/** ApplyScreen is the mockup's apply-in-progress: one block per host, in order. */
+@Composable
+fun ApplyScreen(
+    lines: List<String>,
+    done: Boolean,
+    busy: Boolean,
+    expected: List<String>,
+    onClose: () -> Unit,
+) {
+    val sections = parseApply(lines, done, expected)
+    val preamble = lines.firstOrNull { it.startsWith("plan for ") }.orEmpty()
+    val failed = sections.any { it.state == "failed" }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        ScreenHeader(
+            title = if (done) "Apply · ${if (failed) "failed" else "done"}" else "Apply",
+            subtitle = "${sections.size} ${plural(sections.size, "host", "hosts")}",
+            onBack = onClose,
+            backIcon = Icons.Outlined.Close,
+        )
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            if (preamble.isNotEmpty()) {
+                item {
+                    Text(
+                        preamble,
+                        style = monoStyle(MaterialTheme.typography.labelMedium),
+                        color = Muted,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
+
+            itemsIndexed(sections) { index, section ->
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        StatusDot(
+                            when (section.state) {
+                                "failed" -> Danger
+                                "done" -> Ok
+                                "pending", "skipped" -> Muted
+                                else -> Warn
+                            },
+                            size = 10.dp,
+                        )
+                        Text(
+                            section.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(start = 12.dp).weight(1f),
+                        )
+                        Text(
+                            section.state,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = when (section.state) {
+                                "failed" -> DangerText
+                                "done" -> OkText
+                                "pending", "skipped" -> Muted
+                                else -> Warn
+                            },
+                        )
+                    }
+
+                    section.lines.forEach { line ->
+                        Text(
+                            line,
+                            style = monoStyle(MaterialTheme.typography.labelMedium),
+                            color = when {
+                                line.contains("✗") -> DangerText
+                                line.contains("✓") -> OkText
+                                line.contains("!") -> Warn
+                                else -> Muted
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+
+            item { Spacer(Modifier.height(16.dp)) }
+        }
+
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(
+                if (done) "the series finished · the plan now shows what is left" else "applying · one host at a time, exits first",
+                style = MaterialTheme.typography.labelMedium,
+                color = Muted,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            PrimaryButton(
+                text = if (done) "Back to plan" else "applying…",
+                onClick = onClose,
+                enabled = done && !busy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
