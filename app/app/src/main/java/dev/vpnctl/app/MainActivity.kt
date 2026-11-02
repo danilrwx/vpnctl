@@ -61,18 +61,43 @@ data class UserRow(
 /** One copyable line of a user card. */
 data class UserLink(val label: String, val url: String)
 
-/** One host of the plan. */
-data class PlanHost(val name: String, val changes: Int, val unreachable: String)
+/** One file of the plan, with the mark the core gives it: ~ changed, + new, - removed. */
+data class PlanFile(val path: String, val status: String)
+
+/** One host of the plan: what apply would do, and why it might not. */
+data class PlanHost(
+    val name: String,
+    val changes: Int,
+    val unreachable: String,
+    val marker: String,
+    val bootstrapped: Boolean,
+    val notes: List<String>,
+    val files: List<PlanFile>,
+)
 
 /** parsePlan reads what plan.JSONOf writes: a host, a change count, files. */
 fun parsePlan(json: String): List<PlanHost> = try {
     val arr = JSONArray(json)
     (0 until arr.length()).map { i ->
         val o = arr.getJSONObject(i)
+        val notes = o.optJSONArray("notes")
+        val files = o.optJSONArray("files")
+
         PlanHost(
             name = o.getString("name"),
             changes = o.getInt("changes"),
             unreachable = o.optString("unreachable"),
+            marker = o.optString("marker"),
+            bootstrapped = o.optBoolean("bootstrapped"),
+            notes = if (notes == null) emptyList() else (0 until notes.length()).map { notes.getString(it) },
+            files = if (files == null) {
+                emptyList()
+            } else {
+                (0 until files.length()).map {
+                    val f = files.getJSONObject(it)
+                    PlanFile(f.getString("path"), f.getString("status"))
+                }
+            },
         )
     }
 } catch (e: Exception) {
@@ -786,9 +811,34 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
 
         LazyColumn {
             items(hosts) { h ->
-                Text("${h.name} · ${h.changes} changes", modifier = Modifier.padding(vertical = 4.dp))
-                if (h.unreachable.isNotEmpty()) {
-                    Text(h.unreachable, style = MaterialTheme.typography.bodySmall)
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Row {
+                        Text(h.name, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "  ${h.changes} changes" + if (h.marker.isEmpty()) "" else " · applied ${h.marker.take(7)}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    if (!h.bootstrapped) {
+                        Text("skipped: bootstrap not done", style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    if (h.unreachable.isNotEmpty()) {
+                        Text(h.unreachable, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+
+                    h.notes.forEach { note ->
+                        Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    }
+
+                    // the marks read like plan does on the command line: ~ changed, + new, - gone
+                    h.files.filter { it.status != "=" }.forEach { f ->
+                        Text(
+                            "  ${f.status} ${f.path}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }
