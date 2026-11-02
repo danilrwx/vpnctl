@@ -790,6 +790,11 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     var version by remember { mutableStateOf(0) }
     var exporting by remember { mutableStateOf(false) }
     var restoring by remember { mutableStateOf(false) }
+    // a failure belongs next to the fields that caused it: the status line of
+    // the screen sits behind the dialog, and an error nobody sees reads as a
+    // button that does nothing
+    var exportErr by remember { mutableStateOf("") }
+    var restoreErr by remember { mutableStateOf("") }
     var revoking by remember { mutableStateOf<DeviceRow?>(null) }
 
     val scope = rememberCoroutineScope()
@@ -878,8 +883,8 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Row {
-                    TextButton(onClick = { exporting = true }, enabled = !busy) { Text("Export") }
-                    TextButton(onClick = { restoring = true }, enabled = !busy) { Text("Restore or transfer") }
+                    TextButton(onClick = { exportErr = ""; exporting = true }, enabled = !busy) { Text("Export") }
+                    TextButton(onClick = { restoreErr = ""; restoring = true }, enabled = !busy) { Text("Restore or transfer") }
                 }
             }
 
@@ -929,6 +934,7 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     if (exporting) {
         ExportIdentityDialog(
             busy = busy,
+            error = exportErr,
             onDismiss = { exporting = false },
             onSeal = { pass ->
                 busy = true
@@ -939,7 +945,7 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                         copyToClipboard(ctx, blob)
                         exporting = false
                     } else {
-                        status = err
+                        exportErr = err
                     }
                     busy = false
                 }
@@ -950,16 +956,18 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     if (restoring) {
         RestoreIdentityDialog(
             busy = busy,
+            error = restoreErr,
             onDismiss = { restoring = false },
             onRestore = { blob, pass ->
                 busy = true
                 scope.launch {
                     val (msg, err) = withContext(Dispatchers.IO) { restoreIdentityText(ctx, blob, pass) }
-                    status = if (err.isEmpty()) msg else err
-
                     if (err.isEmpty()) {
+                        status = msg
                         version++
                         restoring = false
+                    } else {
+                        restoreErr = err
                     }
 
                     busy = false
@@ -992,7 +1000,7 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
  * secret the app can reproduce in the clear.
  */
 @Composable
-fun ExportIdentityDialog(busy: Boolean, onDismiss: () -> Unit, onSeal: (String) -> Unit) {
+fun ExportIdentityDialog(busy: Boolean, error: String, onDismiss: () -> Unit, onSeal: (String) -> Unit) {
     var pass by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -1019,6 +1027,10 @@ fun ExportIdentityDialog(busy: Boolean, onDismiss: () -> Unit, onSeal: (String) 
                 if (busy) {
                     Text("sealing…", style = MaterialTheme.typography.bodySmall)
                 }
+
+                if (error.isNotEmpty()) {
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
             }
         },
         confirmButton = {
@@ -1034,7 +1046,7 @@ fun ExportIdentityDialog(busy: Boolean, onDismiss: () -> Unit, onSeal: (String) 
  * replaces the key it is using.
  */
 @Composable
-fun RestoreIdentityDialog(busy: Boolean, onDismiss: () -> Unit, onRestore: (String, String) -> Unit) {
+fun RestoreIdentityDialog(busy: Boolean, error: String, onDismiss: () -> Unit, onRestore: (String, String) -> Unit) {
     var blob by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
 
@@ -1062,6 +1074,10 @@ fun RestoreIdentityDialog(busy: Boolean, onDismiss: () -> Unit, onRestore: (Stri
                 )
                 if (busy) {
                     Text("unlocking…", style = MaterialTheme.typography.bodySmall)
+                }
+
+                if (error.isNotEmpty()) {
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             }
         },
@@ -1143,8 +1159,19 @@ fun restoreIdentityText(ctx: android.content.Context, blob: String, pass: String
             "restored ${id.recipient}$checked" to ""
         }
     } catch (e: Exception) {
-        "" to "error: ${e.message}"
+        "" to "error: ${restoreFailure(e.message.orEmpty())}"
     }
+}
+
+/**
+ * restoreFailure keeps the age library's error chain out of the dialog: it names
+ * the same thing three times ("incorrect passphrase" twice), and what the user
+ * has to act on is whether the password or the backup is wrong.
+ */
+fun restoreFailure(message: String): String = when {
+    message.contains("wrong passphrase") -> "wrong password, or the backup is damaged"
+    message.contains("does not decrypt") -> "this key does not read the secrets here: it is not a recipient of age.yaml"
+    else -> message.substringAfter("error: ").trim()
 }
 
 /** revokeDevice drops a recipient and re-encrypts the secrets for the rest. */
