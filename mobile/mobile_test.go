@@ -574,3 +574,39 @@ func TestInboundsList(t *testing.T) {
 		t.Fatalf("an unknown host answered %q", got)
 	}
 }
+
+// TestSettingsFromThePhone: the three edits the screens make without a host —
+// a set's own entries, an inbound's port, the exit policy.
+func TestSettingsFromThePhone(t *testing.T) {
+	app := openFixture(t)
+
+	if msg, err := app.SaveSet("ru-direct", "gosuslugi.ru,mos.ru", "10.0.0.0/8"); err != nil {
+		t.Fatalf("save set: %v", err)
+	} else if !strings.Contains(msg, "2 domains") {
+		t.Fatalf("set message %q", msg)
+	}
+
+	if body, err := os.ReadFile(filepath.Join(app.dir, "sets", "ru-direct.yaml")); err != nil || !strings.Contains(string(body), "mos.ru") {
+		t.Fatalf("sets file: %q %v", body, err)
+	}
+
+	if _, err := app.SaveInbound("ru-msk-1", "ws", 9443, "/ws", ""); err != nil {
+		t.Fatalf("save inbound: %v", err)
+	}
+
+	if _, err := app.SetExit("ru-msk-1", "fixed", "fi-hel-1"); err != nil {
+		t.Fatalf("set exit: %v", err)
+	}
+
+	if r := app.st.Routing["ru-msk-1"].Exit; r.Policy != "fixed" || r.Prefer != "fi-hel-1" {
+		t.Fatalf("exit %+v", r)
+	}
+
+	if _, err := app.SetExit("ru-msk-1", "fixed", "ru-msk-1"); err == nil {
+		t.Fatal("the entry was made its own exit")
+	}
+
+	if _, err := app.SaveSet("ghost", "example.ru", ""); err == nil {
+		t.Fatal("an unknown set was saved")
+	}
+}

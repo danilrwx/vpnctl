@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/danilrwx/vpnctl-go/internal/ageio"
 	"gopkg.in/yaml.v3"
@@ -122,4 +123,23 @@ func SaveRouting(dir, host string, r Routing) error {
 	}
 
 	return os.WriteFile(filepath.Join(dir, "routing", host+".yaml"), b, 0o644)
+}
+
+// SaveSet writes sets/<name>.yaml in its canonical form.
+func SaveSet(dir, name string, s Set) error {
+	if name == "" || strings.ContainsAny(name, "/\\ ") {
+		return fmt.Errorf("set name %q", name)
+	}
+
+	path := filepath.Join(dir, "sets")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return err
+	}
+
+	b, err := marshal(s)
+	if err != nil {
+		return fmt.Errorf("marshal set: %w", err)
+	}
+
+	return os.WriteFile(filepath.Join(path, name+".yaml"), b, 0o644)
 }

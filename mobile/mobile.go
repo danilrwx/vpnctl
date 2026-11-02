@@ -1105,6 +1105,8 @@ func (a *App) ToggleInbound(host, name string, on bool) (string, error) {
 type InboundInfo struct {
 	Name    string `json:"name"`
 	Port    int    `json:"port"`
+	Path    string `json:"path,omitempty"`
+	SNI     string `json:"sni,omitempty"`
 	Enabled bool   `json:"enabled"`
 }
 
@@ -1118,10 +1120,109 @@ func (a *App) Inbounds(host string) string {
 	out := make([]InboundInfo, 0, len(inb))
 
 	for name, i := range inb {
-		out = append(out, InboundInfo{Name: name, Port: i.Port, Enabled: i.IsEnabled()})
+		out = append(out, InboundInfo{Name: name, Port: i.Port, Path: i.Path, SNI: i.SNI, Enabled: i.IsEnabled()})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 
 	return mustJSON(out)
+}
+
+// Sets returns the address sets as JSON, sorted by name.
+func (a *App) Sets() string {
+	sets := ops.Sets(a.st)
+
+	out := make([]struct {
+		Name    string   `json:"name"`
+		Geosite []string `json:"geosite,omitempty"`
+		GeoIP   []string `json:"geoip,omitempty"`
+		Domains []string `json:"domains,omitempty"`
+		IPs     []string `json:"ips,omitempty"`
+	}, 0, len(sets))
+
+	for _, s := range sets {
+		out = append(out, struct {
+			Name    string   `json:"name"`
+			Geosite []string `json:"geosite,omitempty"`
+			GeoIP   []string `json:"geoip,omitempty"`
+			Domains []string `json:"domains,omitempty"`
+			IPs     []string `json:"ips,omitempty"`
+		}{s.Name, s.Geosite, s.GeoIP, s.Domains, s.IPs})
+	}
+
+	return mustJSON(out)
+}
+
+// SaveSet replaces the operator's own domains and addresses in a set; the
+// geosite and geoip names come from the pinned geodata and stay.
+func (a *App) SaveSet(name, domains, ips string) (string, error) {
+	msg, err := ops.SetEntries(a.st, name, splitList(domains), splitList(ips))
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveSet(a.dir, name, a.st.Sets[name]); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
+
+// SaveInbound creates or edits one inbound of a host. It reaches the host on the
+// next apply.
+func (a *App) SaveInbound(host, name string, port int, path, sni string) (string, error) {
+	msg, err := ops.InboundSet(a.st, host, name, port, path, sni)
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveInbounds(a.dir, a.st.Inbounds); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
+
+// SetExit picks the exit of a host: automatic, or fixed to one exit.
+func (a *App) SetExit(host, policy, prefer string) (string, error) {
+	msg, err := ops.ExitPolicySet(a.st, host, policy, prefer)
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveRouting(a.dir, host, a.st.Routing[host]); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
 }
