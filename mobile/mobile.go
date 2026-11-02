@@ -1042,3 +1042,36 @@ func (a *App) saveRouting(host, msg string) error {
 
 	return nil
 }
+
+// Certs returns the certificates a host holds, as JSON: the name Caddy filed
+// them under, the expiry and the covered names. A host without Caddy answers
+// with an empty list.
+func (a *App) Certs(host string) (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("no signer: the device cannot ask the agent")
+	}
+
+	c, err := remote.Dial(a.st, host)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = c.Close() }()
+
+	req := &agent.Request{V: agent.Version, Op: "cert", Host: host, TS: time.Now().Unix(), Nonce: nonce()}
+	req.TreeHash = agent.TreeHash(nil)
+
+	sig, err := SignMessage([]byte(agent.Message(req)))
+	if err != nil {
+		return "", err
+	}
+
+	req.Sig = base64.StdEncoding.EncodeToString(sig)
+
+	resp, err := agent.Call(c, req)
+	if err != nil {
+		return "", err
+	}
+
+	return mustJSON(resp.Certs), nil
+}

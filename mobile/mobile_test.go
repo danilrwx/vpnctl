@@ -494,3 +494,22 @@ func TestRouteTestStopsAtWhatItCannotKnow(t *testing.T) {
 		t.Fatalf("disabled rule: %q %+v", answer.Result, answer.Trace)
 	}
 }
+
+// TestCertsAndMetricsNeedTheAgent: both methods sign a request before anything
+// reaches a host, so without a signer they must fail instead of dialling.
+func TestCertsAndMetricsNeedTheAgent(t *testing.T) {
+	app := openFixture(t)
+
+	old := signer
+	signer = nil
+
+	t.Cleanup(func() { signer = old })
+
+	if _, err := app.Certs("ru-msk-1"); err == nil {
+		t.Fatal("Certs dialled without a signer")
+	}
+
+	if _, err := app.Metrics("ru-msk-1"); err == nil {
+		t.Fatal("Metrics dialled without a signer")
+	}
+}

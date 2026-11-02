@@ -2,10 +2,14 @@ package agent
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -355,5 +359,54 @@ func TestReadMetricsTakesTheNewest(t *testing.T) {
 
 	if res.Samples[2] != "{\"ts\":4}" {
 		t.Fatalf("newest first? %+v", res.Samples)
+	}
+}
+
+// TestReadCerts: the phone cannot read Caddy's storage, so the agent reports the
+// certificates it holds: the name, the expiry and the covered names.
+func TestReadCerts(t *testing.T) {
+	root := t.TempDir()
+
+	dir := filepath.Join(root, "acme", "example.ru")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotAfter:     time.Now().Add(60 * 24 * time.Hour),
+		DNSNames:     []string{"example.ru", "www.example.ru"},
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pemBody := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	if err := os.WriteFile(filepath.Join(dir, "example.ru.crt"), pemBody, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res := ReadCerts(root)
+	if !res.OK {
+		t.Fatalf("cert refused: %s: %s", res.Code, res.Error)
+	}
+
+	if len(res.Certs) != 1 || res.Certs[0].Name != "example.ru" {
+		t.Fatalf("certs %+v", res.Certs)
+	}
+
+	if len(res.Certs[0].Names) != 2 || res.Certs[0].NotAfter == 0 {
+		t.Fatalf("cert fields %+v", res.Certs[0])
+	}
+
+	if res := ReadCerts(filepath.Join(root, "missing")); !res.OK || len(res.Certs) != 0 {
+		t.Fatalf("a host without Caddy must answer empty: %+v", res)
 	}
 }

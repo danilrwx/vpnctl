@@ -73,7 +73,9 @@ type Response struct {
 	// Bodies is the content of the files a read op asked for, base64.
 	Bodies map[string]string `json:"bodies,omitempty"`
 	// Samples are the metrics lines the host collected, newest last.
-	Samples    []string      `json:"samples,omitempty"`
+	Samples []string `json:"samples,omitempty"`
+	// Certs are the certificates the host holds.
+	Certs      []CertInfo    `json:"certs,omitempty"`
 	Changes    []Change      `json:"changes,omitempty"`
 	Probe      string        `json:"probe,omitempty"`
 	Matrix     []ProbeResult `json:"matrix,omitempty"`
@@ -610,4 +612,81 @@ func ReadMetrics(dir string, last int) Response {
 	}
 
 	return res
+}
+
+// CaddyCerts is where Caddy keeps the certificates it obtained. The path follows
+// HOME=/var/lib/caddy of its unit, not the repository: nothing about it is
+// rendered, so the read op cannot serve it either.
+const CaddyCerts = "/var/lib/caddy/.local/share/caddy/certificates"
+
+// CertInfo is one certificate a host holds, as the phone shows it.
+type CertInfo struct {
+	Name     string   `json:"name"`
+	NotAfter int64    `json:"not_after"`
+	Names    []string `json:"names,omitempty"`
+}
+
+// ReadCerts returns the certificates under root: the name Caddy filed them
+// under, the expiry and the names they cover. A host without Caddy answers
+// with an empty list, not an error.
+func ReadCerts(root string) Response {
+	res := Response{V: Version, OK: true, Certs: []CertInfo{}}
+
+	if _, err := os.Stat(root); err != nil {
+		return res
+	}
+
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if d.IsDir() || !strings.HasSuffix(path, ".crt") {
+			return nil
+		}
+
+		// one unreadable or foreign file must not hide the certificates that
+		// are fine, so a file that does not parse is skipped, not fatal
+		if info, ok := certOf(path); ok {
+			res.Certs = append(res.Certs, info)
+		}
+
+		if len(res.Certs) >= 50 {
+			return filepath.SkipAll
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fail(res, "cert", err)
+	}
+
+	sort.Slice(res.Certs, func(i, j int) bool { return res.Certs[i].Name < res.Certs[j].Name })
+
+	return res
+}
+
+// certOf parses one PEM certificate; ok=false means "not a certificate we can
+// read", never "the host is broken".
+func certOf(path string) (CertInfo, bool) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return CertInfo{}, false
+	}
+
+	block, _ := pem.Decode(body)
+	if block == nil {
+		return CertInfo{}, false
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return CertInfo{}, false
+	}
+
+	return CertInfo{
+		Name:     strings.TrimSuffix(filepath.Base(path), ".crt"),
+		NotAfter: cert.NotAfter.Unix(),
+		Names:    cert.DNSNames,
+	}, true
 }
