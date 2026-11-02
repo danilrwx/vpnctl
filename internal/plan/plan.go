@@ -541,12 +541,23 @@ func Fetch(st *state.State, host, path string) (string, error) {
 
 // Diff is the unified diff between the render and the file on the host.
 func Diff(st *state.State, rendered render.Rendered, host, path string) (string, error) {
+	return DiffWith(st, rendered, host, path, func(h, p string) (string, error) { return Fetch(st, h, p) })
+}
+
+// FetchFunc reads one file from a host. The command line can cat over ssh; a
+// phone cannot, because its key is the agent's forced command, so the two paths
+// differ in how they get the bytes and not in what they compare.
+type FetchFunc func(host, path string) (string, error)
+
+// DiffWith is Diff with the reader supplied: drift is the host's bytes against
+// the render, however those bytes arrived.
+func DiffWith(_ *state.State, rendered render.Rendered, host, path string, fetch FetchFunc) (string, error) {
 	next, ok := rendered[host][path]
 	if !ok {
 		return "", fmt.Errorf("%s: file %s is not rendered", host, path)
 	}
 
-	cur, err := Fetch(st, host, path)
+	cur, err := fetch(host, path)
 	if err != nil {
 		return "", err
 	}
@@ -556,11 +567,16 @@ func Diff(st *state.State, rendered render.Rendered, host, path string) (string,
 
 // Adopt moves a file from the host into the state's overrides/<host>/<path>: the render picks it up.
 func Adopt(st *state.State, host, path string) (string, error) {
+	return AdoptWith(st, host, path, func(h, p string) (string, error) { return Fetch(st, h, p) })
+}
+
+// AdoptWith is Adopt with the reader supplied, for the same reason as DiffWith.
+func AdoptWith(st *state.State, host, path string, fetch FetchFunc) (string, error) {
 	if !strings.HasPrefix(path, "/") {
 		return "", fmt.Errorf("the path must be absolute")
 	}
 
-	cur, err := Fetch(st, host, path)
+	cur, err := fetch(host, path)
 	if err != nil {
 		return "", err
 	}

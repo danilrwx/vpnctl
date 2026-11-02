@@ -285,3 +285,48 @@ func TestMarkRefusesABodyThatDoesNotMatchItsHash(t *testing.T) {
 		t.Fatalf("a mismatched body was written: %+v", res)
 	}
 }
+
+// TestReadOnlyServesTheManifest: the read op exists so a phone can show drift.
+// The manifest is the allow list, so a signed request cannot read anything the
+// agent did not install itself.
+func TestReadOnlyServesTheManifest(t *testing.T) {
+	root := t.TempDir()
+
+	old := AllowedPrefixes
+	AllowedPrefixes = []string{root + "/"}
+
+	t.Cleanup(func() { AllowedPrefixes = old })
+
+	config := filepath.Join(root, "config.json")
+	if err := os.WriteFile(config, []byte("{\"a\":1}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := filepath.Join(root, "applied.sha256")
+	if err := os.WriteFile(manifest, []byte("deadbeef "+config+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res := Read(&Request{Paths: []string{config}}, manifest)
+	if !res.OK {
+		t.Fatalf("read refused: %s: %s", res.Code, res.Error)
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(res.Bodies[config])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(raw) != "{\"a\":1}\n" {
+		t.Fatalf("body %q", raw)
+	}
+
+	secret := filepath.Join(root, "shadow")
+	if err := os.WriteFile(secret, []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if res := Read(&Request{Paths: []string{secret}}, manifest); res.OK {
+		t.Fatal("a file outside the manifest was readable")
+	}
+}

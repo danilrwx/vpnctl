@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+
+	"github.com/danilrwx/vpnctl-go/internal/render"
 )
 
 func TestClassify(t *testing.T) {
@@ -135,3 +137,32 @@ func TestParseProbeUnpushed(t *testing.T) {
 }
 
 func base64Of(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+// TestDiffWithReadsThroughTheCaller: a phone cannot cat over ssh, so the reader
+// is a parameter; what the diff compares must not change because of it.
+func TestDiffWithReadsThroughTheCaller(t *testing.T) {
+	rendered := render.Rendered{"node": {"/etc/x": "new line\n"}}
+
+	out, err := DiffWith(nil, rendered, "node", "/etc/x", func(host, path string) (string, error) {
+		if host != "node" || path != "/etc/x" {
+			t.Fatalf("asked for %s:%s", host, path)
+		}
+
+		return "old line\n", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{"--- node:/etc/x", "+++ render", "-old line", "+new line"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("diff is missing %q:\n%s", want, out)
+		}
+	}
+
+	if _, err := DiffWith(nil, rendered, "node", "/etc/other", func(string, string) (string, error) {
+		return "", nil
+	}); err == nil {
+		t.Fatal("a file that is not rendered was accepted")
+	}
+}

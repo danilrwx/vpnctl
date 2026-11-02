@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/danilrwx/vpnctl-go/internal/agent"
+	"github.com/danilrwx/vpnctl-go/internal/plan"
 	"github.com/danilrwx/vpnctl-go/internal/version"
 )
 
@@ -153,6 +154,8 @@ func main() {
 		res = agent.Apply(&req, "/tmp", func(line string) { fmt.Fprintln(os.Stderr, line) })
 	case "mark":
 		res = agent.Mark(&req)
+	case "read":
+		res = agent.Read(&req, plan.Manifest)
 	case "probe":
 		body, err := os.ReadFile("/etc/vpnctl/probe.json")
 		if err != nil {

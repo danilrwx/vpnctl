@@ -620,3 +620,36 @@ func (a *App) Head() string {
 
 	return head
 }
+
+// Diff is one file of drift: what the host holds against what the render wants.
+// It is the same unified diff the command line prints.
+func (a *App) Diff(host, path string) (string, error) {
+	rendered, err := render.Check(a.st, time.Now())
+	if err != nil {
+		return "", err
+	}
+
+	return plan.DiffWith(a.st, rendered, host, path, func(h, p string) (string, error) {
+		return agentRead(a.st, h, p)
+	})
+}
+
+// Adopt takes the host's copy of a drifted file into overrides/<host>/<path>, so
+// the next apply keeps it instead of overwriting it. It commits like any other
+// change the phone makes.
+func (a *App) Adopt(host, path string) (string, error) {
+	msg, err := plan.AdoptWith(a.st, host, path, func(h, p string) (string, error) {
+		return agentRead(a.st, h, p)
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}

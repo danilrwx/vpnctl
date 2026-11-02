@@ -145,3 +145,48 @@ func agentProbe(st *state.State, host string, paths []string) (plan.Probe, error
 
 	return p, nil
 }
+
+// agentRead fetches one file through the agent. The phone's key is a forced
+// command, so `cat` is not available to it; drift diffs need this op.
+func agentRead(st *state.State, host, path string) (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("no signer: the device cannot read from the agent")
+	}
+
+	c, err := remote.Dial(st, host)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = c.Close() }()
+
+	req := &agent.Request{
+		V: agent.Version, Op: "read", Host: host, Paths: []string{path},
+		TS: time.Now().Unix(), Nonce: nonce(),
+	}
+	req.TreeHash = agent.TreeHash(nil)
+
+	sig, err := SignMessage([]byte(agent.Message(req)))
+	if err != nil {
+		return "", err
+	}
+
+	req.Sig = base64.StdEncoding.EncodeToString(sig)
+
+	resp, err := agent.Call(c, req)
+	if err != nil {
+		return "", err
+	}
+
+	body, ok := resp.Bodies[path]
+	if !ok {
+		return "", fmt.Errorf("%s: the agent returned no content", path)
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(body)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", path, err)
+	}
+
+	return string(raw), nil
+}

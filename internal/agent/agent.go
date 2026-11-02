@@ -70,11 +70,13 @@ type Response struct {
 	Marker       string            `json:"marker,omitempty"`
 	Bootstrapped bool              `json:"bootstrapped,omitempty"`
 	Hashes       map[string]string `json:"hashes,omitempty"`
-	Changes      []Change          `json:"changes,omitempty"`
-	Probe        string            `json:"probe,omitempty"`
-	Matrix       []ProbeResult     `json:"matrix,omitempty"`
-	RolledBack   bool              `json:"rolled_back,omitempty"`
-	Log          []string          `json:"log,omitempty"`
+	// Bodies is the content of the files a read op asked for, base64.
+	Bodies     map[string]string `json:"bodies,omitempty"`
+	Changes    []Change          `json:"changes,omitempty"`
+	Probe      string            `json:"probe,omitempty"`
+	Matrix     []ProbeResult     `json:"matrix,omitempty"`
+	RolledBack bool              `json:"rolled_back,omitempty"`
+	Log        []string          `json:"log,omitempty"`
 }
 
 // Change is one path the apply touched.
@@ -503,3 +505,53 @@ func sumOf(body string) (string, error) {
 }
 
 func encodeBody(body string) string { return base64.StdEncoding.EncodeToString([]byte(body)) }
+
+// MaxRead caps one file a read may return: the op exists for drift diffs, and a
+// multi-megabyte answer over the agent's stdin is a way to hurt the host.
+const MaxRead = 1 << 20
+
+// Read returns the content of files the agent itself applied. The manifest is
+// the allow list on purpose: a signed request cannot be trusted with arbitrary
+// paths, and the paths a diff needs are exactly the ones in the manifest.
+func Read(r *Request, manifestPath string) Response {
+	res := Response{V: Version, OK: true, Bodies: map[string]string{}}
+
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fail(res, "manifest", err)
+	}
+
+	known := map[string]bool{}
+
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 {
+			known[fields[1]] = true
+		}
+	}
+
+	for _, path := range r.Paths {
+		// the manifest is the allow list; the common path checks stay, so a
+		// manifest cannot name something outside the agent's world
+		if err := CheckPath(path, 0o644); err != nil {
+			return fail(res, "path", err)
+		}
+
+		if !known[path] {
+			return fail(res, "path", fmt.Errorf("%s: not in %s", path, filepath.Base(manifestPath)))
+		}
+
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return fail(res, "io", err)
+		}
+
+		if len(body) > MaxRead {
+			return fail(res, "size", fmt.Errorf("%s: larger than %d bytes", path, MaxRead))
+		}
+
+		res.Bodies[path] = base64.StdEncoding.EncodeToString(body)
+	}
+
+	return res
+}
