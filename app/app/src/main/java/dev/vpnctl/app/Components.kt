@@ -69,17 +69,33 @@ fun ScreenHeader(
             IconAction(backIcon, onBack, "Back")
         }
 
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.displayLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (stacked) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.displayLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
 
-            if (!subtitle.isNullOrEmpty()) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Muted,
-                    maxLines = 1,
-                    modifier = if (stacked) Modifier.padding(top = 2.dp) else Modifier.padding(start = 8.dp),
-                )
+                if (!subtitle.isNullOrEmpty()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+        } else {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+                Text(title, style = MaterialTheme.typography.displayLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+                if (!subtitle.isNullOrEmpty()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 8.dp, bottom = 5.dp),
+                    )
+                }
             }
         }
 
