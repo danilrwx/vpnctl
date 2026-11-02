@@ -34,3 +34,45 @@ jobs:
           go run ./cmd/vpnctl render -dir testdata/basic --stub --out /tmp/r1
           go run ./cmd/vpnctl render -dir testdata/basic --stub --out /tmp/r2
           diff -r /tmp/r1 /tmp/r2
+
+  # The app is built by the same script a laptop runs: gomobile turns the Go
+  # core into an AAR, and Gradle assembles the Compose UI around it. The JVM
+  # tests are the parsers; there is no emulator here, so nothing below is a
+  # device test.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: android-actions/setup-android@v3
+
+      - name: SDK pieces the build needs
+        run: sdkmanager --install "platforms;android-35" "build-tools;34.0.0" "ndk;26.1.10909125"
+
+      - name: gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - run: gomobile init
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: JVM tests
+        run: gradle test
+        working-directory: app
+
+      - name: assemble the debug APK
+        run: gradle assembleDebug
+        working-directory: app
