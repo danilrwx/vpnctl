@@ -88,6 +88,17 @@ fun HostsScreen(
         )
 
         LazyColumn(modifier = Modifier.weight(1f)) {
+            if (hosts.isEmpty()) {
+                item {
+                    Text(
+                        "no hosts described: add one with the plus, then bootstrap it from the command line",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+
             if (entries.isNotEmpty()) {
                 item {
                     SectionLabel("Entries · the way in")

@@ -58,6 +58,7 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
     var roles by remember { mutableStateOf(mapOf<String, String>()) }
     var log by remember { mutableStateOf(emptyList<String>()) }
     var probing by remember { mutableStateOf(true) }
+    var repo by remember { mutableStateOf(RepoStateRow()) }
     var drift by remember { mutableStateOf<Pair<String, String>?>(null) }
     var diffText by remember { mutableStateOf("") }
     var diffErr by remember { mutableStateOf("") }
@@ -71,6 +72,7 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
 
     suspend fun load() {
         probing = true
+        repo = withContext(Dispatchers.IO) { parseRepoState(app?.repoState() ?: "{}") }
         status = onIo {
             val json = app?.plan("") ?: return@onIo "no state"
             hosts = parsePlan(json)
@@ -131,6 +133,15 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
             item {
                 SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        if (repo.branch.isNotEmpty()) {
+                            Text(
+                                (if (repo.clean) "✓ " else "! ") +
+                                    "${repo.branch} · ${if (repo.clean) "clean tree" else "uncommitted changes — push or stash first"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (repo.clean) OkText else Warn,
+                            )
+                        }
+
                         if (probing) {
                             Text("probing every host…", style = MaterialTheme.typography.bodySmall, color = Muted)
                         }
