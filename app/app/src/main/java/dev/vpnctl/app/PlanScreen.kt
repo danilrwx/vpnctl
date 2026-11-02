@@ -134,11 +134,17 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
                 SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                         if (repo.branch.isNotEmpty()) {
+                            val ready = repo.clean && repo.pushed
+                            val what = when {
+                                !repo.clean -> "uncommitted changes — commit or stash first"
+                                !repo.pushed -> "not pushed — push before apply"
+                                else -> "clean tree · pushed"
+                            }
+
                             Text(
-                                (if (repo.clean) "✓ " else "! ") +
-                                    "${repo.branch} · ${if (repo.clean) "clean tree" else "uncommitted changes — push or stash first"}",
+                                (if (ready) "✓ " else "! ") + "${repo.branch} · $what",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (repo.clean) OkText else Warn,
+                                color = if (ready) OkText else Warn,
                             )
                         }
 
@@ -252,17 +258,49 @@ fun PlanScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -> U
 
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
-                "exits first, the jump host last · stop and roll back if the probe fails",
+                if (repo.branch.isNotEmpty() && (!repo.clean || !repo.pushed)) {
+                    "the state must be clean and on origin before the hosts move"
+                } else {
+                    "exits first, the jump host last · stop and roll back if the probe fails"
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = Muted,
                 modifier = Modifier.padding(bottom = 10.dp),
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val canApply = repo.branch.isNotEmpty() && repo.clean && repo.pushed
+
                 PrimaryButton(
-                    text = if (busy) "applying…" else "Apply ${hosts.size} hosts",
+                    text = when {
+                        busy -> if (canApply) "applying…" else "pushing…"
+                        canApply -> "Apply ${hosts.size} hosts"
+                        else -> "Push to origin"
+                    },
                     onClick = {
                         if (busy) {
+                            return@PrimaryButton
+                        }
+
+                        if (!canApply) {
+                            busy = true
+                            status = "pushing…"
+
+                            scope.launch {
+                                val out = try {
+                                    onIo { pushState(app) }
+                                } catch (e: Exception) {
+                                    "error: ${e.message}"
+                                }
+
+                                busy = false
+                                status = out
+
+                                if (out.startsWith("pushed")) {
+                                    load()
+                                }
+                            }
+
                             return@PrimaryButton
                         }
 

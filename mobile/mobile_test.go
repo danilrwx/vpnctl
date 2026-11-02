@@ -234,6 +234,15 @@ func TestHeadIsTheShortCommit(t *testing.T) {
 	if empty.Head() != "" {
 		t.Fatalf("a state without a repository named a commit: %q", empty.Head())
 	}
+
+	rs := app.RepoState()
+	if !strings.Contains(rs, `"head":"`+head+`"`) {
+		t.Fatalf("repo state has no head: %s", rs)
+	}
+
+	if !strings.Contains(rs, `"pushed":false`) {
+		t.Fatalf("a repository with no origin claims to be pushed: %s", rs)
+	}
 }
 
 // TestAddUserExpiry: the form offers none, 30 days, 90 days or a date. The date

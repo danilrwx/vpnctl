@@ -44,12 +44,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** RepoStateRow is what the git repository says about the state on screen. */
-data class RepoStateRow(val branch: String = "", val clean: Boolean = true, val head: String = "")
+data class RepoStateRow(
+    val branch: String = "",
+    val clean: Boolean = true,
+    val head: String = "",
+    val origin: String = "",
+    val pushed: Boolean = false,
+)
 
 /** parseRepoState reads mobile.RepoState; a state without a repository is empty. */
 fun parseRepoState(json: String): RepoStateRow = try {
     val o = org.json.JSONObject(json)
-    RepoStateRow(o.optString("branch"), o.optBoolean("clean", true), o.optString("head"))
+    RepoStateRow(
+        o.optString("branch"),
+        o.optBoolean("clean", true),
+        o.optString("head"),
+        o.optString("origin"),
+        o.optBoolean("pushed", false),
+    )
 } catch (e: Exception) {
     RepoStateRow()
 }

@@ -731,6 +731,8 @@ func (a *App) RepoState() string {
 		Branch string `json:"branch"`
 		Clean  bool   `json:"clean"`
 		Head   string `json:"head"`
+		Origin string `json:"origin"`
+		Pushed bool   `json:"pushed"`
 	}{}
 
 	if a.repo != nil {
@@ -744,6 +746,11 @@ func (a *App) RepoState() string {
 
 		if head, err := a.repo.Head(); err == nil {
 			out.Head = head
+		}
+
+		if origin, err := a.repo.OriginMain(); err == nil {
+			out.Origin = origin
+			out.Pushed = origin == out.Head
 		}
 	}
 
