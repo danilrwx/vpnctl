@@ -188,10 +188,23 @@ func (a *App) Message(user, lang string, markdown bool) (string, error) {
 }
 
 // AddUser creates a user, writes the state and commits it.
-func (a *App) AddUser(name, modes, protocols string, tg bool) (string, error) {
+func (a *App) AddUser(name, modes, protocols string, tg bool, expires string) (string, error) {
+	// the date is checked before anything is created: a user that cannot be
+	// fixed from the phone is worse than an error on the form
+	day, err := expiryDate(expires)
+	if err != nil {
+		return "", err
+	}
+
 	msg, err := ops.UserAdd(a.st, name, splitList(modes), splitList(protocols), tg)
 	if err != nil {
 		return "", err
+	}
+
+	if day != "" {
+		u := a.st.Users[name]
+		u.Expires = day
+		a.st.Users[name] = u
 	}
 
 	if err := state.SaveUsers(a.dir, a.st.Users); err != nil {

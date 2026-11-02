@@ -368,8 +368,16 @@ fun setUserEnabled(app: mobile.App?, name: String, on: Boolean): String {
 }
 
 /** addUser joins the sets the way the shell does: comma separated lists. */
-fun addUser(app: mobile.App?, name: String, modes: Set<String>, protocols: Set<String>, tg: Boolean): String {
-    val msg = app?.addUser(name, modes.joinToString(","), protocols.joinToString(","), tg) ?: return "no state"
+fun addUser(
+    app: mobile.App?,
+    name: String,
+    modes: Set<String>,
+    protocols: Set<String>,
+    tg: Boolean,
+    expires: String,
+): String {
+    val msg = app?.addUser(name, modes.joinToString(","), protocols.joinToString(","), tg, expires)
+        ?: return "no state"
     return "ok: $msg"
 }
 

@@ -218,3 +218,30 @@ func TestHeadIsTheShortCommit(t *testing.T) {
 		t.Fatalf("a state without a repository named a commit: %q", empty.Head())
 	}
 }
+
+// TestAddUserExpiry: the form offers none, 30 days, 90 days or a date. The date
+// lands in users.yaml with the user, and a malformed one creates nothing.
+func TestAddUserExpiry(t *testing.T) {
+	app := openFixture(t)
+
+	msg, err := app.AddUser("newbie", "split", "reality", false, "2026-12-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.HasPrefix(msg, "users: + newbie") {
+		t.Fatalf("unexpected message %q", msg)
+	}
+
+	if got := app.st.Users["newbie"].Expires; got != "2026-12-01" {
+		t.Fatalf("expiry %q", got)
+	}
+
+	if _, err := app.AddUser("ghost", "split", "reality", false, "01.12.2026"); err == nil {
+		t.Fatal("a date in the wrong format was accepted")
+	}
+
+	if _, ok := app.st.Users["ghost"]; ok {
+		t.Fatal("a rejected date still created the user")
+	}
+}
