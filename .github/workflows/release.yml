@@ -46,7 +46,7 @@ jobs:
           test -n "$KEYSTORE" || { echo "VPNCTL_KEYSTORE_BASE64 is not set" >&2; exit 1; }
           printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.10.2"
 
