@@ -455,34 +455,12 @@ func Load(dir string) (*State, error) {
 // normalize fills the defaults serde applies on deserialization: urltest timings and
 // the DNS resolvers of a routing file without a `dns` section.
 func (s *State) normalize() {
-	fillTest := func(t *URLTest) {
-		if t.IntervalS == 0 {
-			t.IntervalS = 60
-		}
-
-		if t.ToleranceMS == 0 {
-			t.ToleranceMS = 300
-		}
-
-		if t.Failures == 0 {
-			t.Failures = 2
-		}
-	}
 	for i := range s.Links {
 		fillTest(&s.Links[i].URLTest)
 	}
 
 	for name, r := range s.Routing {
-		fillTest(&r.Exit.URLTest)
-
-		if len(r.DNS.Direct) == 0 {
-			r.DNS.Direct = []string{"77.88.8.8", "1.1.1.1"}
-		}
-
-		if r.DNS.Remote == "" {
-			r.DNS.Remote = "https://1.1.1.1/dns-query"
-		}
-
+		normalizeRouting(&r)
 		s.Routing[name] = r
 	}
 
@@ -496,6 +474,36 @@ func (s *State) normalize() {
 
 	if s.Secrets.Links == nil {
 		s.Secrets.Links = map[string]LinkSecrets{}
+	}
+}
+
+// fillTest fills the urltest timings a routing or link file may leave out.
+func fillTest(t *URLTest) {
+	if t.IntervalS == 0 {
+		t.IntervalS = 60
+	}
+
+	if t.ToleranceMS == 0 {
+		t.ToleranceMS = 300
+	}
+
+	if t.Failures == 0 {
+		t.Failures = 2
+	}
+}
+
+// normalizeRouting fills what a routing file may leave out: the urltest timings
+// and the DNS resolvers. Saving goes through it, so a file the tool wrote is
+// canonical before the next load ever normalises it.
+func normalizeRouting(r *Routing) {
+	fillTest(&r.Exit.URLTest)
+
+	if len(r.DNS.Direct) == 0 {
+		r.DNS.Direct = []string{"77.88.8.8", "1.1.1.1"}
+	}
+
+	if r.DNS.Remote == "" {
+		r.DNS.Remote = "https://1.1.1.1/dns-query"
 	}
 }
 

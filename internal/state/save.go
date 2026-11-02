@@ -106,11 +106,15 @@ func SaveInbounds(dir string, inbounds map[string]map[string]Inbound) error {
 	return os.WriteFile(filepath.Join(dir, "protocols.yaml"), b, 0o644)
 }
 
-// SaveRouting writes routing/<host>.yaml.
+// SaveRouting writes routing/<host>.yaml. The defaults a load would fill are
+// filled here first: a file the tool wrote has to be canonical as written, or
+// check reports the state as unformatted right after it was created.
 func SaveRouting(dir, host string, r Routing) error {
 	if err := os.MkdirAll(filepath.Join(dir, "routing"), 0o755); err != nil {
 		return err
 	}
+
+	normalizeRouting(&r)
 
 	b, err := marshal(r)
 	if err != nil {

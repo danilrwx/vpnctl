@@ -242,8 +242,8 @@ func Init(dir string, opt InitOptions) (InitResult, error) {
 	}
 
 	defaults := map[string]string{
-		"sets/ru-direct.yaml": "geosite:\n- category-ru\n- yandex\n- vk\ndomains:\n- gosuslugi.ru\n",
-		"sets/ads.yaml":       "geosite:\n- category-ads-all\n",
+		"sets/ru-direct.yaml": "geosite:\n  - category-ru\n  - yandex\n  - vk\ndomains:\n  - gosuslugi.ru\n",
+		"sets/ads.yaml":       "geosite:\n  - category-ads-all\n",
 	}
 	for name, body := range defaults {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
