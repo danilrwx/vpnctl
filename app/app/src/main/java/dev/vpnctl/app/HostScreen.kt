@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -46,8 +50,16 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var served by remember { mutableStateOf(emptyList<String>()) }
     var status by remember { mutableStateOf("") }
     var epoch by remember { mutableStateOf(0) }
+    var editing by remember { mutableStateOf(false) }
+    var editSSH by remember { mutableStateOf("") }
+    var editIP by remember { mutableStateOf("") }
+    var editDomain by remember { mutableStateOf("") }
+    var editVia by remember { mutableStateOf("") }
+    var editEngine by remember { mutableStateOf("sing-box") }
+    var editBusy by remember { mutableStateOf(false) }
 
     val head = remember(epoch) { app?.head().orEmpty() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     LaunchedEffect(name, epoch) {
         host = withContext(Dispatchers.IO) {
@@ -76,6 +88,19 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
             ).joinToString(" · "),
             onBack = onBack,
             stacked = true,
+            actions = {
+                IconAction(Icons.Outlined.Edit, {
+                    val row = host
+                    if (row != null) {
+                        editSSH = ""
+                        editIP = row.ip
+                        editDomain = row.domain
+                        editVia = row.via
+                        editEngine = row.engine.ifEmpty { "sing-box" }
+                        editing = true
+                    }
+                }, "Edit")
+            },
         )
 
         LazyColumn(modifier = Modifier.weight(1f)) {
@@ -229,5 +254,91 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
 
             item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+
+    if (editing) {
+        AppDialog(
+            title = "Edit $name",
+            onDismiss = { editing = false },
+            confirmLabel = if (editBusy) "saving…" else "Save",
+            confirmEnabled = !editBusy,
+            onConfirm = {
+                editBusy = true
+
+                scope.launch {
+                    status = onIo {
+                        editHostText(Core.current(), name, editSSH, editIP, editDomain, editVia, editEngine)
+                    }
+                    editBusy = false
+
+                    if (status.startsWith("ok")) {
+                        editing = false
+                        epoch++
+                    }
+                }
+            },
+            content = {
+                Text(
+                    "the name, the role and the link secrets are not editable here: a rename or a role change rewrites both",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+
+                OutlinedTextField(
+                    value = editSSH,
+                    onValueChange = { editSSH = it },
+                    label = { Text("ssh, empty — leave it") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                OutlinedTextField(
+                    value = editIP,
+                    onValueChange = { editIP = it },
+                    label = { Text("ip") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                OutlinedTextField(
+                    value = editDomain,
+                    onValueChange = { editDomain = it },
+                    label = { Text("domain, entries only") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+
+                Text("engine", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Chip("sing-box", { editEngine = "sing-box" }, selected = editEngine == "sing-box")
+                    Chip("xray", { editEngine = "xray" }, selected = editEngine == "xray")
+                }
+            },
+        )
+    }
+}
+
+/** editHostText writes the editable fields; empty values mean "leave it". */
+fun editHostText(
+    app: mobile.App?,
+    name: String,
+    ssh: String,
+    ip: String,
+    domain: String,
+    via: String,
+    engine: String,
+): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.editHost(name, ssh, ip, domain, via, engine)} · push when the forge is reachable"
+    } catch (e: Exception) {
+        "error: ${e.message}"
     }
 }
