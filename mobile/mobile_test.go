@@ -24,6 +24,7 @@ func openFixture(t *testing.T) *App {
 	// key: give the test its own, or it reads the developer's ~/.config and
 	// fails on a runner that has no key at all
 	keyPath := filepath.Join(t.TempDir(), "age.txt")
+
 	id, err := ageio.NewIdentity()
 	if err != nil {
 		t.Fatal(err)
