@@ -20,6 +20,8 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,6 +55,8 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
     var status by remember { mutableStateOf("") }
     var epoch by remember { mutableStateOf(0) }
     var metrics by remember { mutableStateOf<MetricsRow?>(null) }
+    var inbounds by remember { mutableStateOf(emptyList<InboundRow>()) }
+    var toggling by remember { mutableStateOf("") }
     var certs by remember { mutableStateOf(emptyList<CertRow>()) }
     var certNote by remember { mutableStateOf("") }
     var series by remember { mutableStateOf(emptyList<MetricsRow>()) }
@@ -83,6 +88,12 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                     val json = app?.plan(name) ?: return@onIo "no state"
                     plan = parsePlan(json).firstOrNull { it.name == name }
                     ""
+                }
+            }
+
+            launch {
+                inbounds = withContext(Dispatchers.IO) {
+                    app?.let { parseInbounds(it.inbounds(name)) } ?: emptyList()
                 }
             }
 
@@ -258,29 +269,61 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                 }
             }
 
-            if (h?.role == "entry") {
-                item {
-                    SectionLabel("Inbounds · what the entry serves")
+            item {
+                SectionLabel(
+                    if (h?.role == "entry") "Inbounds · what the entry serves" else "Inbounds · what the node serves",
+                )
 
-                    SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        userProtocols(served).forEachIndexed { index, proto ->
-                            if (index > 0) {
-                                HorizontalDivider(color = Edge)
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    inbounds.forEachIndexed { index, inbound ->
+                        if (index > 0) {
+                            HorizontalDivider(color = Edge)
+                        }
+
+                        val count = users.count { user ->
+                            when (inbound.name) {
+                                "mtg" -> user.tg
+                                else -> inbound.name in user.protocols
                             }
+                        }
 
-                            val count = users.count { proto in it.protocols }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(proto, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(inbound.name, style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    "$count ${plural(count, "user", "users")}",
+                                    "port ${inbound.port}" +
+                                        if (h?.role == "entry" && count > 0) " · $count ${plural(count, "user", "users")}" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Muted,
                                 )
                             }
+
+                            Switch(
+                                checked = inbound.enabled,
+                                enabled = toggling.isEmpty(),
+                                onCheckedChange = { on ->
+                                    toggling = inbound.name
+
+                                    scope.launch {
+                                        status = onIo { toggleInboundText(Core.current(), name, inbound.name, on) }
+                                        toggling = ""
+
+                                        if (status.startsWith("ok")) {
+                                            epoch++
+                                        }
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Accent,
+                                    uncheckedThumbColor = Muted,
+                                    uncheckedTrackColor = Surface2,
+                                    uncheckedBorderColor = Edge,
+                                ),
+                            )
                         }
                     }
                 }
@@ -462,6 +505,33 @@ data class MetricsRow(
     val uptime: Long,
     val conns: Int,
 )
+
+/** InboundRow is one inbound of a host with its switch state. */
+data class InboundRow(val name: String, val port: Int, val enabled: Boolean)
+
+/** parseInbounds reads mobile.Inbounds. */
+fun parseInbounds(json: String): List<InboundRow> = try {
+    val arr = org.json.JSONArray(json)
+    (0 until arr.length()).map { i ->
+        val o = org.json.JSONObject(arr.getString(i))
+        InboundRow(o.optString("name"), o.optInt("port"), o.optBoolean("enabled", true))
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
+/** toggleInboundText flips one inbound; the change reaches the host on apply. */
+fun toggleInboundText(app: mobile.App?, host: String, name: String, on: Boolean): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.toggleInbound(host, name, on)} · applied on the next apply"
+    } catch (e: Exception) {
+        "error: ${e.message}"
+    }
+}
 
 /** CertRow is one certificate the host holds. */
 data class CertRow(val name: String, val notAfter: Long, val names: List<String>)
