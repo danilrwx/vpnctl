@@ -288,8 +288,21 @@ fun App(modifier: Modifier = Modifier) {
     var devicesOpen by remember { mutableStateOf(false) }
     var hostOpen by remember { mutableStateOf<String?>(null) }
     var hostAddOpen by remember { mutableStateOf(false) }
+    // the first launch has nothing to show: point it at a repository before the
+    // tabs make sense, and let it be skipped to look at the fixture
+    var onboarding by remember { mutableStateOf(needsOnboarding(ctx)) }
 
     val overlay = user != null || adding || planOpen || devicesOpen || hostOpen != null || hostAddOpen
+
+    if (onboarding) {
+        Scaffold(containerColor = Canvas, contentWindowInsets = WindowInsets.safeDrawing) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                OnboardingScreen(ctx, onDone = { onboarding = false })
+            }
+        }
+
+        return
+    }
 
     // The card, the plan and the new-user form are overlays over one activity:
     // without this, the system Back finishes the app instead of closing them.
