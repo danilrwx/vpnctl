@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -48,6 +49,14 @@ type App struct {
 
 // Open loads the state directory. keyPath may be empty to use the default age key.
 func Open(dir, keyPath string) (*App, error) {
+	// The render of an older commit needs scratch space. On Android the system
+	// temp (/data/local/tmp) is not writable by the app, and a plan that cannot
+	// render the applied commit gives up on drift, so the scratch goes next to
+	// the state instead of into the process environment.
+	if tmp := scratchDir(dir); tmp != "" {
+		plan.TempBase = tmp
+	}
+
 	if keyPath != "" {
 		if err := setKey(keyPath); err != nil {
 			return nil, err
@@ -65,6 +74,16 @@ func Open(dir, keyPath string) (*App, error) {
 	}
 
 	return &App{st: st, repo: repo, dir: dir}, nil
+}
+
+// scratchDir creates the app-owned temp directory the render needs.
+func scratchDir(dir string) string {
+	tmp := filepath.Join(filepath.Dir(dir), "tmp")
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		return ""
+	}
+
+	return tmp
 }
 
 func setKey(path string) error {

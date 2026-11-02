@@ -187,6 +187,11 @@ var ErrPreMigration = errors.New("secrets at that commit are still in the sops f
 // RenderAt is the render of the state at the marker commit, for drift. The date
 // is the same as the live render: expiry is part of what a host should have, so
 // a user whose day has come is gone from both sides and never looks like drift.
+// TempBase is where RenderAt puts the checkout of an older commit; empty means
+// the system temp. The app sets it, because on Android that directory is not
+// writable by the process.
+var TempBase string
+
 func RenderAt(st *state.State, commit, host string, at time.Time) (render.HostFiles, error) {
 	repo, err := gitsync.Open(st.Dir)
 	if err != nil {
@@ -204,7 +209,7 @@ func RenderAt(st *state.State, commit, host string, at time.Time) (render.HostFi
 		}
 	}
 
-	tmp, err := os.MkdirTemp("", "vpnctl-at-")
+	tmp, err := os.MkdirTemp(TempBase, "vpnctl-at-")
 	if err != nil {
 		return nil, err
 	}
