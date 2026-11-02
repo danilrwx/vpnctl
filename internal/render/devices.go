@@ -25,6 +25,7 @@ func deviceFiles(st *state.State) (HostFiles, error) {
 	for name := range st.Devices {
 		names = append(names, name)
 	}
+
 	sort.Strings(names)
 
 	var block strings.Builder

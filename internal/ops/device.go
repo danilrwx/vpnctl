@@ -83,6 +83,7 @@ func DeviceNames(st *state.State) []string {
 	for name := range st.Devices {
 		out = append(out, name)
 	}
+
 	sort.Strings(out)
 
 	return out
@@ -127,6 +128,7 @@ func DeviceSync(st *state.State) ([]string, error) {
 		}
 
 		byKey[ageKey] = name
+
 		added = append(added, msg)
 	}
 
