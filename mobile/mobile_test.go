@@ -513,3 +513,47 @@ func TestCertsAndMetricsNeedTheAgent(t *testing.T) {
 		t.Fatal("Metrics dialled without a signer")
 	}
 }
+
+// TestToggleInbound: ws is not an entry's only way in, so it can be turned off;
+// reality cannot, because the fixture's link and users depend on it.
+func TestToggleInbound(t *testing.T) {
+	app := openFixture(t)
+
+	// every fixture user carries both reality and ws, so the switch refuses
+	if _, err := app.ToggleInbound("ru-msk-1", "ws", false); err == nil {
+		t.Fatal("an inbound in use was turned off")
+	}
+
+	if _, err := app.ToggleInbound("ru-msk-1", "reality", false); err == nil {
+		t.Fatal("an inbound the users need was turned off")
+	}
+
+	if _, err := app.ToggleInbound("ru-msk-1", "quic", true); err == nil {
+		t.Fatal("an unknown inbound was toggled")
+	}
+}
+
+// TestInboundsList: the screen needs the switch state, not only the protocols a
+// user could be given; both come from the same map.
+func TestInboundsList(t *testing.T) {
+	app := openFixture(t)
+
+	var inb []InboundInfo
+	if err := json.Unmarshal([]byte(app.Inbounds("ru-msk-1")), &inb); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(inb) == 0 {
+		t.Fatal("no inbounds")
+	}
+
+	for i, one := range inb {
+		if i > 0 && inb[i-1].Name > one.Name {
+			t.Fatalf("not sorted: %+v", inb)
+		}
+	}
+
+	if got := app.Inbounds("ghost"); got != "[]" {
+		t.Fatalf("an unknown host answered %q", got)
+	}
+}

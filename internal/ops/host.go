@@ -265,3 +265,56 @@ func HostEdit(st *state.State, name string, o HostOptions) (string, error) {
 
 	return fmt.Sprintf("hosts: %s: edited", name), nil
 }
+
+// InboundToggle turns one inbound of a host on or off. The state decides; the
+// next apply makes it real. Validation still runs after it, so turning off an
+// inbound the links or users depend on is refused with a reason.
+func InboundToggle(st *state.State, host, name string, on bool) (string, error) {
+	inb, ok := st.Inbounds[host]
+	if !ok {
+		return "", fmt.Errorf("host %q has no inbounds", host)
+	}
+
+	i, ok := inb[name]
+	if !ok {
+		return "", fmt.Errorf("host %q has no inbound %q", host, name)
+	}
+
+	if !on {
+		// an inbound someone depends on is not a switch: the users' links and
+		// the links between hosts would keep pointing at a door that is gone
+		var users, links []string
+
+		for userName, u := range st.Users {
+			if !u.IsEnabled() {
+				continue
+			}
+
+			if containsStr(u.Protocols, name) || (name == "mtg" && u.TG) {
+				users = append(users, userName)
+			}
+		}
+
+		for _, l := range st.Links {
+			if (l.From == host || l.To == host) && containsStr(l.Protocols, name) {
+				links = append(links, l.From+"->"+l.To)
+			}
+		}
+
+		if len(users) > 0 || len(links) > 0 {
+			return "", fmt.Errorf("inbound %s/%s is in use: %d users and %d links depend on it (%s)",
+				host, name, len(users), len(links), strings.Join(append(append([]string{}, users...), links...), ", "))
+		}
+	}
+
+	i.Enabled = &on
+	inb[name] = i
+	st.Inbounds[host] = inb
+
+	state := "off"
+	if on {
+		state = "on"
+	}
+
+	return fmt.Sprintf("inbounds: %s/%s: %s", host, name, state), nil
+}

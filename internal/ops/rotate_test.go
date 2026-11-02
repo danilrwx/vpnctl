@@ -246,3 +246,41 @@ func TestRoutingRules(t *testing.T) {
 		t.Fatal("the rule survived removal")
 	}
 }
+
+// TestInboundToggle: an inbound flips in the state, and the switch is the same
+// one validate and the render read.
+func TestInboundToggle(t *testing.T) {
+	st := fixture(t)
+
+	// reality on the entry carries the user and the link: the switch refuses
+	if _, err := InboundToggle(st, "a", "reality", false); err == nil {
+		t.Fatal("an inbound in use was turned off")
+	}
+
+	// ws exists but nobody depends on it yet
+	st.Inbounds["a"]["ws"] = state.Inbound{Port: 8444}
+
+	if _, err := InboundToggle(st, "a", "ws", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Inbounds["a"]["ws"].IsEnabled() {
+		t.Fatal("the inbound is still enabled")
+	}
+
+	if _, err := InboundToggle(st, "a", "ws", true); err != nil {
+		t.Fatal(err)
+	}
+
+	if !st.Inbounds["a"]["ws"].IsEnabled() {
+		t.Fatal("the inbound did not come back")
+	}
+
+	if _, err := InboundToggle(st, "a", "quic", true); err == nil {
+		t.Fatal("an unknown inbound was toggled")
+	}
+
+	if _, err := InboundToggle(st, "ghost", "reality", true); err == nil {
+		t.Fatal("an unknown host was toggled")
+	}
+}

@@ -1075,3 +1075,53 @@ func (a *App) Certs(host string) (string, error) {
 
 	return mustJSON(resp.Certs), nil
 }
+
+// ToggleInbound turns one inbound of a host on or off. The change is written and
+// validated now and reaches the host on the next apply.
+func (a *App) ToggleInbound(host, name string, on bool) (string, error) {
+	msg, err := ops.InboundToggle(a.st, host, name, on)
+	if err != nil {
+		return "", err
+	}
+
+	if err := state.SaveInbounds(a.dir, a.st.Inbounds); err != nil {
+		return "", err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return "", fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
+
+// InboundInfo is one inbound of a host as the screen shows it.
+type InboundInfo struct {
+	Name    string `json:"name"`
+	Port    int    `json:"port"`
+	Enabled bool   `json:"enabled"`
+}
+
+// Inbounds returns the inbounds of a host, sorted by name, as JSON.
+func (a *App) Inbounds(host string) string {
+	inb, ok := a.st.Inbounds[host]
+	if !ok {
+		return "[]"
+	}
+
+	out := make([]InboundInfo, 0, len(inb))
+
+	for name, i := range inb {
+		out = append(out, InboundInfo{Name: name, Port: i.Port, Enabled: i.IsEnabled()})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	return mustJSON(out)
+}
