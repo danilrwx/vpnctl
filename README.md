@@ -21,8 +21,8 @@ An entry close to home, exits abroad, users and subscriptions — YAML files in 
 - **State is the truth.** `hosts.yaml`, `links.yaml`, `users.yaml`, routing and
   sets describe everything. Secrets live in one `secrets.age.yaml`, encrypted for
   every device you own plus an offline backup identity.
-- **Render is deterministic.** Two runs produce identical bytes, and golden files
-  from the original Rust core keep the renderer honest.
+- **Render is deterministic.** Two runs produce identical bytes, and golden snapshots
+  keep the renderer honest.
 - **Apply is guarded.** Only a clean, pushed state is applied, only forward, with
   config checks before the swap, a chain probe after it, and a rollback when the
   probe fails.
@@ -56,7 +56,7 @@ $ vpnctl plan -dir ./state
 nl-ams-1 · applied 9c0d2b1 · 2 changes
   ~ etc/sing-box/config.json
   + var/www/sub/olga.txt
-ru-spb-2 · ✗ ssh: connect: connection refused
+lv-rix-2 · ✗ ssh: connect: connection refused
 
 $ vpnctl apply -dir ./state --host nl-ams-1
 ▸ nl-ams-1
