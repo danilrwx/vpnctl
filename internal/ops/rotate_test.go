@@ -191,3 +191,58 @@ func TestLinkAddAndSet(t *testing.T) {
 		t.Fatal("a link with no protocols left was accepted")
 	}
 }
+
+// TestRoutingRules: the chain is the decision and its order is part of it, so a
+// new rule goes to the end, a move is one step, and a toggle keeps the rule.
+func TestRoutingRules(t *testing.T) {
+	st := fixture(t)
+	st.Sets = map[string]state.Set{"ru-direct": {Geosite: []string{"category-ru"}}}
+
+	if _, err := RuleAdd(st, "a", "split", RuleInput{Sets: []string{"ru-direct"}, Action: "direct"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := RuleAdd(st, "a", "split", RuleInput{Sets: []string{"ghost"}, Action: "direct"}); err == nil {
+		t.Fatal("a rule over an unknown set was accepted")
+	}
+
+	if _, err := RuleAdd(st, "a", "split", RuleInput{Action: "direct"}); err == nil {
+		t.Fatal("an empty catch-all was accepted")
+	}
+
+	if _, err := RuleAdd(st, "a", "split", RuleInput{Sets: []string{"ru-direct"}, Action: "haproxy"}); err == nil {
+		t.Fatal("an unknown action was accepted")
+	}
+
+	if _, err := RuleAdd(st, "a", "nope", RuleInput{Sets: []string{"ru-direct"}, Action: "direct"}); err == nil {
+		t.Fatal("an unknown chain was accepted")
+	}
+
+	if len(st.Routing["a"].Groups.Split) != 1 {
+		t.Fatalf("split rules: %+v", st.Routing["a"].Groups.Split)
+	}
+
+	if _, err := RuleToggle(st, "a", "split", 0, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Routing["a"].Groups.Split[0].IsEnabled() {
+		t.Fatal("the rule is still enabled")
+	}
+
+	if _, err := RuleMove(st, "a", "split", 0, true); err == nil {
+		t.Fatal("the first rule moved up")
+	}
+
+	if _, err := RuleRemove(st, "a", "split", 5); err == nil {
+		t.Fatal("a rule that does not exist was removed")
+	}
+
+	if _, err := RuleRemove(st, "a", "split", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(st.Routing["a"].Groups.Split) != 0 {
+		t.Fatal("the rule survived removal")
+	}
+}

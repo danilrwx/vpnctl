@@ -184,3 +184,123 @@ func actionText(a state.Action) string {
 
 	return string(a.Kind)
 }
+
+// RouteTrace is one rule the tester consulted and what it decided.
+type RouteTrace struct {
+	Rule    int    `json:"rule"`
+	Title   string `json:"title"`
+	Verdict string `json:"verdict"`
+}
+
+// RouteAnswer is the tester's answer: where the address would go, and why.
+type RouteAnswer struct {
+	Result string       `json:"result"`
+	Trace  []RouteTrace `json:"trace"`
+}
+
+// RouteTest walks a chain for one domain. It answers only what it can decide on
+// the phone: explicit domains in sets and rules. A rule that needs geosite or an
+// address stops the walk with "cannot decide here" instead of guessing.
+func (a *App) RouteTest(host, chain, domain string) string {
+	domain = strings.TrimSpace(strings.ToLower(domain))
+	if domain == "" {
+		return mustJSON(RouteAnswer{Result: "enter a domain"})
+	}
+
+	var rules []state.Rule
+
+	switch chain {
+	case "all":
+		rules = a.st.Routing[host].Groups.All
+	case "split":
+		rules = a.st.Routing[host].Groups.Split
+	case "full":
+		rules = a.st.Routing[host].Groups.Full
+	default:
+		return mustJSON(RouteAnswer{Result: "unknown chain"})
+	}
+
+	answer := RouteAnswer{Trace: make([]RouteTrace, 0, len(rules))}
+
+	for i, rule := range rules {
+		title, _ := ruleMatch(a.st.Sets, rule.Match)
+
+		if !rule.IsEnabled() {
+			answer.Trace = append(answer.Trace, RouteTrace{i + 1, title, "off"})
+			continue
+		}
+
+		decided, matched := matchDomain(a.st.Sets, rule.Match, domain)
+
+		if matched {
+			answer.Trace = append(answer.Trace, RouteTrace{i + 1, title, "matched"})
+			answer.Result = actionText(rule.Action)
+
+			return mustJSON(answer)
+		}
+
+		if !decided {
+			answer.Trace = append(answer.Trace, RouteTrace{i + 1, title, "needs the host"})
+			answer.Result = fmt.Sprintf("cannot decide here: rule %d needs geosite or the address on the host", i+1)
+
+			return mustJSON(answer)
+		}
+
+		answer.Trace = append(answer.Trace, RouteTrace{i + 1, title, "no match"})
+	}
+
+	answer.Result = "no rule matched"
+
+	return mustJSON(answer)
+}
+
+// matchDomain answers for the parts a phone holds: explicit domains in the rule
+// and in its sets. decided=false means the rule could still match on the host.
+func matchDomain(sets map[string]state.Set, m state.Match, domain string) (decided, matched bool) {
+	if len(m.Inbound) > 0 || len(m.Port) > 0 || len(m.IP) > 0 {
+		return true, false // not a question about this domain
+	}
+
+	for _, d := range m.Domains {
+		if domainMatches(domain, d) {
+			return true, true
+		}
+	}
+
+	if len(m.Sets) > 0 {
+		unknown := false
+
+		for _, name := range m.Sets {
+			s := sets[name]
+
+			for _, d := range s.Domains {
+				if domainMatches(domain, d) {
+					return true, true
+				}
+			}
+
+			if len(s.Geosite) > 0 {
+				unknown = true
+			}
+		}
+
+		if unknown {
+			return false, false
+		}
+
+		return true, false
+	}
+
+	if len(m.GeoIP) > 0 {
+		return false, false // an address, not a name
+	}
+
+	// nothing to match against: the catch-all
+	return true, true
+}
+
+func domainMatches(domain, rule string) bool {
+	rule = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(rule)), ".")
+
+	return domain == rule || strings.HasSuffix(domain, "."+rule)
+}

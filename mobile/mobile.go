@@ -931,3 +931,79 @@ func (a *App) EditHost(name, ssh, ip, domain, via, engine string) (string, error
 
 	return msg, nil
 }
+
+// AddRule appends a routing rule to a chain. The end is deliberate: the list is
+// top-down and first match wins.
+func (a *App) AddRule(host, chain, sets, geoip, inbound, domains, ips, action, note string) (string, error) {
+	msg, err := ops.RuleAdd(a.st, host, chain, ops.RuleInput{
+		Sets: splitList(sets), GeoIP: splitList(geoip), Inbound: splitList(inbound),
+		Domains: splitList(domains), IPs: splitList(ips), Action: action, Note: note,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.saveRouting(host, msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+// RemoveRule drops one rule by its position.
+func (a *App) RemoveRule(host, chain string, index int) (string, error) {
+	msg, err := ops.RuleRemove(a.st, host, chain, index)
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.saveRouting(host, msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+// MoveRule swaps a rule with its neighbour.
+func (a *App) MoveRule(host, chain string, index int, up bool) (string, error) {
+	msg, err := ops.RuleMove(a.st, host, chain, index, up)
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.saveRouting(host, msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+// ToggleRule turns a rule off without losing its place in the chain.
+func (a *App) ToggleRule(host, chain string, index int, on bool) (string, error) {
+	msg, err := ops.RuleToggle(a.st, host, chain, index, on)
+	if err != nil {
+		return "", err
+	}
+
+	if err := a.saveRouting(host, msg); err != nil {
+		return "", err
+	}
+
+	return msg, nil
+}
+
+func (a *App) saveRouting(host, msg string) error {
+	if err := state.SaveRouting(a.dir, host, a.st.Routing[host]); err != nil {
+		return err
+	}
+
+	if errs := validate.State(a.st); len(errs) > 0 {
+		return fmt.Errorf("invalid state: %s", errs[0])
+	}
+
+	if a.repo != nil {
+		return a.repo.Commit(msg)
+	}
+
+	return nil
+}

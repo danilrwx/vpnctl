@@ -443,3 +443,54 @@ func TestEditHost(t *testing.T) {
 		t.Fatal("an unknown engine was accepted")
 	}
 }
+
+// TestRouteTestStopsAtWhatItCannotKnow: the phone answers for explicit domains
+// and refuses to guess when a rule needs geosite or an address.
+func TestRouteTestStopsAtWhatItCannotKnow(t *testing.T) {
+	app := openFixture(t)
+
+	app.st.Sets["own"] = state.Set{Domains: []string{"example.ru"}}
+	app.st.Sets["geo"] = state.Set{Geosite: []string{"category-ru"}}
+	app.st.Routing["ru-msk-1"] = state.Routing{Groups: state.Groups{Split: []state.Rule{
+		{Match: state.Match{Sets: []string{"own"}}, Action: state.Action{Kind: state.ActionDirect}},
+		{Match: state.Match{GeoIP: []string{"ru"}}, Action: state.Action{Kind: state.ActionDirect}},
+		{Action: state.Action{Kind: state.ActionLink, Link: "auto"}},
+	}}}
+
+	var answer RouteAnswer
+	if err := json.Unmarshal([]byte(app.RouteTest("ru-msk-1", "split", "www.example.ru")), &answer); err != nil {
+		t.Fatal(err)
+	}
+
+	if answer.Result != "direct" {
+		t.Fatalf("result %q, trace %+v", answer.Result, answer.Trace)
+	}
+
+	app.st.Routing["ru-msk-1"] = state.Routing{Groups: state.Groups{Split: []state.Rule{
+		{Match: state.Match{Sets: []string{"geo"}}, Action: state.Action{Kind: state.ActionDirect}},
+		{Action: state.Action{Kind: state.ActionLink, Link: "auto"}},
+	}}}
+
+	if err := json.Unmarshal([]byte(app.RouteTest("ru-msk-1", "split", "example.ru")), &answer); err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(answer.Result, "cannot decide") {
+		t.Fatalf("a geosite rule was decided on the phone: %q", answer.Result)
+	}
+
+	// a disabled rule is reported and skipped
+	off := false
+	app.st.Routing["ru-msk-1"] = state.Routing{Groups: state.Groups{Split: []state.Rule{
+		{Match: state.Match{Domains: []string{"example.ru"}}, Action: state.Action{Kind: state.ActionBlock}, Enabled: &off},
+		{Action: state.Action{Kind: state.ActionDirect}},
+	}}}
+
+	if err := json.Unmarshal([]byte(app.RouteTest("ru-msk-1", "split", "example.ru")), &answer); err != nil {
+		t.Fatal(err)
+	}
+
+	if answer.Result != "direct" || len(answer.Trace) == 0 || answer.Trace[0].Verdict != "off" {
+		t.Fatalf("disabled rule: %q %+v", answer.Result, answer.Trace)
+	}
+}
