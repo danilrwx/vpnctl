@@ -86,6 +86,12 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     var backupErr by remember { mutableStateOf("") }
     var backupBlob by remember { mutableStateOf("") }
 
+    var alerts by remember { mutableStateOf(AlertsRow()) }
+    var hostRows by remember { mutableStateOf(emptyList<HostRow>()) }
+    var settingAlerts by remember { mutableStateOf(false) }
+    var alertsEntry by remember { mutableStateOf("") }
+    var alertsTopic by remember { mutableStateOf("") }
+
     val scope = rememberCoroutineScope()
     val recipient = remember(version) { localRecipient(ctx) }
     val sshKey = remember { File(ctx.filesDir, "identity.pub").takeIf { it.exists() }?.readText()?.trim().orEmpty() }
@@ -93,6 +99,12 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
     LaunchedEffect(version) {
         devices = withContext(Dispatchers.IO) {
             Core.current()?.let { parseDevices(it.devices()) } ?: emptyList()
+        }
+        alerts = withContext(Dispatchers.IO) {
+            Core.current()?.let { parseAlerts(it.alerts()) } ?: AlertsRow()
+        }
+        hostRows = withContext(Dispatchers.IO) {
+            Core.current()?.let { parseHosts(it.hosts()) } ?: emptyList()
         }
     }
 
@@ -178,6 +190,58 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                                 },
                                 enabled = !busy,
                             )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionLabel("Notifications")
+
+                SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        if (alerts.url.isEmpty()) {
+                            Text("off", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "the entry can notify the phone when the chain probe fails",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                            )
+                        } else {
+                            MonoText(alerts.url, color = Link, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                            Text(
+                                "served by ${alerts.serve.ifEmpty { "another host" }} · ${if (alerts.token) "token in secrets" else "no token"}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Muted,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+
+                        Row(modifier = Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    alertsEntry = alerts.serve.ifEmpty {
+                                        hostRows.firstOrNull { it.role == "entry" }?.name.orEmpty()
+                                    }
+                                    alertsTopic = alerts.url.substringAfterLast('/').ifEmpty { "" }
+                                    settingAlerts = true
+                                },
+                            ) {
+                                Text(if (alerts.url.isEmpty()) "Set up" else "Change", color = Link, style = MaterialTheme.typography.bodySmall)
+                            }
+
+                            if (alerts.url.isNotEmpty()) {
+                                TextButton(onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        status = onIo { setAlertsText(Core.current(), "", "") }
+                                        version++
+                                        busy = false
+                                    }
+                                }, enabled = !busy) {
+                                    Text("Turn off", color = DangerText, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                         }
                     }
                 }
@@ -424,6 +488,47 @@ fun DevicesScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                     textStyle = MaterialTheme.typography.bodyMedium,
                     colors = appFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
+                )
+            },
+        )
+    }
+
+    if (settingAlerts) {
+        AppDialog(
+            title = "Notifications",
+            onDismiss = { settingAlerts = false },
+            confirmLabel = "Save",
+            confirmEnabled = !busy && alertsEntry.isNotEmpty() && alertsTopic.isNotBlank(),
+            onConfirm = {
+                busy = true
+
+                scope.launch {
+                    status = onIo { setAlertsText(Core.current(), alertsEntry, alertsTopic.trim()) }
+                    version++
+                    settingAlerts = false
+                    busy = false
+                }
+            },
+            content = {
+                Text(
+                    "The entry runs ntfy behind its domain and the chain probe posts there. The public name is derived from the entry, so it cannot drift.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+
+                Text("entry", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                hostRows.filter { it.role == "entry" }.forEach { host ->
+                    Chip(host.name, { alertsEntry = host.name }, selected = alertsEntry == host.name)
+                }
+
+                OutlinedTextField(
+                    value = alertsTopic,
+                    onValueChange = { alertsTopic = it },
+                    label = { Text("topic, a-z 0-9 _ -") },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = appFieldColors(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 )
             },
         )
@@ -760,6 +865,30 @@ fun restoreFailure(message: String): String = when {
     message.contains("wrong passphrase") -> "wrong password, or the backup is damaged"
     message.contains("does not decrypt") -> "this key does not read the secrets here: it is not a recipient of age.yaml"
     else -> message.substringAfter("error: ").trim()
+}
+
+/** AlertsRow is the notification setup the screen shows. */
+data class AlertsRow(val url: String = "", val serve: String = "", val token: Boolean = false)
+
+/** parseAlerts reads mobile.Alerts. */
+fun parseAlerts(json: String): AlertsRow = try {
+    val o = org.json.JSONObject(json)
+    AlertsRow(o.optString("url"), o.optString("serve"), o.optBoolean("token"))
+} catch (e: Exception) {
+    AlertsRow()
+}
+
+/** setAlertsText points notifications at an entry, or turns them off. */
+fun setAlertsText(app: mobile.App?, serve: String, topic: String): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.setAlerts(serve, topic)} · push when the forge is reachable"
+    } catch (e: Exception) {
+        "error: ${e.message}"
+    }
 }
 
 /** addDeviceText adds a recipient generated on another device. */

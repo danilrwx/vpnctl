@@ -53,6 +53,9 @@ fun HostsScreen(
     var linkTo by remember { mutableStateOf("") }
     var linkProtos by remember { mutableStateOf(setOf("awg")) }
     var linkingBusy by remember { mutableStateOf(false) }
+    var editingLink by remember { mutableStateOf<LinkRow?>(null) }
+    var editProtos by remember { mutableStateOf(emptySet<String>()) }
+    var editActive by remember { mutableStateOf("") }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     val head = remember(epoch) { app?.head().orEmpty() }
@@ -124,7 +127,14 @@ fun HostsScreen(
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    editingLink = link
+                                    editProtos = link.protocols.split(" ").filter { it.isNotEmpty() }.toSet()
+                                    editActive = link.active
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             MonoText(
@@ -170,6 +180,63 @@ fun HostsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
         }
+    }
+
+    editingLink?.let { link ->
+        val was = link.protocols.split(" ").filter { it.isNotEmpty() }.toSet()
+        val add = (editProtos - was).joinToString(",")
+        val rm = (was - editProtos).joinToString(",")
+
+        AppDialog(
+            title = "${link.from} → ${link.to}",
+            onDismiss = { editingLink = null },
+            confirmLabel = "Save",
+            confirmEnabled = !linkingBusy && editProtos.isNotEmpty() &&
+                (add.isNotEmpty() || rm.isNotEmpty() || editActive != link.active),
+            onConfirm = {
+                linkingBusy = true
+
+                scope.launch {
+                    status = onIo { setLinkText(Core.current(), link.from, link.to, add, rm, editActive) }
+                    linkingBusy = false
+
+                    if (status.startsWith("ok")) {
+                        editingLink = null
+                        epoch++
+                    }
+                }
+            },
+            content = {
+                Text(
+                    "removing a transport from the link does not delete its keys; adding one back reuses them",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+
+                Text("protocols", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("awg", "reality", "hy2").forEach { proto ->
+                        Chip(
+                            proto,
+                            onClick = {
+                                editProtos = if (proto in editProtos) editProtos - proto else editProtos + proto
+                                if (editActive == proto && proto !in editProtos) {
+                                    editActive = editProtos.firstOrNull().orEmpty()
+                                }
+                            },
+                            selected = proto in editProtos,
+                        )
+                    }
+                }
+
+                Text("active", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    editProtos.sorted().forEach { proto ->
+                        Chip(proto, { editActive = proto }, selected = editActive == proto)
+                    }
+                }
+            },
+        )
     }
 
     if (linking) {
@@ -243,6 +310,19 @@ fun HostsScreen(
                 }
             },
         )
+    }
+}
+
+/** setLinkText applies the protocol set the edit dialog produced. */
+fun setLinkText(app: mobile.App?, from: String, to: String, add: String, rm: String, active: String): String {
+    if (app == null) {
+        return "no state"
+    }
+
+    return try {
+        "ok: ${app.setLink(from, to, add, rm, active, "")} · push when the forge is reachable"
+    } catch (e: Exception) {
+        "error: ${e.message}"
     }
 }
 
