@@ -3,6 +3,7 @@ package mobile
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/danilrwx/vpnctl-go/internal/ageio"
@@ -139,5 +140,122 @@ func TestRemoveDeviceFromStateWithoutAgeYaml(t *testing.T) {
 
 	if _, err := app.RemoveDevice("phone"); err == nil {
 		t.Fatal("a state without age.yaml accepted a revocation")
+	}
+}
+
+// TestAddDeviceAddsARecipient: the phone hands out access by pasting a key that
+// another device generated; the secrets are re-encrypted for the new list.
+func TestAddDeviceAddsARecipient(t *testing.T) {
+	st, laptop, _ := agedState(t)
+
+	app, err := Open(st.Dir, laptop)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tablet, err := ageio.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := app.AddDevice("tablet", ageio.RecipientOf(tablet))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "tablet") {
+		t.Fatalf("message %q", msg)
+	}
+
+	recs, err := ageio.LoadRecipients(st.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+
+	for _, r := range recs.Recipients {
+		if r.Name == "tablet" && r.Key == ageio.RecipientOf(tablet) {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("tablet is not in age.yaml: %+v", recs.Names())
+	}
+
+	keys, err := recs.Keys()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secrets, err := ageio.Decrypt(filepath.Join(st.Dir, "secrets.age.yaml"), state.KeyPath())
+	if err != nil {
+		t.Fatalf("the state cannot be read after adding a device: %v", err)
+	}
+
+	if len(secrets) == 0 || len(keys) != 3 {
+		t.Fatalf("recipients %d, secrets %d bytes", len(keys), len(secrets))
+	}
+
+	if _, err := app.AddDevice("tablet2", "not a key"); err == nil {
+		t.Fatal("garbage was accepted as a recipient")
+	}
+
+	other, err := ageio.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// the same name with another key is a different device claiming an old
+	// name: key rm would become ambiguous, so it is refused
+	if _, err := app.AddDevice("tablet", ageio.RecipientOf(other)); err == nil {
+		t.Fatal("a duplicate device name was accepted")
+	}
+}
+
+// TestNewBackupRotates: the offline backup is replaced, and the old sealed blob
+// must stop matching the new age.yaml.
+func TestNewBackupRotates(t *testing.T) {
+	st, laptop, _ := agedState(t)
+
+	app, err := Open(st.Dir, laptop)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := app.NewBackup("first passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := app.NewBackup("second passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	one, err := ageio.OpenIdentity(first, "first passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	two, err := ageio.OpenIdentity(second, "second passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if one.String() == two.String() {
+		t.Fatal("the backup identity did not change")
+	}
+
+	recs, err := ageio.LoadRecipients(st.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range recs.Recipients {
+		if r.Name == "backup" && r.Key != ageio.RecipientOf(two) {
+			t.Fatalf("age.yaml keeps the old backup key: %s", r.Key)
+		}
 	}
 }

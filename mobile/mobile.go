@@ -666,3 +666,102 @@ func (a *App) Adopt(host, path string) (string, error) {
 
 	return msg, nil
 }
+
+// Pull fetches origin and fast-forwards the state. The phone could only clone
+// and push, so a state that moved on the laptop stayed stale here until the
+// operator reconnected — which deletes the local copy.
+func (a *App) Pull() (string, error) {
+	if a.repo == nil {
+		return "", fmt.Errorf("no git repository")
+	}
+
+	if err := a.repo.Fetch(); err != nil {
+		return "", err
+	}
+
+	// uncommitted work would be buried by the hard reset the fast-forward uses
+	if clean, err := a.repo.Clean(); err == nil && !clean {
+		return "", fmt.Errorf("the state has uncommitted changes: push them before pulling")
+	}
+
+	head, err := a.repo.FastForward()
+	if err != nil {
+		return "", err
+	}
+
+	// the files under the app changed, and so did the secrets age decrypts
+	st, err := state.Load(a.dir)
+	if err != nil {
+		return "", err
+	}
+
+	a.st = st
+
+	return head, nil
+}
+
+// RepoState tells the Overview which branch it shows and whether the tree is
+// clean: the same two facts the command line prints before an apply.
+func (a *App) RepoState() string {
+	out := struct {
+		Branch string `json:"branch"`
+		Clean  bool   `json:"clean"`
+		Head   string `json:"head"`
+	}{}
+
+	if a.repo != nil {
+		if branch, err := a.repo.Branch(); err == nil {
+			out.Branch = branch
+		}
+
+		if clean, err := a.repo.Clean(); err == nil {
+			out.Clean = clean
+		}
+
+		if head, err := a.repo.Head(); err == nil {
+			out.Head = head
+		}
+	}
+
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "{}"
+	}
+
+	return string(b)
+}
+
+// AddDevice adds a recipient that was generated on another device. The phone
+// can hand out access without waiting for the laptop; the key itself still has
+// to be produced by the device that will hold it.
+func (a *App) AddDevice(name, recipient string) (string, error) {
+	msg, err := ops.KeyAdd(a.st, name, recipient)
+	if err != nil {
+		return "", err
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return msg, nil
+}
+
+// NewBackup replaces the offline backup identity and returns the sealed blob,
+// which the caller shows once and stores outside every device.
+func (a *App) NewBackup(passphrase string) (string, error) {
+	blob, msg, err := ops.KeyBackup(a.st, passphrase)
+	if err != nil {
+		return "", err
+	}
+
+	if a.repo != nil {
+		if err := a.repo.Commit(msg); err != nil {
+			return "", err
+		}
+	}
+
+	return blob, nil
+}

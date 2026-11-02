@@ -3,6 +3,7 @@ package gitsync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
@@ -165,5 +166,172 @@ func TestCloneWithAuth(t *testing.T) {
 
 	if _, err := cloned.Head(); err != nil {
 		t.Fatalf("head: %v", err)
+	}
+}
+
+// TestFastForwardMovesAStaleClone: a phone that only pushed stayed on the state
+// it cloned. Pull has to move the worktree, not just the remote-tracking ref.
+func TestFastForwardMovesAStaleClone(t *testing.T) {
+	root := t.TempDir()
+	bare := filepath.Join(root, "origin.git")
+
+	if _, err := git.PlainInitWithOptions(bare, &git.PlainInitOptions{
+		Bare:        true,
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	first := filepath.Join(root, "first")
+	if err := os.MkdirAll(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := Init(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.AddRemote(bare); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(first, "hosts.yaml"), []byte("hosts: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Commit("state: one"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Push(); err != nil {
+		t.Fatal(err)
+	}
+
+	second := filepath.Join(root, "second")
+	if _, err := git.PlainClone(second, false, &git.CloneOptions{URL: bare}); err != nil {
+		t.Fatal(err)
+	}
+
+	repo2, err := Open(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(first, "hosts.yaml"), []byte("hosts:\n  ru-msk-1: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Commit("state: two"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Push(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo2.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+
+	head, err := repo2.FastForward()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if head != want {
+		t.Fatalf("fast-forwarded to %s, want %s", head, want)
+	}
+
+	body, err := os.ReadFile(filepath.Join(second, "hosts.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(body), "ru-msk-1") {
+		t.Fatalf("the worktree did not move: %q", body)
+	}
+}
+
+// TestFastForwardRefusesADivergedState: a merge is not something a phone can
+// resolve, so it is refused instead of guessed.
+func TestFastForwardRefusesADivergedState(t *testing.T) {
+	root := t.TempDir()
+	bare := filepath.Join(root, "origin.git")
+
+	if _, err := git.PlainInitWithOptions(bare, &git.PlainInitOptions{
+		Bare:        true,
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	first := filepath.Join(root, "first")
+	if err := os.MkdirAll(first, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := Init(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.AddRemote(bare); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(first, "hosts.yaml"), []byte("hosts: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Commit("state: one"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Push(); err != nil {
+		t.Fatal(err)
+	}
+
+	second := filepath.Join(root, "second")
+	if _, err := git.PlainClone(second, false, &git.CloneOptions{URL: bare}); err != nil {
+		t.Fatal(err)
+	}
+
+	repo2, err := Open(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(second, "users.yaml"), []byte("users: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo2.Commit("state: local"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(first, "users.yaml"), []byte("users:\n  a: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Commit("state: remote"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Push(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo2.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := repo2.FastForward(); err == nil {
+		t.Fatal("a diverged state was fast-forwarded")
 	}
 }

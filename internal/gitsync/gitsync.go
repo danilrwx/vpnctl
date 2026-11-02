@@ -365,3 +365,44 @@ func (r *Repo) PushAuth(auth transport.AuthMethod) error {
 
 	return nil
 }
+
+// FastForward moves the worktree to origin/main when that commit descends from
+// HEAD. A phone cannot resolve a merge or a rewind, so anything else is refused
+// rather than half-applied.
+func (r *Repo) FastForward() (string, error) {
+	head, err := r.r.Head()
+	if err != nil {
+		return "", fmt.Errorf("head: %w", err)
+	}
+
+	origin, err := r.r.Reference(plumbing.NewRemoteReferenceName("origin", "main"), true)
+	if err != nil {
+		return "", fmt.Errorf("origin/main: %w", err)
+	}
+
+	short := origin.Hash().String()[:7]
+
+	if head.Hash() == origin.Hash() {
+		return short, nil
+	}
+
+	ok, err := r.IsAncestor(head.Hash().String(), origin.Hash().String())
+	if err != nil {
+		return "", err
+	}
+
+	if !ok {
+		return "", fmt.Errorf("origin/main is not ahead of HEAD: the state has diverged, resolve it where you can merge")
+	}
+
+	w, err := r.r.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("worktree: %w", err)
+	}
+
+	if err := w.Reset(&git.ResetOptions{Commit: origin.Hash(), Mode: git.HardReset}); err != nil {
+		return "", fmt.Errorf("fast-forward: %w", err)
+	}
+
+	return short, nil
+}
