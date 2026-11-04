@@ -217,21 +217,19 @@ fun parseProtocols(json: String): List<String> = try {
  * protocol, and offering one the entry has no inbound for fails at save.
  */
 fun userProtocols(served: List<String>): List<String> {
-    val out = listOf("reality", "ws", "hy2", "awg").filter { it in served }
-
-    return if (out.isEmpty()) listOf("reality", "ws") else out
+    return listOf("reality", "ws", "hy2", "awg").filter { it in served }
 }
 
 /** servedProtocols is the entry's own answer, cut to what a user can have. */
 fun servedProtocols(app: mobile.App?): List<String> =
     userProtocols(app?.let { parseProtocols(it.protocols()) } ?: emptyList())
 
-/** defaultProtocols is what the command line creates when it is not told: the
- * pair the entry serves, or its first protocol when it serves only one. */
+/** Proxy transports share a subscription. AWG is an explicit choice because
+ * it creates a separate peer and client file. */
 fun defaultProtocols(served: List<String>): Set<String> {
-    val both = listOf("reality", "ws").filter { it in served }
+    val proxies = userProtocols(served).filter { it != "awg" }
 
-    return if (both.isEmpty()) setOf(served.first()) else both.toSet()
+    return proxies.ifEmpty { userProtocols(served).take(1) }.toSet()
 }
 
 /** parseLinks is the same shape for Links(): a label and a URL per row. */

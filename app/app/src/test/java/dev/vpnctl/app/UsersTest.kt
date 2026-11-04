@@ -41,14 +41,19 @@ class UsersTest {
         assertEquals(listOf("reality", "ws"), userProtocols(listOf("reality", "ws", "mtg")))
         // an entry that serves hy2 must offer it, in the same fixed order
         assertEquals(listOf("reality", "hy2"), userProtocols(listOf("hy2", "reality")))
-        // nothing readable at all still leaves the command line's default
-        assertEquals(listOf("reality", "ws"), userProtocols(emptyList()))
+        assertEquals(listOf("hy2", "awg"), userProtocols(listOf("awg", "mtg", "hy2")))
+        // Never invent inbounds that are not actually enabled.
+        assertEquals(emptyList(), userProtocols(emptyList()))
+        assertEquals(emptyList(), userProtocols(listOf("mtg", "unknown")))
     }
 
     @Test
-    fun `a new user starts with the pair the command line picks`() {
-        assertEquals(setOf("reality", "ws"), defaultProtocols(listOf("reality", "ws", "hy2")))
+    fun `a new user includes all subscription transports while AWG stays explicit`() {
+        assertEquals(setOf("reality", "ws", "hy2"), defaultProtocols(listOf("reality", "ws", "hy2", "awg")))
         assertEquals(setOf("reality"), defaultProtocols(listOf("reality")))
+        assertEquals(setOf("hy2"), defaultProtocols(listOf("hy2", "awg")))
+        assertEquals(setOf("awg"), defaultProtocols(listOf("awg")))
+        assertTrue(defaultProtocols(emptyList()).isEmpty())
     }
 
     @Test

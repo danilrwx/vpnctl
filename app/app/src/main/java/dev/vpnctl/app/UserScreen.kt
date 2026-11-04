@@ -1,5 +1,7 @@
 package dev.vpnctl.app
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +62,7 @@ fun UserScreen(
     onDeleted: () -> Unit,
 ) {
     val app = remember { Core.current() }
-    val served = remember { servedProtocols(app) }
+    var served by remember { mutableStateOf(emptyList<String>()) }
     val scope = rememberCoroutineScope()
 
     var status by remember { mutableStateOf("") }
@@ -68,6 +70,9 @@ fun UserScreen(
     var links by remember { mutableStateOf(emptyList<UserLink>()) }
     var message by remember { mutableStateOf("") }
     var qr by remember { mutableStateOf("") }
+    var qrTitle by remember { mutableStateOf("") }
+    var profiles by remember { mutableStateOf(emptyList<UserProfile>()) }
+    var savingProfile by remember { mutableStateOf<UserProfile?>(null) }
     var mode by remember { mutableStateOf(setOf("split")) }
     var protos by remember { mutableStateOf(emptySet<String>()) }
     var tg by remember { mutableStateOf(false) }
@@ -79,6 +84,19 @@ fun UserScreen(
     var reload by remember { mutableStateOf(0) }
 
     val head = remember(reload) { app?.head().orEmpty() }
+    val saveProfile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val profile = savingProfile
+        savingProfile = null
+        if (uri != null && profile != null) {
+            scope.launch {
+                status = onIo {
+                    val stream = ctx.contentResolver.openOutputStream(uri) ?: error("cannot open the selected file")
+                    stream.bufferedWriter().use { it.write(profile.content) }
+                    "ok: ${profile.filename} saved"
+                }
+            }
+        }
+    }
 
     // One action at a time: two saves over the same file would race, and a
     // disabled control is the only feedback a git commit has.
@@ -123,8 +141,14 @@ fun UserScreen(
     }
 
     LaunchedEffect(name, reload) {
-        links = withContext(Dispatchers.IO) {
-            app?.let { parseLinks(it.links(name)) } ?: emptyList()
+        val loadStatus = onIo {
+            links = app?.let { parseLinks(it.links(name)) } ?: emptyList()
+            profiles = app?.let { parseUserProfiles(it.userProfiles(name)) } ?: emptyList()
+            served = app?.let { userProtocols(parseProtocols(it.protocolsForUser(name))) } ?: emptyList()
+            ""
+        }
+        if (loadStatus.startsWith("error")) {
+            status = loadStatus
         }
 
         val row = withContext(Dispatchers.IO) {
@@ -211,16 +235,13 @@ fun UserScreen(
                     selected = mode.firstOrNull() ?: "split",
                     onSelect = {
                         if (!busy && mode.firstOrNull() != it) {
-                            mode = setOf(it)
                             persist(nextMode = setOf(it))
                         }
                     },
                 )
             }
 
-            val sub = links.firstOrNull { it.label.startsWith("subscription") }
-
-            if (sub != null) {
+            links.filter { it.label.startsWith("subscription") }.forEach { sub ->
                 item {
                     SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Column(
@@ -245,7 +266,7 @@ fun UserScreen(
                                 modifier = Modifier.padding(top = 14.dp),
                             )
                             Text(
-                                "Karing · Hiddify · one URL for both modes",
+                                sub.label,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Muted,
                                 modifier = Modifier.padding(top = 4.dp),
@@ -292,8 +313,54 @@ fun UserScreen(
                                     copyToClipboard(ctx, link.url)
                                     status = "${linkTitle(link)} copied"
                                 },
-                                onQr = { qr = link.url },
+                                onQr = {
+                                    qrTitle = linkTitle(link)
+                                    qr = link.url
+                                },
                             )
+                        }
+                    }
+                }
+            }
+
+            if (profiles.isNotEmpty()) {
+                item { SectionLabel("Client configs", "${profiles.size}") }
+                profiles.forEach { profile ->
+                    item {
+                        SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                Text(
+                                    "${protocolTitle(profile.protocol)} · ${profile.mode}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                MonoText(profile.filename, color = Muted, style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    "Contains a private key. Import into AmneziaWG and share only with this user. Changes take effect after apply.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Muted,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    OutlineButton("Save .conf", {
+                                        savingProfile = profile
+                                        saveProfile.launch(profile.filename)
+                                    }, modifier = Modifier.weight(1f))
+                                    OutlineButton("Share", {
+                                        try {
+                                            shareProfile(ctx, profile)
+                                        } catch (e: Exception) {
+                                            status = "error: ${e.message}"
+                                        }
+                                    }, modifier = Modifier.weight(1f))
+                                    OutlineButton("QR", {
+                                        qrTitle = "${protocolTitle(profile.protocol)} · ${profile.mode} · private key"
+                                        qr = profile.content
+                                    }, modifier = Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
@@ -304,27 +371,22 @@ fun UserScreen(
 
                 SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            userProtocols(served).forEach { proto ->
-                                Chip(
-                                    proto,
-                                    onClick = {
-                                        val next = if (proto in protos) protos - proto else protos + proto
-                                        if (busy) {
-                                            return@Chip
-                                        }
-
-                                        if (next.isEmpty()) {
-                                            status = "error: choose at least one protocol"
-                                        } else {
-                                            protos = next
-                                            persist(nextProtos = next)
-                                        }
-                                    },
-                                    selected = proto in protos,
-                                )
+                        ProtocolChoices(userProtocols(served + protos), protos) { proto ->
+                            val next = if (proto in protos) protos - proto else protos + proto
+                            if (!busy) {
+                                if (next.isEmpty()) {
+                                    status = "error: choose at least one protocol"
+                                } else {
+                                    persist(nextProtos = next)
+                                }
                             }
                         }
+                        Text(
+                            "Hysteria 2 is in Links and the subscription. AmneziaWG uses its own config and QR.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
 
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -343,7 +405,6 @@ fun UserScreen(
                                 checked = tg,
                                 enabled = !busy,
                                 onCheckedChange = {
-                                    tg = it
                                     persist(nextTg = it)
                                 },
                                 colors = SwitchDefaults.colors(
@@ -483,7 +544,7 @@ fun UserScreen(
     }
 
     if (qr.isNotEmpty()) {
-        QrDialog(links.firstOrNull { it.url == qr }?.let { linkTitle(it) } ?: "QR", qr, onDismiss = { qr = "" })
+        QrDialog(qrTitle.ifEmpty { "QR" }, qr, onDismiss = { qr = "" })
     }
 
     if (deleting) {
@@ -539,7 +600,7 @@ fun UserScreen(
 /** linkTitle names a link by what it is, not by the position the core gave it. */
 fun linkTitle(link: UserLink): String = when {
     link.url.startsWith("tg://") -> "Telegram proxy"
-    link.url.startsWith("hysteria2") -> "hy2"
+    link.url.startsWith("hysteria2://") || link.url.startsWith("hy2://") -> "Hysteria 2 · ${link.label.removePrefix("hy2 ")}"
     link.url.contains("type=ws") -> "ws"
     link.url.startsWith("vless://") -> "reality"
     else -> link.label.replaceFirstChar { it.uppercase() }

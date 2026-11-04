@@ -91,7 +91,7 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
         }
     }
 
-    val accounts = protos.size
+    val accounts = protos.count { it != "awg" }
 
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(title = "New user", subtitle = "the hosts get it on the next apply", onBack = onBack)
@@ -133,22 +133,16 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
 
             item {
                 SectionLabel("Protocols · what this entry serves")
-                Row(
+                ProtocolChoices(
+                    protocols = userProtocols(served),
+                    selected = protos,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    userProtocols(served).forEach { proto ->
-                        Chip(
-                            proto,
-                            onClick = {
-                                protos = if (proto in protos) protos - proto else protos + proto
-                            },
-                            selected = proto in protos,
-                        )
-                    }
+                    proto -> protos = if (proto in protos) protos - proto else protos + proto
                 }
                 Text(
-                    "only the inbounds this entry has enabled; anything else fails at save",
+                    if (served.isEmpty()) "No client protocols enabled. Add an inbound in Hosts first."
+                    else "Hysteria 2 uses the subscription and a direct link. AmneziaWG gets a separate config and QR.",
                     style = MaterialTheme.typography.labelMedium,
                     color = Muted,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -227,24 +221,28 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                     SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp)) {
                         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                             Text(
-                                "$accounts ${plural(accounts, "account", "accounts")}",
+                                "$accounts ${plural(accounts, "engine account", "engine accounts")}" +
+                                    if ("awg" in protos) " · 1 AWG peer" else "",
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             MonoText(
-                                "${name.trim()}-{$mode}-{${protos.sorted().joinToString(", ")}}",
+                                if (accounts > 0) "${name.trim()}-{$mode}-{${protos.filter { it != "awg" }.sorted().joinToString(", ")}}"
+                                else "${name.trim()} · $mode · AmneziaWG",
                                 color = Muted,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 2,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                             Text(
-                                "UUID, hy2 password and subId → secrets.age.yaml",
+                                if ("awg" in protos) "UUID, protocol passwords, AWG keys and subId → secrets.age.yaml"
+                                else "UUID, protocol passwords and subId → secrets.age.yaml",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
                             Text(
-                                "1 subscription at ${domain.ifEmpty { "the entry" }} · files on each entry",
+                                if (accounts > 0) "1 subscription at ${domain.ifEmpty { "the entry" }}"
+                                else "AmneziaWG config and QR in the user card",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
                                 modifier = Modifier.padding(top = 4.dp),

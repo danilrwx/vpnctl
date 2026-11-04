@@ -2,7 +2,6 @@ package dev.vpnctl.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -316,7 +315,7 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(inbound.name, style = MaterialTheme.typography.titleSmall)
+                                Text(protocolTitle(inbound.name), style = MaterialTheme.typography.titleSmall)
                                 Text(
                                     "port ${inbound.port}" +
                                         if (h?.role == "entry" && count > 0) " · $count ${plural(count, "user", "users")}" else "",
@@ -479,7 +478,7 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                 editingInbound = ""
             },
             confirmLabel = "Save",
-            confirmEnabled = !inboundBusy && inboundName.isNotEmpty() && inboundPort.isNotBlank(),
+            confirmEnabled = !inboundBusy && inboundName.isNotEmpty() && (inboundPort.toIntOrNull() ?: 0) in 1..65535,
             onConfirm = {
                 inboundBusy = true
 
@@ -503,14 +502,26 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                 if (newInbound) {
                     Text("name", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(bottom = 4.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("reality", "ws", "hy2", "awg", "mtg").chunked(3).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                row.forEach { n ->
-                                    Chip(n, { inboundName = n }, selected = inboundName == n)
-                                }
-                            }
+                        ProtocolChoices(
+                            inboundProtocols(host?.engine.orEmpty(), host?.role.orEmpty()),
+                            setOf(inboundName),
+                        ) { selected ->
+                            inboundName = selected
+                            inboundPort = defaultInboundPort(selected)
+                            inboundPath = if (selected == "ws") "/ws" else ""
+                            inboundSNI = ""
                         }
                     }
+                }
+
+                if (inboundName == "hy2" || inboundName == "awg") {
+                    Text(
+                        if (inboundName == "hy2") "Hysteria 2 · UDP. Uses the entry domain and its TLS certificate."
+                        else "AmneziaWG · UDP. Server keys and split/full client subnets are created automatically. New users get their own peer keys.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
 
                 OutlinedTextField(
@@ -522,7 +533,7 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                     colors = appFieldColors(),
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 )
-                OutlinedTextField(
+                if (inboundName == "ws") OutlinedTextField(
                     value = inboundPath,
                     onValueChange = { inboundPath = it },
                     label = { Text("path, ws only") },
@@ -531,7 +542,7 @@ fun HostScreen(ctx: android.content.Context, modifier: Modifier, name: String, o
                     colors = appFieldColors(),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
-                OutlinedTextField(
+                if (inboundName == "reality") OutlinedTextField(
                     value = inboundSNI,
                     onValueChange = { inboundSNI = it },
                     label = { Text("sni, reality only") },

@@ -61,7 +61,9 @@ object Core {
             copyAssets(ctx, "state", dir)
         }
 
-        return open(dir.absolutePath, "")
+        // Creating a demo user also writes encrypted protocol credentials.
+        // Use the phone's identity, just as the cloned state does.
+        return open(dir.absolutePath, ageKeyFile(ctx) ?: "")
     }
 
     private fun copyAssets(ctx: Context, from: String, to: File) {
