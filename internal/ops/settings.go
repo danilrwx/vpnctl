@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/danilrwx/vpnctl-go/internal/secrets"
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
 
@@ -92,6 +93,11 @@ func InboundSet(st *state.State, host, name string, port int, path, sni string) 
 		return "", fmt.Errorf("inbound %q: expected reality, ws, hy2, awg or mtg", name)
 	}
 
+	h := st.Hosts[host]
+	if h.Engine == "xray" && (name == "hy2" || (name == "awg" && h.Role == state.Entry)) {
+		return "", fmt.Errorf("host %q: engine xray does not support inbound %s", host, name)
+	}
+
 	inb, ok := st.Inbounds[host]
 	if !ok {
 		inb = map[string]state.Inbound{}
@@ -123,7 +129,47 @@ func InboundSet(st *state.State, host, name string, port int, path, sni string) 
 		i.SNI = sni
 	}
 
+	if name == "awg" {
+		hs := st.Secrets.Hosts[host]
+		if hs.AWG == nil {
+			priv, pub, err := secrets.AWGKeys()
+			if err != nil {
+				return "", err
+			}
+
+			hs.AWG = &state.KeyPair{Private: priv, Public: pub}
+		}
+
+		if h.Role == state.Entry {
+			subnets := state.Subnets{}
+			if i.Subnets != nil {
+				subnets = *i.Subnets
+			}
+
+			if subnets.Split == "" {
+				subnets.Split = "10.8.1.0/24"
+			}
+
+			if subnets.Full == "" {
+				subnets.Full = "10.8.2.0/24"
+			}
+
+			i.Subnets = &subnets
+		}
+
+		if st.Secrets.Hosts == nil {
+			st.Secrets.Hosts = map[string]state.HostSecrets{}
+		}
+
+		st.Secrets.Hosts[host] = hs
+	}
+
 	inb[name] = i
+
+	if st.Inbounds == nil {
+		st.Inbounds = map[string]map[string]state.Inbound{}
+	}
+
 	st.Inbounds[host] = inb
 
 	return fmt.Sprintf("inbounds: %s/%s: port %d", host, name, i.Port), nil

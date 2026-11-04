@@ -138,33 +138,111 @@ func (a *App) Links(user string) (string, error) {
 		return "", fmt.Errorf("user %q is not described", user)
 	}
 
-	entry, err := a.st.Entry()
+	out := []Link{}
+	if !u.IsEnabled() {
+		return mustJSON(out), nil
+	}
+
+	entry, ok := a.st.EntryOf(u)
+	if !ok {
+		return "", fmt.Errorf("user %q has no unambiguous entry", user)
+	}
+
+	for _, mode := range u.Modes {
+		// AWG is a file profile, not a subscription account.
+		engine := false
+
+		for _, p := range u.Protocols {
+			if p == "reality" || p == "ws" || p == "hy2" {
+				engine = true
+			}
+		}
+
+		if !engine {
+			continue
+		}
+
+		accs, err := render.SubAccounts(a.st, entry, user, u, mode)
+		if err != nil {
+			return "", err
+		}
+
+		if len(accs) == 0 {
+			continue
+		}
+
+		if sub, err := render.SubURL(a.st, entry, user, mode); err == nil {
+			out = append(out, Link{Label: "subscription " + mode, URL: sub})
+		}
+
+		links, err := render.Links(a.st, entry, user, mode)
+		if err != nil {
+			return "", err
+		}
+
+		for i, l := range links {
+			out = append(out, Link{Label: accs[i].Proto + " " + mode, URL: l})
+		}
+	}
+
+	if u.TG {
+		if tg, ok := render.TGLink(a.st, entry); ok {
+			out = append(out, Link{Label: "telegram", URL: tg})
+		}
+	}
+
+	return mustJSON(out), nil
+}
+
+// UserProfile is a downloadable client configuration, separate from URL links.
+type UserProfile struct {
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`
+	Mode     string `json:"mode"`
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
+
+// UserProfiles returns enabled AWG profiles as JSON for gomobile clients.
+func (a *App) UserProfiles(user string) (string, error) {
+	u, ok := a.st.Users[user]
+	if !ok {
+		return "", fmt.Errorf("user %q is not described", user)
+	}
+
+	out := []UserProfile{}
+	if !u.IsEnabled() || u.AWG == nil {
+		return mustJSON(out), nil
+	}
+
+	hasAWG := false
+
+	for _, p := range u.Protocols {
+		if p == "awg" {
+			hasAWG = true
+		}
+	}
+
+	if !hasAWG {
+		return mustJSON(out), nil
+	}
+
+	entry, ok := a.st.EntryOf(u)
+	if !ok {
+		return "", fmt.Errorf("user %q has no unambiguous entry", user)
+	}
+
+	in, ok := a.st.Inbounds[entry]["awg"]
+	if !ok || !in.IsEnabled() {
+		return mustJSON(out), nil
+	}
+
+	body, err := render.AWGClient(a.st, entry, user)
 	if err != nil {
 		return "", err
 	}
 
-	mode := "split"
-	if len(u.Modes) > 0 {
-		mode = u.Modes[0]
-	}
-
-	var out []Link
-	if sub, err := render.SubURL(a.st, entry, user, mode); err == nil {
-		out = append(out, Link{Label: "subscription " + mode, URL: sub})
-	}
-
-	links, err := render.Links(a.st, entry, user, mode)
-	if err != nil {
-		return "", err
-	}
-
-	for i, l := range links {
-		out = append(out, Link{Label: fmt.Sprintf("direct %d", i+1), URL: l})
-	}
-
-	if tg, ok := render.TGLink(a.st, entry); ok {
-		out = append(out, Link{Label: "telegram", URL: tg})
-	}
+	out = append(out, UserProfile{Name: user + " awg " + u.AWG.Mode, Protocol: "awg", Mode: u.AWG.Mode, Filename: user + "-awg-" + u.AWG.Mode + ".conf", Content: body})
 
 	return mustJSON(out), nil
 }
@@ -191,7 +269,12 @@ func (a *App) Message(user, lang string, markdown bool) (string, error) {
 }
 
 // AddUser creates a user, writes the state and commits it.
-func (a *App) AddUser(name, modes, protocols string, tg bool, expires string) (string, error) {
+func (a *App) AddUser(name, modes, protocols string, tg bool, expires string) (_ string, retErr error) {
+	rollback, err := a.stage()
+	if err != nil {
+		return "", err
+	}
+	defer func() { rollback(retErr) }()
 	// the date is checked before anything is created: a user that cannot be
 	// fixed from the phone is worse than an error on the form
 	day, err := expiryDate(expires)
@@ -210,25 +293,39 @@ func (a *App) AddUser(name, modes, protocols string, tg bool, expires string) (s
 		a.st.Users[name] = u
 	}
 
-	if err := state.SaveUsers(a.dir, a.st.Users); err != nil {
+	if err := a.userProtocolsEnabled(name); err != nil {
 		return "", err
 	}
 
-	if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
+	if err := a.save(msg); err != nil {
 		return "", err
-	}
-
-	if errs := validate.State(a.st); len(errs) > 0 {
-		return "", fmt.Errorf("invalid state: %s", errs[0])
-	}
-
-	if a.repo != nil {
-		if err := a.repo.Commit(msg); err != nil {
-			return "", err
-		}
 	}
 
 	return msg, nil
+}
+
+// stage isolates nested maps, slices and key pointers from a rejected mutation.
+// The live state is only retained after validation and persistence succeed.
+func (a *App) stage() (func(error), error) {
+	old := a.st
+
+	b, err := json.Marshal(old)
+	if err != nil {
+		return nil, err
+	}
+
+	var next state.State
+	if err := json.Unmarshal(b, &next); err != nil {
+		return nil, err
+	}
+
+	a.st = &next
+
+	return func(err error) {
+		if err != nil {
+			a.st = old
+		}
+	}, nil
 }
 
 // save is the one path a phone takes after changing the state: validate, write,
@@ -238,19 +335,21 @@ func (a *App) save(msg string) error {
 		return fmt.Errorf("invalid state: %s", errs[0])
 	}
 
-	if err := state.SaveUsers(a.dir, a.st.Users); err != nil {
-		return err
-	}
+	return a.persistFiles([]string{"users.yaml", "secrets.age.yaml"}, func() error {
+		if err := state.SaveUsers(a.dir, a.st.Users); err != nil {
+			return err
+		}
 
-	if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
-		return err
-	}
+		if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
+			return err
+		}
 
-	if a.repo != nil {
-		return a.repo.Commit(msg)
-	}
+		if a.repo != nil {
+			return a.repo.Commit(msg)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // RegisterDevice writes this phone into devices.yaml: the OpenSSH key the
@@ -395,6 +494,26 @@ func (a *App) Protocols() string {
 		return "[]"
 	}
 
+	return a.protocolsAt(entry)
+}
+
+// ProtocolsForUser returns enabled protocols on this user's own entry.
+// An unknown user or ambiguous entry has no available protocols.
+func (a *App) ProtocolsForUser(user string) string {
+	u, ok := a.st.Users[user]
+	if !ok {
+		return "[]"
+	}
+
+	entry, ok := a.st.EntryOf(u)
+	if !ok {
+		return "[]"
+	}
+
+	return a.protocolsAt(entry)
+}
+
+func (a *App) protocolsAt(entry string) string {
 	names := make([]string, 0, len(a.st.Inbounds[entry]))
 	for name, in := range a.st.Inbounds[entry] {
 		if in.IsEnabled() {
@@ -411,7 +530,13 @@ func (a *App) Protocols() string {
 // flag and the day the term ends. The screen shows the current values, so it
 // sends the whole form back instead of the one field that changed; an empty
 // date means no deadline at all, which the tick respects.
-func (a *App) EditUser(name, modes, protocols string, tg bool, expires string) (string, error) {
+func (a *App) EditUser(name, modes, protocols string, tg bool, expires string) (_ string, retErr error) {
+	rollback, err := a.stage()
+	if err != nil {
+		return "", err
+	}
+	defer func() { rollback(retErr) }()
+
 	if len(splitList(modes)) == 0 || len(splitList(protocols)) == 0 {
 		return "", fmt.Errorf("user %q: a mode and a protocol are required", name)
 	}
@@ -425,6 +550,10 @@ func (a *App) EditUser(name, modes, protocols string, tg bool, expires string) (
 		Modes: splitList(modes), Protocols: splitList(protocols), TG: &tg, Expires: &date,
 	})
 	if err != nil {
+		return "", err
+	}
+
+	if err := a.userProtocolsEnabled(name); err != nil {
 		return "", err
 	}
 
@@ -1208,13 +1337,15 @@ func (a *App) SaveSet(name, domains, ips string) (string, error) {
 
 // SaveInbound creates or edits one inbound of a host. It reaches the host on the
 // next apply.
-func (a *App) SaveInbound(host, name string, port int, path, sni string) (string, error) {
-	msg, err := ops.InboundSet(a.st, host, name, port, path, sni)
+func (a *App) SaveInbound(host, name string, port int, path, sni string) (_ string, retErr error) {
+	rollback, err := a.stage()
 	if err != nil {
 		return "", err
 	}
+	defer func() { rollback(retErr) }()
 
-	if err := state.SaveInbounds(a.dir, a.st.Inbounds); err != nil {
+	msg, err := ops.InboundSet(a.st, host, name, port, path, sni)
+	if err != nil {
 		return "", err
 	}
 
@@ -1222,10 +1353,22 @@ func (a *App) SaveInbound(host, name string, port int, path, sni string) (string
 		return "", fmt.Errorf("invalid state: %s", errs[0])
 	}
 
-	if a.repo != nil {
-		if err := a.repo.Commit(msg); err != nil {
-			return "", err
+	if err := a.persistFiles([]string{"protocols.yaml", "secrets.age.yaml"}, func() error {
+		if err := state.SaveInbounds(a.dir, a.st.Inbounds); err != nil {
+			return err
 		}
+
+		if err := state.SaveSecrets(a.dir, a.st.Secrets); err != nil {
+			return err
+		}
+
+		if a.repo != nil {
+			return a.repo.Commit(msg)
+		}
+
+		return nil
+	}); err != nil {
+		return "", err
 	}
 
 	return msg, nil

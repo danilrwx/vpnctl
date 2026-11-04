@@ -193,27 +193,14 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 				f[base+".yaml"] = yl
 			}
 
-			if acc.U.AWG != nil && us.AWG != nil {
-				if awg, ok := inb["awg"]; ok {
-					if awg.Subnets == nil {
-						return nil, fmt.Errorf("awg without subnets")
-					}
-
-					net := awg.Subnets.ForMode(acc.U.AWG.Mode)
-
-					var serverPK string
-					if hs.AWG != nil {
-						serverPK = hs.AWG.Public
-					}
-
-					if err := emit("/etc/vpnctl/profiles/"+acc.Name+"/awg.conf", "awg-client.conf.j2", map[string]any{
-						"user": acc.Name, "mode": acc.U.AWG.Mode, "domain": domain,
-						"address": acc.U.AWG.IP, "private_key": us.AWG.Private,
-						"dns": Gateway(net), "server_public_key": serverPK,
-						"preshared": us.AWGPreshared, "port": awg.Port,
-					}); err != nil {
+			if acc.U.AWG != nil && us.AWG != nil && containsStr(acc.U.Protocols, "awg") {
+				if awg, ok := inb["awg"]; ok && awg.IsEnabled() {
+					body, err := AWGClient(st, name, acc.Name)
+					if err != nil {
 						return nil, err
 					}
+
+					f["/etc/vpnctl/profiles/"+acc.Name+"/awg.conf"] = body
 				}
 			}
 		}
