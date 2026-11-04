@@ -1,6 +1,7 @@
 package render
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,40 @@ import (
 
 	"github.com/danilrwx/vpnctl-go/internal/state"
 )
+
+// Every mask has the same three forbidden addresses and at least one usable
+// address, except a /31 and /32 where a client cannot be placed at all.
+func TestUsableAWGAddr(t *testing.T) {
+	cases := []struct {
+		subnet string
+		addr   string
+		usable bool
+	}{
+		{"10.8.1.0/24", "10.8.1.0", false},
+		{"10.8.1.0/24", "10.8.1.1", false},
+		{"10.8.1.0/24", "10.8.1.2", true},
+		{"10.8.1.0/24", "10.8.1.254", true},
+		{"10.8.1.0/24", "10.8.1.255", false},
+		{"10.8.0.0/23", "10.8.1.255", false},
+		{"10.8.0.0/23", "10.8.1.2", true},
+		{"10.8.1.0/25", "10.8.1.127", false},
+		{"10.8.1.0/25", "10.8.1.126", true},
+		{"10.8.1.0/30", "10.8.1.2", true},
+		{"10.8.1.0/30", "10.8.1.3", false},
+		{"10.8.1.0/31", "10.8.1.0", false},
+		{"10.8.1.0/31", "10.8.1.1", false},
+		{"10.8.1.2/32", "10.8.1.2", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.subnet+"/"+tc.addr, func(t *testing.T) {
+			subnet := netip.MustParsePrefix(tc.subnet)
+			if got := usableAWGAddr(netip.MustParseAddr(tc.addr), subnet); got != tc.usable {
+				t.Fatalf("usable = %v, want %v", got, tc.usable)
+			}
+		})
+	}
+}
 
 func TestAWGClientMatchesHost(t *testing.T) {
 	st := fixture(t)
@@ -82,6 +117,16 @@ func TestAWGClientGuards(t *testing.T) {
 			st.Secrets.Hosts["ru-msk-1"] = sec
 		}},
 		{"wrong subnet", func(st *state.State) { u := st.Users["brat"]; u.AWG.IP = "10.99.0.2"; st.Users["brat"] = u }},
+		{"gateway address", func(st *state.State) { u := st.Users["brat"]; u.AWG.IP = "10.8.1.1"; st.Users["brat"] = u }},
+		{"broadcast address", func(st *state.State) { u := st.Users["brat"]; u.AWG.IP = "10.8.1.255"; st.Users["brat"] = u }},
+		{"port out of range", func(st *state.State) {
+			in := st.Inbounds["ru-msk-1"]["awg"]
+			in.Port = 70000
+			st.Inbounds["ru-msk-1"]["awg"] = in
+		}},
+		{"subnet with host bits", func(st *state.State) {
+			st.Inbounds["ru-msk-1"]["awg"].Subnets.Split = "10.8.1.3/24"
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := fixture(t)

@@ -31,17 +31,21 @@ func AWGClient(st *state.State, entry, user string) (string, error) {
 	}
 
 	in, ok := st.Inbounds[entry]["awg"]
-	if !ok || !in.IsEnabled() || in.Subnets == nil || in.Port <= 0 {
+	if !ok || !in.IsEnabled() || in.Subnets == nil {
 		return "", fmt.Errorf("entry %q has no enabled AWG inbound with subnets", entry)
 	}
 
+	if in.Port <= 0 || in.Port > 65535 {
+		return "", fmt.Errorf("entry %q: AWG port %d is outside 1-65535", entry, in.Port)
+	}
+
 	subnet, err := netip.ParsePrefix(in.Subnets.ForMode(u.AWG.Mode))
-	if err != nil {
+	if err != nil || !subnet.Addr().Is4() || subnet != subnet.Masked() {
 		return "", fmt.Errorf("invalid AWG subnet for user %q", user)
 	}
 
 	ip, err := netip.ParseAddr(u.AWG.IP)
-	if err != nil || !subnet.Contains(ip) {
+	if err != nil || !ip.Is4() || !subnet.Contains(ip) || !usableAWGAddr(ip, subnet) {
 		return "", fmt.Errorf("invalid AWG address for user %q", user)
 	}
 
@@ -79,4 +83,26 @@ func AWGClient(st *state.State, entry, user string) (string, error) {
 	}
 
 	return body, nil
+}
+
+// usableAWGAddr rejects the network, gateway and broadcast addresses. A client
+// config that points at one of them can be imported but never carries traffic.
+func usableAWGAddr(ip netip.Addr, subnet netip.Prefix) bool {
+	if ip == subnet.Addr() || ip == subnet.Addr().Next() {
+		return false
+	}
+
+	a := subnet.Addr().As4()
+	bits := subnet.Bits()
+
+	for i := 3; i >= 0 && bits < 8*(i+1); i-- {
+		host := 8*(i+1) - bits
+		if host >= 8 {
+			a[i] = 0xff
+		} else {
+			a[i] |= byte((1 << host) - 1)
+		}
+	}
+
+	return ip != netip.AddrFrom4(a)
 }
