@@ -32,7 +32,7 @@ jobs:
 
       # v3 installs "tools" by default, and that package no longer exists in
       # the SDK repository; platform-tools is all this build needs from it
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: "platform-tools"
 
