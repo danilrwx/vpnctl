@@ -139,6 +139,38 @@ sync` and `vpnctl apply` put it on every host. Compose over a gomobile AAR that
 Gradle rebuilds from `mobile/` on every build, so a Go change cannot hide behind
 a stale binding.
 
+### Mihomo
+
+Open a user's **Client configs** in the Android app and choose **Save .yaml**
+or **Share** on the **Mihomo** profile for the desired mode. From the CLI:
+
+```sh
+vpnctl user config --format mihomo --mode split --out brat.yaml brat
+mihomo -f brat.yaml
+```
+
+The file configures a local HTTP/SOCKS proxy at `127.0.0.1:7890`. After apply,
+you can also import the subscription URL with `.yaml` appended to it, for
+example `https://gw.example.ru/s/<token>/split.yaml`.
+
+### WireGuard
+
+Enable **WireGuard** on a sing-box entry and select it in the user's **Access**
+card. Both `split` and `full` send client traffic to the entry. On the entry,
+sing-box applies the same route groups as it does for VLESS. Each mode has its
+own peer and appears in **Client configs** as a `.conf` file with an import QR.
+
+```sh
+vpnctl host inbound --port 51821 ru-spb-1 wg
+vpnctl user edit --modes split,full --protos reality,ws,wg danil-laptop
+vpnctl user config --format wg --mode split --out laptop-split.conf danil-laptop
+```
+
+The entry needs Debian's `wireguard-tools` package. Bootstrap installs it for
+hosts with WireGuard enabled. Update the host's `vpnctl-agent` so it can remove
+expired WireGuard peers. The entry applies the mode's routing to IPv4 and IPv6
+TCP and UDP traffic.
+
 ### Hysteria 2 and AmneziaWG
 
 - In **Hosts → host → Inbounds → Add**, choose **Hysteria 2** (`hy2`, UDP 443)

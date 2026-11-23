@@ -16,8 +16,14 @@ https://{{ domain }}:{{ caddy_port }} {
 		header profile-title "{{ profile_title }}"
 		header profile-update-interval "12"
 		header Cache-Control "no-store"
-		@singbox header User-Agent *sing-box*
-		@clash header User-Agent *lash*
+		@singbox {
+			path /*/split /*/full
+			header User-Agent *sing-box*
+		}
+		@clash {
+			path /*/split /*/full
+			header_regexp User-Agent (?i)clash|mihomo
+		}
 		rewrite @singbox {path}.json
 		rewrite @clash {path}.yaml
 		file_server

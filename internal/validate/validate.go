@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"fmt"
 	"net"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -17,7 +18,7 @@ import (
 
 // protoOrder is the declaration order of the protocol enum: errors follow it, as the
 // Rust core walks a BTreeMap<Proto, Inbound>.
-var protoOrder = []string{"reality", "ws", "hy2", "awg", "mtg"}
+var protoOrder = []string{"reality", "ws", "hy2", "awg", "wg", "mtg"}
 
 var linkProtos = map[string]bool{"reality": true, "hy2": true, "awg": true}
 
@@ -457,6 +458,7 @@ func Warnings(st *state.State) []string {
 // written against it, so this function is moved, never reordered.
 func userErrors(st *state.State, err func(string, ...any)) {
 	peerIPs := map[string]string{}
+	wgIPs := map[string]string{}
 
 	for _, name := range sortedUsers(st) {
 		u := st.Users[name]
@@ -543,10 +545,39 @@ func userErrors(st *state.State, err func(string, ...any)) {
 			err("user «%s»: an awg peer is described but the awg protocol is not set", name)
 		}
 
+		if contains(u.Protocols, "wg") {
+			for _, mode := range u.Modes {
+				ip := u.WG[mode]
+				in := inb["wg"]
+
+				key := st.Secrets.Users[name].WG[mode]
+				if in.Subnets == nil || !validWGAddress(in.Subnets.ForMode(mode), ip) || key.Private == "" || key.Public == "" || key.Preshared == "" {
+					err("user «%s»: invalid WireGuard %s address or missing keys", name, mode)
+				}
+
+				index := entry + "/" + ip
+				if other, ok := wgIPs[index]; ip != "" && ok {
+					err("WireGuard address %s is used by both «%s» and «%s» on %s", ip, other, name, entry)
+				}
+
+				wgIPs[index] = name
+			}
+		} else if len(u.WG) != 0 {
+			err("user «%s»: WireGuard peers require the wg protocol", name)
+		}
+
 		if _, ok := st.Secrets.Users[name]; !ok {
 			err("user «%s»: no secrets (uuid, hy2_password, sub_id)", name)
 		}
 	}
+}
+
+func validWGAddress(cidr, ip string) bool {
+	prefix, err := netip.ParsePrefix(cidr)
+	addr, ipErr := netip.ParseAddr(ip)
+
+	return err == nil && ipErr == nil && prefix.Addr().Is4() && prefix == prefix.Masked() && prefix.Contains(addr) &&
+		addr != prefix.Addr() && addr != prefix.Addr().Next() && prefix.Contains(addr.Next())
 }
 
 // hostErrors checks a host on its own: its name, the jump it uses, the ports of
@@ -596,7 +627,7 @@ func hostErrors(st *state.State, err func(string, ...any)) {
 			}
 
 			table := tcp
-			if p == "hy2" || p == "awg" {
+			if p == "hy2" || p == "awg" || p == "wg" {
 				table = udp
 			}
 
@@ -617,6 +648,14 @@ func hostErrors(st *state.State, err func(string, ...any)) {
 		}
 
 		hs, hasHS := st.Secrets.Hosts[name]
+		if in, ok := inb["wg"]; ok {
+			if h.Role != state.Entry || h.Engine == "xray" || in.Port < 1 || in.Port > 65535 || hs.WG == nil || hs.WG.Private == "" || hs.WG.Public == "" {
+				err("host «%s»: WireGuard requires a sing-box entry, valid port and host keys", name)
+			}
+
+			wgSubnets(name, in.Subnets, inb["awg"].Subnets, err)
+		}
+
 		if _, ok := inb["reality"]; ok && (!hasHS || hs.Reality == nil) {
 			err("host «%s»: no reality keys in secrets", name)
 		}
@@ -651,6 +690,29 @@ func hostErrors(st *state.State, err func(string, ...any)) {
 		if !retiring {
 			err("domain %s on hosts %s: allowed only during a migration, mark the old host retiring: true",
 				d, strings.Join(hs, ", "))
+		}
+	}
+}
+
+func wgSubnets(host string, wg, awg *state.Subnets, report func(string, ...any)) {
+	if wg == nil {
+		report("host «%s»: WireGuard requires split and full subnets", host)
+		return
+	}
+
+	split, splitErr := netip.ParsePrefix(wg.Split)
+
+	full, fullErr := netip.ParsePrefix(wg.Full)
+	if splitErr != nil || fullErr != nil || !split.Addr().Is4() || !full.Addr().Is4() || split != split.Masked() || full != full.Masked() || split.Bits() > 30 || full.Bits() > 30 || split.Overlaps(full) {
+		report("host «%s»: invalid or overlapping WireGuard subnets", host)
+	}
+
+	if awg != nil {
+		for _, cidr := range []string{awg.Split, awg.Full} {
+			p, err := netip.ParsePrefix(cidr)
+			if err == nil && (split.Overlaps(p) || full.Overlaps(p)) {
+				report("host «%s»: WireGuard and AmneziaWG subnets overlap", host)
+			}
 		}
 	}
 }

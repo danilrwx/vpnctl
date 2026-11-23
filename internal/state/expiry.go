@@ -16,6 +16,7 @@ type ExpiryEntry struct {
 	SubID string `yaml:"sub_id,omitempty"`
 	// AWGIP is the peer address in the awg subnet, empty without a peer.
 	AWGIP  string   `yaml:"awg_ip,omitempty"`
+	WGIPs  []string `yaml:"wg_ips,omitempty"`
 	Emails []string `yaml:"emails"`
 }
 

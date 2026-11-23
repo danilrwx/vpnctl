@@ -28,6 +28,10 @@ func expiryFile(st *state.State, entry string, at time.Time) string {
 		}
 
 		for _, m := range acc.U.Modes {
+			if ip := acc.U.WG[m]; ip != "" && containsStr(acc.U.Protocols, "wg") {
+				e.WGIPs = append(e.WGIPs, ip)
+			}
+
 			for _, p := range acc.U.Protocols {
 				if isEngineUser(p) {
 					e.Emails = append(e.Emails, st.Email(acc.Name, m, p))

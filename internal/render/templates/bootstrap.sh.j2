@@ -15,7 +15,7 @@ if ! grep -rqs 'security.debian.org' /etc/apt/sources.list /etc/apt/sources.list
   ok "security repository added"
 fi
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates unzip tar nftables unattended-upgrades openssl{% if awg %} dkms build-essential "linux-headers-$(uname -r)" git{% endif %} >/dev/null
+apt-get install -y -qq curl ca-certificates unzip tar nftables unattended-upgrades openssl{% if awg %} dkms build-essential "linux-headers-$(uname -r)" git{% endif %}{% if wg %} wireguard-tools{% endif %} >/dev/null
 ok "packages: curl nftables unattended-upgrades{% if awg %} dkms linux-headers git{% endif %}"
 
 # --- unattended upgrades and reboot window

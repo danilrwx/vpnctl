@@ -4,7 +4,7 @@ Address = {{ addresses | join(", ") }}
 PrivateKey = {{ private_key }}
 {% if listen_port %}ListenPort = {{ listen_port }}
 {% endif %}{% if table_off %}Table = off
-{% endif %}Jc = 4
+{% endif %}{% if not plain %}Jc = 4
 Jmin = 40
 Jmax = 70
 S1 = 0
@@ -13,7 +13,7 @@ H1 = 1
 H2 = 2
 H3 = 3
 H4 = 4
-{% for cmd in post_up %}PostUp = {{ cmd }}
+{% endif %}{% for cmd in post_up %}PostUp = {{ cmd }}
 {% endfor %}{% for cmd in post_down %}PostDown = {{ cmd }}
 {% endfor %}
 {% for p in peers %}

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,15 +29,9 @@ func UserAdd(dir, name string, modes, protocols []string, tg bool, entry string,
 		return fmt.Errorf("user %q already exists", name)
 	}
 
-	msg, err := ops.UserAdd(st, name, modes, protocols, tg)
+	msg, err := ops.UserAddOnEntry(st, name, modes, protocols, tg, entry)
 	if err != nil {
 		return err
-	}
-
-	if entry != "" {
-		u := st.Users[name]
-		u.Entry = entry
-		st.Users[name] = u
 	}
 
 	if err := save(st, dir, msg, nocommit); err != nil {
@@ -328,14 +323,14 @@ func UserConfig(dir, name, mode, format, out string) error {
 		return err
 	}
 
-	entry, err := st.Entry()
-	if err != nil {
-		return err
-	}
-
 	u, ok := st.Users[name]
 	if !ok {
 		return fmt.Errorf("user %q is not described", name)
+	}
+
+	entry, ok := st.EntryOf(u)
+	if !ok {
+		return fmt.Errorf("user %q has no unambiguous entry", name)
 	}
 
 	modes := u.Modes
@@ -347,12 +342,18 @@ func UserConfig(dir, name, mode, format, out string) error {
 		modes = []string{mode}
 	}
 
-	ext := map[string]string{"singbox": "json", "clash": "yaml", "sub": "txt", "links": "txt"}[format]
+	ext := map[string]string{"singbox": "json", "mihomo": "yaml", "clash": "yaml", "wg": "conf", "sub": "txt", "links": "txt"}[format]
 	if ext == "" {
-		return fmt.Errorf("unknown format %q: expected singbox, clash, sub or links", format)
+		return fmt.Errorf("unknown format %q: expected singbox, mihomo, clash, wg, sub or links", format)
 	}
 
 	multi := len(modes) > 1
+	outputDir := out != "" && isDir(out)
+
+	if multi && out != "" && !outputDir {
+		return fmt.Errorf("user %q has multiple modes: select --mode or write to an output directory", name)
+	}
+
 	for _, m := range modes {
 		body, err := profile(st, entry, name, u, m, format)
 		if err != nil {
@@ -364,8 +365,12 @@ func UserConfig(dir, name, mode, format, out string) error {
 			fmt.Printf("=== %s %s ===\n%s\n", name, m, body)
 		case out == "":
 			fmt.Print(body)
-		case isDir(out):
+		case outputDir:
 			p := fmt.Sprintf("%s/%s-%s.%s", strings.TrimSuffix(out, "/"), name, m, ext)
+			if format == "wg" {
+				p = filepath.Join(out, render.WGFilename(name, m))
+			}
+
 			if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 				return err
 			}
@@ -385,10 +390,17 @@ func UserConfig(dir, name, mode, format, out string) error {
 
 func profile(st *state.State, entry, name string, u state.User, mode, format string) (string, error) {
 	switch format {
+	case "wg":
+		return render.WGClient(st, entry, name, mode, time.Now())
 	case "singbox":
 		return render.SingboxJSON(st, entry, name, u, mode)
-	case "clash":
-		return render.ClashYAML(st, entry, name, u, mode)
+	case "mihomo", "clash":
+		body, err := render.ClashYAML(st, entry, name, u, mode)
+		if err == nil && body == "" {
+			return "", fmt.Errorf("user %q has no proxy accounts on %q", name, entry)
+		}
+
+		return body, err
 	case "sub":
 		links, err := render.Links(st, entry, name, mode)
 		if err != nil {

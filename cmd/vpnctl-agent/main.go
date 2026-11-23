@@ -78,7 +78,7 @@ func main() {
 
 		err := agent.RunTick(agent.TickOptions{
 			ExpiryPath: *expiry, EngineConfig: *config, EngineBin: *engine,
-			SubRoot: *subs, AWGConfig: *awg, DryRun: *dry, Now: time.Now(),
+			SubRoot: *subs, AWGConfig: *awg, WGConfig: "/etc/wireguard/wg0.conf", DryRun: *dry, Now: time.Now(),
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)

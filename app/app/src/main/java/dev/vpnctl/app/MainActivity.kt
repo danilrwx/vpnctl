@@ -217,7 +217,7 @@ fun parseProtocols(json: String): List<String> = try {
  * protocol, and offering one the entry has no inbound for fails at save.
  */
 fun userProtocols(served: List<String>): List<String> {
-    return listOf("reality", "ws", "hy2", "awg").filter { it in served }
+    return listOf("reality", "ws", "hy2", "awg", "wg").filter { it in served }
 }
 
 /** servedProtocols is the entry's own answer, cut to what a user can have. */
@@ -227,7 +227,7 @@ fun servedProtocols(app: mobile.App?): List<String> =
 /** Proxy transports share a subscription. AWG is an explicit choice because
  * it creates a separate peer and client file. */
 fun defaultProtocols(served: List<String>): Set<String> {
-    val proxies = userProtocols(served).filter { it != "awg" }
+    val proxies = userProtocols(served).filter { it != "awg" && it != "wg" }
 
     return proxies.ifEmpty { userProtocols(served).take(1) }.toSet()
 }

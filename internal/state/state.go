@@ -42,14 +42,15 @@ type Peer struct {
 }
 
 type User struct {
-	Modes     []string `yaml:"modes"`
-	Protocols []string `yaml:"protocols"`
-	AWG       *Peer    `yaml:"awg,omitempty"`
-	TG        bool     `yaml:"tg,omitempty"`
-	Enabled   *bool    `yaml:"enabled,omitempty"`
-	Expires   string   `yaml:"expires,omitempty"`
-	Note      string   `yaml:"note,omitempty"`
-	Entry     string   `yaml:"entry,omitempty"`
+	Modes     []string          `yaml:"modes"`
+	Protocols []string          `yaml:"protocols"`
+	AWG       *Peer             `yaml:"awg,omitempty"`
+	WG        map[string]string `yaml:"wg,omitempty"`
+	TG        bool              `yaml:"tg,omitempty"`
+	Enabled   *bool             `yaml:"enabled,omitempty"`
+	Expires   string            `yaml:"expires,omitempty"`
+	Note      string            `yaml:"note,omitempty"`
+	Entry     string            `yaml:"entry,omitempty"`
 }
 
 // IsEnabled reports the user state; an absent flag means enabled.
@@ -237,6 +238,7 @@ func (s Set) Empty() bool { return len(s.Domains) == 0 && len(s.IPs) == 0 }
 type HostSecrets struct {
 	Reality *RealityKeys `yaml:"reality,omitempty"`
 	AWG     *KeyPair     `yaml:"awg,omitempty"`
+	WG      *KeyPair     `yaml:"wg,omitempty"`
 	MTG     string       `yaml:"mtg_secret,omitempty"`
 }
 
@@ -252,11 +254,17 @@ type RealityKeys struct {
 }
 
 type UserSecrets struct {
-	UUID         string   `yaml:"uuid"`
-	Hy2Pass      string   `yaml:"hy2_password"`
-	SubID        string   `yaml:"sub_id"`
-	AWG          *KeyPair `yaml:"awg,omitempty"`
-	AWGPreshared string   `yaml:"awg_preshared,omitempty"`
+	UUID         string            `yaml:"uuid"`
+	Hy2Pass      string            `yaml:"hy2_password"`
+	SubID        string            `yaml:"sub_id"`
+	AWG          *KeyPair          `yaml:"awg,omitempty"`
+	AWGPreshared string            `yaml:"awg_preshared,omitempty"`
+	WG           map[string]WGKeys `yaml:"wg,omitempty"`
+}
+
+type WGKeys struct {
+	KeyPair   `yaml:",inline"`
+	Preshared string `yaml:"preshared"`
 }
 
 // LinkAWG is the key material of an AmneziaWG link: from and to sides plus the PSK.
@@ -684,6 +692,13 @@ func (s *State) FillStubSecrets() {
 			sec.AWGPreshared = stub("awg-psk-" + n)
 		}
 
+		if len(u.WG) > 0 {
+			sec.WG = make(map[string]WGKeys, len(u.WG))
+			for mode := range u.WG {
+				sec.WG[mode] = WGKeys{KeyPair: KeyPair{Private: stub("wg-priv-" + n + "-" + mode), Public: stub("wg-pub-" + n + "-" + mode)}, Preshared: stub("wg-psk-" + n + "-" + mode)}
+			}
+		}
+
 		s.Secrets.Users[n] = sec
 	}
 
@@ -694,7 +709,12 @@ func (s *State) FillStubSecrets() {
 			Public:   stub("reality-pub-" + n),
 			ShortIDs: []string{"0000000000000000"},
 		}
+
 		sec.AWG = &KeyPair{Private: stub("awg-priv-" + n), Public: stub("awg-pub-" + n)}
+		if _, ok := s.Inbounds[n]["wg"]; ok {
+			sec.WG = &KeyPair{Private: stub("wg-priv-" + n), Public: stub("wg-pub-" + n)}
+		}
+
 		sec.MTG = "ee00000000000000000000000000000000"
 		s.Secrets.Hosts[n] = sec
 	}

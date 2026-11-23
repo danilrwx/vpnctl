@@ -321,6 +321,21 @@ func App() *ucli.Command {
 				Usage: "hosts: setup and maintenance",
 				Commands: []*ucli.Command{
 					{
+						Name:      "inbound",
+						Usage:     "configure an inbound on an existing host",
+						ArgsUsage: "<host> <protocol>",
+						Flags:     []ucli.Flag{dirFlag(), jsonFlag(), &ucli.IntFlag{Name: "port", Usage: "inbound port"}},
+						Action: func(_ context.Context, c *ucli.Command) error {
+							SetJSON(c.Bool("json"))
+
+							if c.Args().Len() != 2 {
+								return Usage(errors.New("a host and protocol are required"))
+							}
+
+							return HostInbound(c.String("dir"), c.Args().Get(0), c.Args().Get(1), c.Int("port"))
+						},
+					},
+					{
 						Name:          "add",
 						Usage:         "create a host with its inbound, keys and routing",
 						ArgsUsage:     "<name>",
@@ -625,7 +640,7 @@ func App() *ucli.Command {
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "modes", Value: "split", Usage: "split,full"},
-							&ucli.StringFlag{Name: "protos", Value: "reality,ws", Usage: "reality,ws,hy2,awg"},
+							&ucli.StringFlag{Name: "protos", Value: "reality,ws", Usage: "reality,ws,hy2,awg,wg"},
 							&ucli.BoolFlag{Name: "tg", Usage: "the user gets the Telegram proxy"},
 							&ucli.StringFlag{Name: "entry", Usage: "entry host when the state has several"},
 							&ucli.BoolFlag{Name: "nocommit", Usage: "do not commit"},
@@ -882,7 +897,7 @@ func App() *ucli.Command {
 						Flags: []ucli.Flag{
 							dirFlag(), jsonFlag(),
 							&ucli.StringFlag{Name: "mode", Usage: "split or full, default: all user modes"},
-							&ucli.StringFlag{Name: "format", Value: "links", Usage: "links, sub, singbox or clash"},
+							&ucli.StringFlag{Name: "format", Value: "links", Usage: "links, sub, singbox, mihomo, clash or wg"},
 							&ucli.StringFlag{Name: "out", Aliases: []string{"o"}, Usage: "write to a file or a directory instead of stdout"},
 						},
 						Action: func(_ context.Context, c *ucli.Command) error {

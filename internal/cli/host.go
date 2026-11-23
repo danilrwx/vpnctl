@@ -56,6 +56,44 @@ func HostAdd(dir string, o ops.HostOptions, nocommit bool) error {
 	return nil
 }
 
+// HostInbound saves and commits a host's inbound configuration.
+func HostInbound(dir, host, protocol string, port int) error {
+	st, err := loadState(dir)
+	if err != nil {
+		return err
+	}
+
+	msg, err := ops.InboundSet(st, host, protocol, port, "", "")
+	if err != nil {
+		return err
+	}
+
+	if err := checkState(st); err != nil {
+		return err
+	}
+
+	repo, err := gitsync.Open(dir)
+	if err != nil {
+		return err
+	}
+
+	if err := state.SaveSecrets(dir, st.Secrets); err != nil {
+		return err
+	}
+
+	if err := state.SaveInbounds(dir, st.Inbounds); err != nil {
+		return err
+	}
+
+	if err := repo.Commit(msg); err != nil {
+		return err
+	}
+
+	fmt.Println(msg)
+
+	return nil
+}
+
 // HostBootstrap renders the setup script of a host and runs it over SSH.
 // With printOnly the script goes to stdout and the host is not touched.
 func HostBootstrap(dir, name, ssh string, printOnly bool, out io.Writer, at time.Time) error {

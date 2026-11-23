@@ -15,6 +15,11 @@ import (
 
 // UserAdd creates a user with fresh secrets and returns the commit message.
 func UserAdd(st *state.State, name string, modes, protocols []string, tg bool) (string, error) {
+	return UserAddOnEntry(st, name, modes, protocols, tg, "")
+}
+
+// UserAddOnEntry selects the entry before allocating any tunnel peers.
+func UserAddOnEntry(st *state.State, name string, modes, protocols []string, tg bool, entry string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("name is empty")
 	}
@@ -31,7 +36,7 @@ func UserAdd(st *state.State, name string, modes, protocols []string, tg bool) (
 		return "", fmt.Errorf("user %q: no protocols", name)
 	}
 
-	u := state.User{Modes: modes, Protocols: protocols, TG: tg}
+	u := state.User{Modes: modes, Protocols: protocols, TG: tg, Entry: entry}
 
 	sec := state.UserSecrets{
 		UUID:    secrets.UUID(),
@@ -39,6 +44,10 @@ func UserAdd(st *state.State, name string, modes, protocols []string, tg bool) (
 		SubID:   secrets.SubID(),
 	}
 	if err := prepareUserAWG(st, name, &u, &sec); err != nil {
+		return "", err
+	}
+
+	if err := prepareUserWG(st, name, &u, &sec); err != nil {
 		return "", err
 	}
 
@@ -133,6 +142,10 @@ func UserEdit(st *state.State, name string, p UserPatch) (string, error) {
 
 	sec := st.Secrets.Users[name]
 	if err := prepareUserAWG(st, name, &u, &sec); err != nil {
+		return "", err
+	}
+
+	if err := prepareUserWG(st, name, &u, &sec); err != nil {
 		return "", err
 	}
 
@@ -266,7 +279,6 @@ func UserRotate(st *state.State, name string) (string, error) {
 	sec.UUID = secrets.UUID()
 	sec.Hy2Pass = secrets.Password()
 	sec.SubID = secrets.SubID()
-	st.Secrets.Users[name] = sec
 
 	if u.AWG != nil {
 		priv, pub, err := secrets.AWGKeys()
@@ -276,8 +288,21 @@ func UserRotate(st *state.State, name string) (string, error) {
 
 		sec.AWG = &state.KeyPair{Private: priv, Public: pub}
 		sec.AWGPreshared = secrets.Preshared()
-		st.Secrets.Users[name] = sec
 	}
+
+	if len(u.WG) != 0 {
+		sec.WG = make(map[string]state.WGKeys, len(u.WG))
+		for mode := range u.WG {
+			key, err := newWGKeys()
+			if err != nil {
+				return "", err
+			}
+
+			sec.WG[mode] = key
+		}
+	}
+
+	st.Secrets.Users[name] = sec
 
 	return fmt.Sprintf("users: %s: rotate credentials", name), nil
 }

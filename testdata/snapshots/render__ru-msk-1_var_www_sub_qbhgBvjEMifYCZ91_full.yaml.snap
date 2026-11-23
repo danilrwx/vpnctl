@@ -2,6 +2,7 @@
 source: tests/render.rs
 expression: body
 ---
+mixed-port: 7890
 proxies:
 - client-fingerprint: chrome
   flow: xtls-rprx-vision

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,38 @@ func TestCheckAndRender(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(out, "ru-msk-1", "etc", "sing-box", "config.json")); err != nil {
 		t.Fatalf("the render is missing the engine config: %v", err)
+	}
+}
+
+func TestUserConfigMihomo(t *testing.T) {
+	dir := openFixtureDir(t)
+	out := t.TempDir()
+
+	for _, format := range []string{"mihomo", "clash"} {
+		file := filepath.Join(out, format+".yaml")
+
+		args := []string{"vpnctl", "user", "config", "--dir", dir, "--format", format, "--mode", "split", "--out", file, "brat"}
+		if err := App().Run(t.Context(), args); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mihomo, err := os.ReadFile(filepath.Join(out, "mihomo.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clash, err := os.ReadFile(filepath.Join(out, "clash.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(mihomo, clash) || !bytes.Contains(mihomo, []byte("mixed-port: 7890")) {
+		t.Fatal("expected identical Mihomo and Clash YAML with a local proxy port")
+	}
+
+	if err := UserConfig(dir, "brat", "", "mihomo", filepath.Join(out, "single.yaml")); err == nil {
+		t.Fatal("a single output file cannot hold both modes")
 	}
 }
 

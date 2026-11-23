@@ -1,0 +1,16 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · brat · mode full · entry ru-msk-1
+[Interface]
+Address = 10.19.2.2/32, fd70:bf8f:6b9e:1::a13:202/128
+PrivateKey = STUB-wg-priv-brat-full
+DNS = 10.19.2.1
+
+[Peer]
+PublicKey = STUB-wg-pub-ru-msk-1
+PresharedKey = STUB-wg-psk-brat-full
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = gw.example.ru:51821
+PersistentKeepalive = 25

@@ -10,6 +10,8 @@ import androidx.compose.ui.unit.dp
 fun protocolTitle(protocol: String): String = when (protocol) {
     "hy2" -> "Hysteria 2"
     "awg" -> "AmneziaWG"
+    "wg" -> "WireGuard"
+    "mihomo" -> "Mihomo"
     else -> protocol
 }
 
@@ -35,14 +37,16 @@ fun ProtocolChoices(
 
 /** Xray cannot serve HY2 or the entry's L3 DNS. */
 fun inboundProtocols(engine: String, role: String): List<String> =
-    listOf("reality", "ws", "hy2", "awg", "mtg").filterNot {
-        engine == "xray" && (it == "hy2" || (it == "awg" && role == "entry"))
+    listOf("reality", "ws", "hy2", "awg", "wg", "mtg").filterNot {
+        (it == "wg" && (role != "entry" || engine == "xray")) ||
+            (engine == "xray" && (it == "hy2" || (it == "awg" && role == "entry")))
     }
 
 fun defaultInboundPort(protocol: String): String = when (protocol) {
     "reality", "hy2" -> "443"
     "ws" -> "8444"
     "awg" -> "51820"
+    "wg" -> "51821"
     "mtg" -> "2053"
     else -> ""
 }

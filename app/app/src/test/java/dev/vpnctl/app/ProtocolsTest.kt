@@ -45,8 +45,17 @@ class ProtocolsTest {
     }
 
     @Test
+    fun `Mihomo profiles retain their YAML extension and content`() {
+        val profiles = parseUserProfiles(
+            """[{"name":"anna","protocol":"mihomo","mode":"full","filename":"anna-mihomo-full.yaml","content":"mixed-port: 7890\n"}]""",
+        )
+        assertEquals("anna-mihomo-full.yaml", profiles.single().filename)
+        assertEquals("mixed-port: 7890\n", profiles.single().content)
+    }
+
+    @Test
     fun `profile parser rejects paths and empty configs`() {
-        listOf("../secret.conf", "/tmp/key.conf", "a/b.conf", "a\\b.conf", "key.txt").forEach { path ->
+        listOf("../secret.conf", "/tmp/key.conf", "a/b.conf", "a\\b.conf", "../key.yaml", "key.txt").forEach { path ->
             val json = org.json.JSONObject().apply {
                 put("name", "anna")
                 put("protocol", "awg")

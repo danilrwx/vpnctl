@@ -327,6 +327,7 @@ fun UserScreen(
                 item { SectionLabel("Client configs", "${profiles.size}") }
                 profiles.forEach { profile ->
                     item {
+                        val isTunnel = profile.protocol == "awg" || profile.protocol == "wg"
                         SurfaceCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                                 Text(
@@ -335,7 +336,8 @@ fun UserScreen(
                                 )
                                 MonoText(profile.filename, color = Muted, style = MaterialTheme.typography.labelMedium)
                                 Text(
-                                    "Contains a private key. Import into AmneziaWG and share only with this user. Changes take effect after apply.",
+                                    if (isTunnel) "Contains a private key. Import into ${protocolTitle(profile.protocol)} and share only with this user. Changes take effect after apply."
+                                    else "Import into Mihomo. Share only with this user. Changes take effect after apply.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Muted,
                                     modifier = Modifier.padding(top = 8.dp),
@@ -344,7 +346,7 @@ fun UserScreen(
                                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    OutlineButton("Save .conf", {
+                                    OutlineButton("Save .${profile.filename.substringAfterLast('.')}", {
                                         savingProfile = profile
                                         saveProfile.launch(profile.filename)
                                     }, modifier = Modifier.weight(1f))
@@ -355,10 +357,12 @@ fun UserScreen(
                                             status = "error: ${e.message}"
                                         }
                                     }, modifier = Modifier.weight(1f))
-                                    OutlineButton("QR", {
-                                        qrTitle = "${protocolTitle(profile.protocol)} · ${profile.mode} · private key"
-                                        qr = profile.content
-                                    }, modifier = Modifier.weight(1f))
+                                    if (isTunnel) {
+                                        OutlineButton("QR", {
+                                            qrTitle = "${protocolTitle(profile.protocol)} · ${profile.mode} · private key"
+                                            qr = profile.content
+                                        }, modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
@@ -382,7 +386,7 @@ fun UserScreen(
                             }
                         }
                         Text(
-                            "Hysteria 2 is in Links and the subscription. AmneziaWG uses its own config and QR.",
+                            "WireGuard and AmneziaWG each get a separate config and QR.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Muted,
                             modifier = Modifier.padding(top = 8.dp),
@@ -569,7 +573,7 @@ fun UserScreen(
             content = {
                 Text("After the next apply:", style = MaterialTheme.typography.bodySmall, color = Muted)
                 Text(
-                    "· ${mode.size * protos.size} engine accounts and ${mode.size} subscription${if (mode.size == 1) "" else "s"} go away",
+                    "· VPN accounts, tunnel peers, and subscriptions are removed",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )

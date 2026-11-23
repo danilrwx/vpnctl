@@ -174,6 +174,38 @@ func TestStubSecretsRender(t *testing.T) {
 	}
 }
 
+func TestGoldenWireGuard(t *testing.T) {
+	st := fixture(t)
+
+	const host, user = "ru-msk-1", "brat"
+
+	st.Inbounds[host]["wg"] = state.Inbound{Port: 51821, Subnets: &state.Subnets{
+		Split: "10.19.1.0/24", Full: "10.19.2.0/24",
+	}}
+	u := st.Users[user]
+	u.Protocols = append(u.Protocols, "wg")
+	u.WG = map[string]string{"split": "10.19.1.2", "full": "10.19.2.2"}
+	st.Users[user] = u
+	st.FillStubSecrets()
+
+	files, err := RenderHost(st, host, testDay())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checkSnapshot(t, "render__wireguard_server", files[WGConfig])
+	checkSnapshot(t, "render__wireguard_nftables", files["/etc/nftables.conf"])
+
+	for _, mode := range u.Modes {
+		client, err := WGClient(st, host, user, mode, testDay())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		checkSnapshot(t, "render__wireguard_client_"+mode, client)
+	}
+}
+
 // testDay is the date every golden test renders against: a snapshot that moved
 // with the wall clock would fail on somebody's birthday.
 func testDay() time.Time {

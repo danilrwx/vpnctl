@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	// TProxyPort is where the engine accepts intercepted L3 traffic (clients in awg).
+	// TProxyPort is where the engine accepts intercepted IPv4 client traffic.
 	TProxyPort = 7893
+	// TProxyIPv6Port is the IPv6 counterpart for WireGuard clients.
+	TProxyIPv6Port = 7894
 	// CaddyPort is the local cover site, the ws endpoint and the subscriptions; Reality falls back to it.
 	CaddyPort = 8443
 	// ProbePort is the local socks inbound: chain probes and the mtg upstream.

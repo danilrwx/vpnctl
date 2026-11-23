@@ -15,7 +15,9 @@ data class UserProfile(
     val content: String,
 )
 
-/** Configs contain private keys. Keep them separate from copyable public URLs. */
+private val profileFilename = Regex("[a-zA-Z0-9_.-]+\\.(conf|yaml)")
+
+/** Parse client configuration attachments and their filenames. */
 fun parseUserProfiles(json: String): List<UserProfile> = try {
     val arr = JSONArray(json)
     (0 until arr.length()).map { i ->
@@ -24,20 +26,20 @@ fun parseUserProfiles(json: String): List<UserProfile> = try {
             o.getString("name"), o.getString("protocol"), o.getString("mode"),
             o.getString("filename"), o.getString("content"),
         )
-    }.filter { it.content.isNotBlank() && it.filename.matches(Regex("[a-zA-Z0-9_.-]+\\.conf")) }
+    }.filter { it.content.isNotBlank() && it.filename.matches(profileFilename) }
 } catch (e: Exception) {
     emptyList()
 }
 
-/** Share a real .conf attachment with a temporary read grant, never a public file. */
+/** Share a client config attachment with a temporary read grant. */
 fun shareProfile(ctx: Context, profile: UserProfile) {
-    require(profile.filename.matches(Regex("[a-zA-Z0-9_.-]+\\.conf")))
+    require(profile.filename.matches(profileFilename))
     val dir = File(ctx.cacheDir, "profiles").apply { mkdirs() }
     val file = File(dir, profile.filename)
     file.writeText(profile.content)
     val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.profiles", file)
     val send = Intent(Intent.ACTION_SEND).apply {
-        type = "application/octet-stream"
+        type = if (profile.filename.endsWith(".yaml")) "application/yaml" else "application/octet-stream"
         putExtra(Intent.EXTRA_STREAM, uri)
         putExtra(Intent.EXTRA_SUBJECT, profile.filename)
         clipData = ClipData.newRawUri(profile.filename, uri)

@@ -26,6 +26,7 @@ type TickOptions struct {
 	EngineBin    string
 	SubRoot      string
 	AWGConfig    string
+	WGConfig     string
 	ExpiredDir   string
 	AlertsEnv    string
 	Now          time.Time
@@ -223,9 +224,14 @@ func takeDownSubs(opts TickOptions, exp state.Expiry, gone []string) ([]string, 
 // dropPeers removes the awg peer of every expired account: a live tunnel
 // outlives the engine identity, so the account would keep its path otherwise.
 func dropPeers(opts TickOptions, exp state.Expiry, gone []string) ([]string, error) {
-	var peers []string
+	var (
+		peers []string
+		wgIPs []string
+	)
 
 	for _, name := range gone {
+		wgIPs = append(wgIPs, exp.Users[name].WGIPs...)
+
 		ip := exp.Users[name].AWGIP
 		if ip == "" || opts.AWGConfig == "" {
 			continue
@@ -243,6 +249,27 @@ func dropPeers(opts TickOptions, exp state.Expiry, gone []string) ([]string, err
 		peers = append(peers, ip)
 		if _, err := opts.Run("systemctl restart awg-quick@awg0"); err != nil {
 			return peers, fmt.Errorf("restart awg-quick@awg0: %w", err)
+		}
+	}
+
+	if opts.WGConfig != "" && len(wgIPs) != 0 {
+		for _, ip := range wgIPs {
+			changed, err := DropPeer(opts.WGConfig, ip)
+			if err != nil {
+				return peers, err
+			}
+
+			if changed {
+				peers = append(peers, ip)
+			}
+		}
+		// Retry applying the file on the next tick if a previous restart failed.
+		if _, err := os.Stat(opts.WGConfig); err == nil {
+			if _, err := opts.Run(`config=$(wg-quick strip wg0) && printf '%s\n' "$config" | wg syncconf wg0 /dev/stdin`); err != nil {
+				return peers, fmt.Errorf("sync expired WireGuard peers: %w", err)
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return peers, err
 		}
 	}
 
@@ -500,8 +527,7 @@ func DropPeer(path, ip string) (bool, error) {
 			end++
 		}
 
-		block := strings.Join(lines[i:end], "\n")
-		if strings.Contains(block, ip+"/32") || strings.Contains(block, ip+"/") {
+		if peerHasIP(lines[i:end], ip) {
 			dropped = true
 			i = end - 1
 
@@ -517,6 +543,23 @@ func DropPeer(path, ip string) (bool, error) {
 	}
 
 	return true, os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o600)
+}
+
+func peerHasIP(lines []string, ip string) bool {
+	for _, line := range lines {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "AllowedIPs" {
+			continue
+		}
+
+		for _, cidr := range strings.Split(value, ",") {
+			if addr, _, _ := strings.Cut(strings.TrimSpace(cidr), "/"); addr == ip {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // notifyFailure sends one message when the timer could not do its job: a silent

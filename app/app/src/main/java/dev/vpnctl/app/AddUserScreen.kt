@@ -91,7 +91,9 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
         }
     }
 
-    val accounts = protos.count { it != "awg" }
+    val proxyProtocols = protos.filter { it != "awg" && it != "wg" }.sorted()
+    val tunnelProtocols = protos.filter { it == "awg" || it == "wg" }.sorted()
+    val accounts = proxyProtocols.size
 
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(title = "New user", subtitle = "the hosts get it on the next apply", onBack = onBack)
@@ -142,7 +144,7 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                 }
                 Text(
                     if (served.isEmpty()) "No client protocols enabled. Add an inbound in Hosts first."
-                    else "Hysteria 2 uses the subscription and a direct link. AmneziaWG gets a separate config and QR.",
+                    else "WireGuard and AmneziaWG each get a separate config and QR.",
                     style = MaterialTheme.typography.labelMedium,
                     color = Muted,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -222,19 +224,19 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                             Text(
                                 "$accounts ${plural(accounts, "engine account", "engine accounts")}" +
-                                    if ("awg" in protos) " · 1 AWG peer" else "",
+                                    tunnelProtocols.joinToString("") { " · 1 ${protocolTitle(it)} peer" },
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             MonoText(
-                                if (accounts > 0) "${name.trim()}-{$mode}-{${protos.filter { it != "awg" }.sorted().joinToString(", ")}}"
-                                else "${name.trim()} · $mode · AmneziaWG",
+                                if (accounts > 0) "${name.trim()}-{$mode}-{${proxyProtocols.joinToString(", ")}}"
+                                else "${name.trim()} · $mode · ${tunnelProtocols.joinToString(", ", transform = ::protocolTitle)}",
                                 color = Muted,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 2,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                             Text(
-                                if ("awg" in protos) "UUID, protocol passwords, AWG keys and subId → secrets.age.yaml"
+                                if (tunnelProtocols.isNotEmpty()) "UUID, protocol passwords, peer keys and subId → secrets.age.yaml"
                                 else "UUID, protocol passwords and subId → secrets.age.yaml",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
@@ -242,7 +244,7 @@ fun AddUserScreen(ctx: android.content.Context, modifier: Modifier, onBack: () -
                             )
                             Text(
                                 if (accounts > 0) "1 subscription at ${domain.ifEmpty { "the entry" }}"
-                                else "AmneziaWG config and QR in the user card",
+                                else "Config and QR in the user card",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
                                 modifier = Modifier.padding(top = 4.dp),

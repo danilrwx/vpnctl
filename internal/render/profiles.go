@@ -133,11 +133,15 @@ func SingboxJSON(st *state.State, entry, user string, u state.User, mode string)
 	return toJSON(cfg)
 }
 
-// ClashYAML is the profile served to a client with a User-Agent of *clash*.
+// ClashYAML renders the Mihomo/Clash profile, or an empty string without proxy accounts.
 func ClashYAML(st *state.State, entry, user string, u state.User, mode string) (string, error) {
 	accs, err := SubAccounts(st, entry, user, u, mode)
 	if err != nil {
 		return "", err
+	}
+
+	if len(accs) == 0 {
+		return "", nil
 	}
 
 	proxies := []any{}
@@ -164,6 +168,7 @@ func ClashYAML(st *state.State, entry, user string, u state.User, mode string) (
 
 	group := user + "-" + mode
 	cfg := obj(
+		"mixed-port", 7890,
 		"proxies", proxies,
 		"proxy-groups", []any{obj("name", group, "type", "url-test", "proxies", names, "url", ProbeURL, "interval", 60)},
 		"rules", []any{"MATCH," + group},

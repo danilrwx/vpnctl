@@ -11,7 +11,7 @@ import (
 
 // setNames are the inbounds the renderer knows how to write; a typo here would
 // produce a file nobody reads.
-var inboundNames = map[string]bool{"reality": true, "ws": true, "hy2": true, "awg": true, "mtg": true}
+var inboundNames = map[string]bool{"reality": true, "ws": true, "hy2": true, "awg": true, "wg": true, "mtg": true}
 
 // SetInfo is one address set as the editor shows it.
 type SetInfo struct {
@@ -90,10 +90,14 @@ func InboundSet(st *state.State, host, name string, port int, path, sni string) 
 	}
 
 	if !inboundNames[name] {
-		return "", fmt.Errorf("inbound %q: expected reality, ws, hy2, awg or mtg", name)
+		return "", fmt.Errorf("inbound %q: expected reality, ws, hy2, awg, wg or mtg", name)
 	}
 
 	h := st.Hosts[host]
+	if name == "wg" && (h.Role != state.Entry || h.Engine == "xray") {
+		return "", fmt.Errorf("host %q: WireGuard requires a sing-box entry", host)
+	}
+
 	if h.Engine == "xray" && (name == "hy2" || (name == "awg" && h.Role == state.Entry)) {
 		return "", fmt.Errorf("host %q: engine xray does not support inbound %s", host, name)
 	}
@@ -155,6 +159,28 @@ func InboundSet(st *state.State, host, name string, port int, path, sni string) 
 			}
 
 			i.Subnets = &subnets
+		}
+
+		if st.Secrets.Hosts == nil {
+			st.Secrets.Hosts = map[string]state.HostSecrets{}
+		}
+
+		st.Secrets.Hosts[host] = hs
+	}
+
+	if name == "wg" {
+		hs := st.Secrets.Hosts[host]
+		if hs.WG == nil {
+			priv, pub, err := secrets.AWGKeys()
+			if err != nil {
+				return "", err
+			}
+
+			hs.WG = &state.KeyPair{Private: priv, Public: pub}
+		}
+
+		if i.Subnets == nil {
+			i.Subnets = &state.Subnets{Split: "10.19.1.0/24", Full: "10.19.2.0/24"}
 		}
 
 		if st.Secrets.Hosts == nil {

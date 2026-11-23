@@ -190,7 +190,9 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 					return nil, err
 				}
 
-				f[base+".yaml"] = yl
+				if yl != "" {
+					f[base+".yaml"] = yl
+				}
 			}
 
 			if acc.U.AWG != nil && us.AWG != nil && containsStr(acc.U.Protocols, "awg") {
@@ -371,6 +373,18 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 	}
 
 	// network
+	wg, ok := inb["wg"]
+
+	wgEnabled := h.Role == state.Entry && ok && wg.IsEnabled()
+	if wgEnabled {
+		body, err := wireGuardServer(st, name, at, wg)
+		if err != nil {
+			return nil, err
+		}
+
+		f[WGConfig] = body
+	}
+
 	var tcp, udp []int
 
 	for p, i := range inb {
@@ -381,7 +395,7 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 		switch p {
 		case "reality", "mtg":
 			tcp = append(tcp, i.Port)
-		case "hy2", "awg":
+		case "hy2", "awg", "wg":
 			udp = append(udp, i.Port)
 		}
 	}
@@ -397,14 +411,14 @@ func RenderHost(st *state.State, name string, at time.Time) (HostFiles, error) {
 	udp = dedupInts(udp)
 
 	var tproxy any
-	if clientAWG != nil {
+	if clientAWG != nil || wgEnabled {
 		tproxy = TProxyPort
 	}
 	// IPv6 forwarding is only needed for L3 clients (awg): the kernel then disables accept_ra itself
 	awgUsed := len(awgIfaces) > 0
 	if err := emit("/etc/nftables.conf", "nftables.conf.j2", map[string]any{
 		"host": name, "tcp_ports": tcp, "udp_ports": udp, "awg_ifaces": awgIfaces,
-		"tproxy_port": tproxy, "masquerade": masquerade,
+		"tproxy_port": tproxy, "tproxy6_port": TProxyIPv6Port, "tproxy_awg": clientAWG != nil, "tproxy_wg": wgEnabled, "masquerade": masquerade,
 	}); err != nil {
 		return nil, err
 	}

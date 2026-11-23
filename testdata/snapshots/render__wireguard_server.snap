@@ -1,0 +1,30 @@
+---
+source: tests/render.rs
+expression: body
+---
+# vpnctl · ru-msk-1 · interface wg0 · WireGuard clients
+[Interface]
+Address = 10.19.1.1/24, fd70:bf8f:6b9e:1::a13:101/120, 10.19.2.1/24, fd70:bf8f:6b9e:1::a13:201/120
+PrivateKey = STUB-wg-priv-ru-msk-1
+ListenPort = 51821
+PostUp = ip rule add fwmark 2 lookup 109
+PostUp = ip route add local 0.0.0.0/0 dev lo table 109
+PostUp = ip -6 rule add fwmark 2 lookup 109
+PostUp = ip -6 route add local ::/0 dev lo table 109
+PostDown = ip rule del fwmark 2 lookup 109
+PostDown = ip route del local 0.0.0.0/0 dev lo table 109
+PostDown = ip -6 rule del fwmark 2 lookup 109 2>/dev/null || true
+PostDown = ip -6 route del local ::/0 dev lo table 109 2>/dev/null || true
+
+
+# brat split
+[Peer]
+PublicKey = STUB-wg-pub-brat-split
+PresharedKey = STUB-wg-psk-brat-split
+AllowedIPs = 10.19.1.2/32, fd70:bf8f:6b9e:1::a13:102/128
+
+# brat full
+[Peer]
+PublicKey = STUB-wg-pub-brat-full
+PresharedKey = STUB-wg-psk-brat-full
+AllowedIPs = 10.19.2.2/32, fd70:bf8f:6b9e:1::a13:202/128

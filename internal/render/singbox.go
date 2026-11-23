@@ -320,9 +320,19 @@ func scope(st *state.State, host, mode string, users []Account) (map[string]any,
 		}
 	}
 
-	var subnet string
-	if i, ok := st.Inbounds[host]["awg"]; ok && i.IsEnabled() && i.Subnets != nil {
-		subnet = i.Subnets.ForMode(mode)
+	var subnets []string
+
+	for _, protocol := range []string{"awg", "wg"} {
+		if i, ok := st.Inbounds[host][protocol]; ok && i.IsEnabled() && i.Subnets != nil {
+			subnet := i.Subnets.ForMode(mode)
+
+			subnets = append(subnets, subnet)
+			if protocol == "wg" {
+				if v6 := wgIPv6Subnet(subnet); v6 != "" {
+					subnets = append(subnets, v6)
+				}
+			}
+		}
 	}
 
 	var parts []any
@@ -330,8 +340,8 @@ func scope(st *state.State, host, mode string, users []Account) (map[string]any,
 		parts = append(parts, obj("auth_user", emails))
 	}
 
-	if subnet != "" {
-		parts = append(parts, obj("source_ip_cidr", []string{subnet}))
+	if len(subnets) != 0 {
+		parts = append(parts, obj("source_ip_cidr", subnets))
 	}
 
 	switch len(parts) {
@@ -580,8 +590,15 @@ func SingBoxConfig(st *state.State, host string, at time.Time) (string, error) {
 	}
 
 	if h.Role == state.Entry {
-		if i, ok := inb["awg"]; ok && i.IsEnabled() {
+		awg, awgOK := inb["awg"]
+
+		wg, wgOK := inb["wg"]
+		if awgOK && awg.IsEnabled() || wgOK && wg.IsEnabled() {
 			inbounds = append(inbounds, obj("type", "tproxy", "tag", "tproxy", "listen", "127.0.0.1", "listen_port", TProxyPort))
+		}
+
+		if wgOK && wg.IsEnabled() {
+			inbounds = append(inbounds, obj("type", "tproxy", "tag", "tproxy6", "listen", "::1", "listen_port", TProxyIPv6Port))
 		}
 
 		inbounds = append(inbounds, obj("type", "socks", "tag", "probe", "listen", "127.0.0.1", "listen_port", ProbePort))

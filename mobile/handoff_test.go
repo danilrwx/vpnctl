@@ -7,6 +7,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/danilrwx/vpnctl-go/internal/render"
 )
 
 func TestUserHandoffRoundTrip(t *testing.T) {
@@ -45,8 +48,23 @@ func TestUserHandoffRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(profiles) != 1 || profiles[0].Protocol != "awg" || !strings.Contains(profiles[0].Content, "PrivateKey = "+a.st.Secrets.Users["handoff"].AWG.Private) {
+	if len(profiles) != 3 || profiles[2].Protocol != "awg" || !strings.Contains(profiles[2].Content, "PrivateKey = "+a.st.Secrets.Users["handoff"].AWG.Private) {
 		t.Fatalf("profiles: %s", profile)
+	}
+
+	files, err := render.RenderHost(a.st, "ru-msk-1", time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, mode := range []string{"split", "full"} {
+		p := profiles[i]
+
+		path := "/var/www/sub/" + a.st.Secrets.Users["handoff"].SubID + "/" + mode + ".yaml"
+		if p.Protocol != "mihomo" || p.Mode != mode || p.Filename != "handoff-mihomo-"+mode+".yaml" ||
+			p.Content != files[path] || !strings.Contains(p.Content, "type: hysteria2") {
+			t.Fatalf("invalid Mihomo profile for %s: %+v", mode, p)
+		}
 	}
 
 	if _, err := a.EditUser("handoff", "full", "hy2,awg", false, ""); err != nil {

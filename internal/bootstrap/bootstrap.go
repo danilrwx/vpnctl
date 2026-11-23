@@ -240,6 +240,10 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		if f, ok := strings.CutPrefix(path, "/etc/amnezia/amneziawg/"); ok {
 			enable = append(enable, "awg-quick@"+strings.TrimSuffix(f, ".conf"))
 		}
+
+		if path == render.WGConfig {
+			enable = append(enable, "wg-quick@wg0")
+		}
 	}
 
 	sort.Slice(units, func(i, j int) bool { return units[i]["name"] < units[j]["name"] })
@@ -303,6 +307,7 @@ func Script(st *state.State, host string, at time.Time) (string, error) {
 		"rule_sets":   rsCtx,
 		"geodata":     geodata.Version,
 		"awg":         awg,
+		"wg":          files[render.WGConfig] != "",
 		"awg_version": awgPin.Version,
 		"nftables":    files["/etc/nftables.conf"],
 		"sysctl":      files["/etc/sysctl.d/90-vpnctl.conf"],

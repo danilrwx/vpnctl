@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -203,7 +204,7 @@ type UserProfile struct {
 	Content  string `json:"content"`
 }
 
-// UserProfiles returns enabled AWG profiles as JSON for gomobile clients.
+// UserProfiles returns Mihomo and AmneziaWG profiles as JSON for gomobile clients.
 func (a *App) UserProfiles(user string) (string, error) {
 	u, ok := a.st.Users[user]
 	if !ok {
@@ -211,25 +212,44 @@ func (a *App) UserProfiles(user string) (string, error) {
 	}
 
 	out := []UserProfile{}
-	if !u.IsEnabled() || u.AWG == nil {
-		return mustJSON(out), nil
-	}
-
-	hasAWG := false
-
-	for _, p := range u.Protocols {
-		if p == "awg" {
-			hasAWG = true
-		}
-	}
-
-	if !hasAWG {
+	if !u.IsEnabled() {
 		return mustJSON(out), nil
 	}
 
 	entry, ok := a.st.EntryOf(u)
 	if !ok {
 		return "", fmt.Errorf("user %q has no unambiguous entry", user)
+	}
+
+	at := time.Now()
+	for _, mode := range u.Modes {
+		if slices.Contains(u.Protocols, "wg") && a.st.Inbounds[entry]["wg"].IsEnabled() && len(u.WG) > 0 && !state.Expired(u.Expires, at) {
+			body, err := render.WGClient(a.st, entry, user, mode, at)
+			if err != nil {
+				return "", err
+			}
+
+			out = append(out, UserProfile{
+				Name: user + " wg " + mode, Protocol: "wg", Mode: mode,
+				Filename: render.WGFilename(user, mode), Content: body,
+			})
+		}
+
+		body, err := render.ClashYAML(a.st, entry, user, u, mode)
+		if err != nil {
+			return "", err
+		}
+
+		if body != "" {
+			out = append(out, UserProfile{
+				Name: user + " mihomo " + mode, Protocol: "mihomo", Mode: mode,
+				Filename: user + "-mihomo-" + mode + ".yaml", Content: body,
+			})
+		}
+	}
+
+	if u.AWG == nil || !slices.Contains(u.Protocols, "awg") {
+		return mustJSON(out), nil
 	}
 
 	in, ok := a.st.Inbounds[entry]["awg"]

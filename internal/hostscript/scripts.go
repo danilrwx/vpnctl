@@ -27,6 +27,8 @@ func ServiceFor(path string) (string, bool) {
 	case strings.HasPrefix(path, "/etc/amnezia/amneziawg/"):
 		f := strings.TrimPrefix(path, "/etc/amnezia/amneziawg/")
 		return "awg-quick@" + strings.TrimSuffix(f, ".conf"), true
+	case path == render.WGConfig:
+		return "wg-quick@wg0", true
 	case path == "/etc/nftables.conf":
 		return "nftables", true
 	case strings.HasPrefix(path, "/etc/sysctl.d/"):
@@ -66,6 +68,8 @@ func CheckCmd(engine, path string) (string, bool) {
 		return "nft -c -f " + tmp, true
 	case path == "/etc/caddy/Caddyfile":
 		return "caddy validate --config " + tmp + " --adapter caddyfile >/dev/null", true
+	case path == render.WGConfig:
+		return "wg-quick strip " + tmp + " >/dev/null", true
 	}
 
 	return "", false
@@ -85,6 +89,7 @@ func hasString(list []string, v string) bool {
 // ModeFor is the file mode on the host: secrets are 0600.
 func ModeFor(path string) int64 {
 	if strings.HasPrefix(path, "/etc/amnezia/") ||
+		path == render.WGConfig ||
 		strings.HasPrefix(path, "/etc/vpnctl/") ||
 		strings.HasPrefix(path, "/etc/sing-box/") ||
 		strings.HasPrefix(path, "/etc/xray/") ||
@@ -145,7 +150,15 @@ func InstallScript(hp plan.HostPlan, backup string) string {
 		case plan.Unchanged:
 			continue
 		case plan.Removed:
+			if path == render.WGConfig {
+				s.WriteString("systemctl disable --now -q wg-quick@wg0\n")
+			}
+
 			fmt.Fprintf(&s, "cp --parents -a '%s' %s 2>/dev/null || true; rm -f '%s'\n", path, backup, path)
+
+			if path == render.WGConfig {
+				continue
+			}
 
 			if svc, ok := ServiceFor(path); ok && strings.HasPrefix(svc, "awg-quick@") {
 				fmt.Fprintf(&s, "systemctl disable --now -q %s || true\n", svc)
@@ -199,7 +212,7 @@ fi
 			return 1
 		case s == "nftables":
 			return 2
-		case strings.HasPrefix(s, "awg-quick@"):
+		case s == "wg-quick@wg0" || strings.HasPrefix(s, "awg-quick@"):
 			return 3
 		case s == "caddy":
 			return 4
@@ -236,6 +249,13 @@ fi
 func RollbackScript(hp plan.HostPlan, backup string) string {
 	var s strings.Builder
 	s.WriteString("set +e\n")
+
+	for _, f := range hp.Files {
+		if f.Path == render.WGConfig && f.Status == plan.New {
+			s.WriteString("systemctl disable --now -q wg-quick@wg0\n")
+		}
+	}
+
 	fmt.Fprintf(&s, "if [ -f %s/.new ]; then xargs -r rm -f < %s/.new; fi\n", backup, backup)
 	fmt.Fprintf(&s, "(cd %s && find . -type f ! -name .new | while read f; do install -D -m 0600 \"$f\" \"/${f#./}\"; done)\n", backup)
 
@@ -245,6 +265,10 @@ func RollbackScript(hp plan.HostPlan, backup string) string {
 
 	for _, f := range hp.Files {
 		if f.Status == plan.Unchanged {
+			continue
+		}
+
+		if f.Path == render.WGConfig && f.Status == plan.New {
 			continue
 		}
 
